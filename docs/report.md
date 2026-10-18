@@ -26,7 +26,7 @@
 11. [已知限制与后续建议](#11-已知限制与后续建议)
 13. [P8 收尾：打包 / 回滚演练 / 中文化](#13-p8-收尾打包--回滚演练--中文化)
 14. [路由策略（P12-1）](#15-路由策略p12-1按接口源分流原生表格--真实节点实测)
-19. [附录：命令速查](#19-附录命令速查)
+20. [附录：命令速查](#20-附录命令速查)
 
 ---
 
@@ -1032,7 +1032,80 @@ lan (192.168.1.0/24 → 🇺🇸 United States)
 
 ---
 
-## 19. 附录：命令速查
+## 19. P14：内网直达、订阅自动更新，以及一个"看起来生效其实没生效"的修正
+
+### 19.1 ② 内网流量不再绕 mihomo
+
+绑定接口的流量原先（含 LAN↔LAN、访问其它内网段）都会进 TUN 再出来。现在每个绑定接口会多出若干条
+「目标＝其它内网网段」的 pass 规则（无网关），排在策略路由规则**之前**：
+
+```
+seq=301  gw=-            src=lan  dst=lo0    Mihomo bypass (lo0)
+seq=401  gw=-            src=lan  dst=opt1   Mihomo bypass (opt1)
+seq=501  gw=-            src=lan  dst=opt2   Mihomo bypass (opt2)
+seq=601  gw=Mihomo_TUN   src=lan  dst=any    Mihomo policy (lan)
+```
+
+效果：内网互访与访问路由器本身走正常路由；**mihomo 停止时也只影响出网，不再影响内网互通**。
+
+### 19.2 ④ 订阅自动更新（写进 OPNsense 原生 Cron）
+
+设置页新增「自动更新 / 间隔（每 6·12 小时·每天）」；勾选后由插件在核心 Cron 模型里维护一个任务：
+
+```
+<OPNsense><cron><jobs><job>
+  origin=mihomo  minutes=0  hours=0,6,12,18  who=root
+  command=mihomo sub-update   description=Mihomo subscription update
+```
+
+生成的 crontab（`/var/cron/tabs/nobody`）：
+`0  0,6,12,18  *  *  *  /usr/local/sbin/configctl -d -- mihomo sub-update`
+取消勾选即删除该任务。任务描述沿用上游的命名规律，卸载时会被 `+PRE_DEINSTALL` 的清理规则一并移除。
+
+### 19.3 重要修正：策略路由此前**被默认放行规则抢先**（等于没生效）
+
+这一轮在做 ② 时发现了 P12-2 的一个**根本性错误**：
+
+* 本插件把规则写进了 **旧版根 `<filter>`**；而这台 OPNsense 的**生效规则集在新核心模块**
+  `/OPNsense/Firewall/Filter/rules/rule`（接口的 "Default allow LAN to any rule" 在那里，`sequence=1`）。
+* 生成器展开顺序：**新模块规则 → 旧版规则**，且规则都是 `quick` ⇒ 接口的默认放行规则 **先匹配**，
+  我们的策略路由规则 `Evaluations: 0`（从未被命中）。
+* 证据：`pfctl -sr` 里默认放行 @67、我们的 route-to @70；`pfctl -vvsr` 显示我们的规则评估次数为 0。
+
+**正确做法**（已实现）：把规则写成核心防火墙模块里的**浮动规则**（不设置 `interface`）——
+浮动规则的 `prio_group=200000`，接口规则为 `400000`，**浮动规则先执行** ✅。
+
+修正后的实测（`pfctl -sr` 行号）：
+
+```
+route-to 规则行号: 70
+默认放行规则行号 : 71        ⇒ 浮动策略路由排在默认放行之前 ✅
+```
+
+*pf 里的样子*（浮动规则不带 `on <iface>`）：
+
+```
+pass in quick inet from (igb0:network) to (igb4:network) flags S/SA keep state   ← 内网直达
+pass in quick inet from (igb0:network) to (igb5:network) flags S/SA keep state   ← 内网直达
+pass in quick route-to (tun_mihomo 198.18.0.2) inet from (igb0:network) to any   ← 策略路由（带网关）
+```
+
+另外的坑（都已修）：
+
+| # | 问题 | 处理 |
+|---|---|---|
+| 1 | `sequence` 取值范围 1–999999，而接口默认放行规则已占 `1`，插不到它前面 | 改用**浮动规则**（不靠 sequence 抢位） |
+| 2 | 新模块字段名是 `source_net` / `destination_net`，不是 `source.network` | 按模型实际字段写入 |
+| 3 | 我的描述格式与去重正则不一致 → 每次应用都重建 4 条规则 | 统一键与描述（`Mihomo bypass (opt1)` / `Mihomo policy (lan)`），并清理重复项 |
+| 4 | `build_plan()` 里漏写 `global $CONFIG_FILE` → 计划接口致命错误 | 补上 |
+
+> **结论**：P12-2 的机制此前**只有一半**——mihomo 侧规则、接口、网关都对，但 pf 那一跳被默认放行规则挡住；
+> 现在按"浮动规则"的姿势写入，才真正成立。这一点也说明**自检 + 规则计数**这类验证不可省：
+> 单看界面"生效中"是看不出来的。
+
+---
+
+## 20. 附录：命令速查
 
 ```sh
 # ---- 本机 ----

@@ -172,6 +172,17 @@ TRANSLATIONS: dict[str, str] = {
         'TUN 已关闭：规则会写入并通过校验，但暂时没有流量进入 mihomo。',
     'TUN is disabled: traffic does not reach mihomo.': 'TUN 已关闭：流量不会进入 mihomo。',
     'TUN off': 'TUN 未启用',
+    # ---- 订阅自动更新（④）----
+    'Auto update': '自动更新',
+    'Create a scheduled task for the subscription update.': '创建定时任务执行订阅更新。',
+    'How often the scheduled task runs.': '定时任务的执行频率。',
+    'Every 6 hours': '每 6 小时',
+    'Every 12 hours': '每 12 小时',
+    'Update the subscription on a schedule.': '按计划更新订阅。',
+    'Scheduled task enabled: subscription update (%s).': '定时任务已启用：订阅更新（%s）。',
+    'Scheduled task removed: subscription update.': '定时任务已删除：订阅更新。',
+    'Scheduled task could not be updated: %s': '定时任务更新失败：%s',
+
     'Nothing to test: no enabled row requests a firewall rule.': '无可自检项：没有启用且要求创建防火墙规则的行。',
     'Backup not found.': '备份不存在。',
     'Restore this configuration backup? The current file is backed up first and the result is validated with mihomo -t.':

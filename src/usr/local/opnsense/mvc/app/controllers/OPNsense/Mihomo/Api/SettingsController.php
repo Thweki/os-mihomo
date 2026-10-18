@@ -126,7 +126,20 @@ class SettingsController extends ApiMutableModelControllerBase
             }
         }
 
-        /* ---- 4. 显式重启 ---- */
+        /* ---- 4. 订阅自动更新（写 OPNsense 原生 Cron 任务）---- */
+        try {
+            $cronMessage = $this->syncSubscriptionCron(
+                (string)$mdl->subscription->updateEnabled === '1',
+                (string)$mdl->subscription->updateInterval
+            );
+            if ($cronMessage !== '') {
+                $result['messages'][] = $cronMessage;
+            }
+        } catch (\Throwable $e) {
+            $result['messages'][] = sprintf(gettext('Scheduled task could not be updated: %s'), $e->getMessage());
+        }
+
+        /* ---- 5. 显式重启 ---- */
         if ($this->boolParam('restart')) {
             if (!$enabled) {
                 $result['messages'][] = gettext('Service is not enabled; nothing to restart.');
@@ -144,6 +157,59 @@ class SettingsController extends ApiMutableModelControllerBase
 
         $result['status'] = 'ok';
         return $result;
+    }
+
+    /**
+     * 订阅自动更新：在 OPNsense 原生 Cron 里维护一个任务（command = mihomo sub-update）。
+     * 关闭时删除该任务；开启时创建/更新。改完让 cron 重新生成 crontab。
+     */
+    private function syncSubscriptionCron(bool $enabled, string $interval): string
+    {
+        $hours = ['v6' => '0,6,12,18', 'v12' => '0,12', 'v24' => '0'][$interval] ?? '0';
+        $cron = new \OPNsense\Cron\Cron();
+        $uuid = null;
+        foreach ($cron->jobs->job->iterateItems() as $id => $job) {
+            if (str_contains((string)$job->command, 'mihomo sub-update')) {
+                $uuid = $id;
+                break;
+            }
+        }
+
+        if ($enabled) {
+            $job = $uuid === null
+                ? $cron->jobs->job->Add()
+                : $cron->getNodeByReference('jobs.job.' . $uuid);
+            $job->enabled = '1';
+            $job->origin = 'mihomo';
+            $job->minutes = '0';
+            $job->hours = $hours;
+            $job->days = '*';
+            $job->months = '*';
+            $job->weekdays = '*';
+            $job->who = 'root';
+            $job->command = 'mihomo sub-update';
+            $job->parameters = '';
+            $job->description = 'Mihomo subscription update';
+        } elseif ($uuid !== null) {
+            $cron->jobs->job->del($uuid);
+        } else {
+            return '';
+        }
+
+        $messages = $cron->performValidation();
+        foreach ($messages as $message) {
+            if ($message->getType() === 'error') {
+                throw new \RuntimeException((string)$message);
+            }
+        }
+        $cron->serializeToConfig();
+        \OPNsense\Core\Config::getInstance()->save();
+        $backend = new Backend();
+        $backend->configdRun('cron restart');
+
+        return $enabled
+            ? sprintf(gettext('Scheduled task enabled: subscription update (%s).'), $hours)
+            : gettext('Scheduled task removed: subscription update.');
     }
 
     /**

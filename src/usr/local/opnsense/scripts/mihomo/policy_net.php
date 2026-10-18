@@ -30,6 +30,7 @@ $CONFIG_FILE = '/conf/config.xml';
 $BACKUP_GLOB = '/conf/config.xml.mihomo-bak.*';
 $GATEWAY_NAME = 'MIHOMO_TUN';
 $RULE_MARKER = 'Mihomo policy routing';
+$RULE_MARKER_LOCAL = 'Mihomo local bypass';
 $DEFAULT_DEVICE = 'tun_mihomo';
 
 function out(array $data): void
@@ -222,9 +223,153 @@ function remove_our_rules(string $xml, array $ifaces, string $marker, string $gw
     return $out . substr($xml, $last);
 }
 
+/** 解析 config.xml 里配置了静态 IPv4 的接口 => 网段（排除回环/动态接口） */
+function local_networks(string $xml): array
+{
+    [$start, $end] = root_interfaces_range($xml);
+    $inner = substr($xml, $start, $end - $start);
+    $nets = [];
+    if (preg_match_all('@<(\w+)>\s*(.*?)</\1>@s', $inner, $blocks, PREG_SET_ORDER)) {
+        foreach ($blocks as $block) {
+            [, $name, $body] = $block;
+            if (str_contains($body, '<internal_dynamic>1</internal_dynamic>')) {
+                continue;
+            }
+            if (!preg_match('@<if>([^<]+)</if>@', $body, $m) || $m[1] === 'lo0') {
+                continue;
+            }
+            if (
+                !preg_match('@<ipaddr>([^<]+)</ipaddr>@', $body, $m2)
+                || !preg_match('@<subnet>([0-9]{1,2})</subnet>@', $body, $m3)
+            ) {
+                continue;
+            }
+            $ip = trim($m2[1]);
+            if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                continue;
+            }
+            $bits = (int)$m3[1];
+            $mask = $bits === 0 ? 0 : (-1 << (32 - $bits));
+            $nets[$name] = long2ip(ip2long($ip) & $mask) . '/' . $bits;
+        }
+    }
+    return $nets;
+}
+
+/**
+ * 解析 config.xml 里本插件的规则：返回逐条 [kind, iface, dest, offset]
+ * kind = policy（策略路由）或 bypass（内网直达）
+ */
+function our_rules(string $xml, string $policyMarker, string $localMarker, string $gwName): array
+{
+    $rules = [];
+    if (!preg_match_all('@[ \t]*<rule\b[^>]*>.*?</rule>@s', $xml, $m, PREG_OFFSET_CAPTURE)) {
+        return $rules;
+    }
+    foreach ($m[0] as [$block, $offset]) {
+        $kind = null;
+        if (str_contains($block, $policyMarker) && str_contains($block, '<gateway>' . $gwName . '</gateway>')) {
+            $kind = 'policy';
+        } elseif (str_contains($block, $localMarker)) {
+            $kind = 'bypass';
+        }
+        if ($kind === null) {
+            continue;
+        }
+        preg_match('@<interface>([^<]+)</interface>@', $block, $im);
+        $dest = '';
+        if ($kind === 'bypass' && preg_match('@' . preg_quote($localMarker, '@') . ' \(([^)]+)\)@', $block, $dm)) {
+            $dest = $dm[1];
+        }
+        $rules[] = [
+            'kind' => $kind,
+            'iface' => $im[1] ?? '',
+            'dest' => $dest,
+            'offset' => $offset,
+        ];
+    }
+    usort($rules, fn ($a, $b) => $a['offset'] <=> $b['offset']);
+    return $rules;
+}
+
+function new_uuid(): string
+{
+    return sprintf(
+        '%s-%s-%s-%s-%s',
+        bin2hex(random_bytes(4)),
+        bin2hex(random_bytes(2)),
+        bin2hex(random_bytes(2)),
+        bin2hex(random_bytes(2)),
+        bin2hex(random_bytes(6))
+    );
+}
+
+function policy_rule_xml(string $iface, string $gwName, string $marker): string
+{
+    return sprintf(
+        "          <rule uuid=\"%s\">\n"
+        . "            <type>pass</type>\n"
+        . "            <interface>%s</interface>\n"
+        . "            <ipprotocol>inet</ipprotocol>\n"
+        . "            <source><network>%s</network></source>\n"
+        . "            <destination><any/></destination>\n"
+        . "            <gateway>%s</gateway>\n"
+        . "            <descr>%s (%s)</descr>\n"
+        . "          </rule>\n",
+        new_uuid(),
+        $iface,
+        $iface,
+        $gwName,
+        $marker,
+        $iface
+    );
+}
+
+function bypass_rule_xml(string $iface, string $dest, string $marker): string
+{
+    return sprintf(
+        "          <rule uuid=\"%s\">\n"
+        . "            <type>pass</type>\n"
+        . "            <interface>%s</interface>\n"
+        . "            <ipprotocol>inet</ipprotocol>\n"
+        . "            <source><network>%s</network></source>\n"
+        . "            <destination><network>%s</network></destination>\n"
+        . "            <descr>%s (%s)</descr>\n"
+        . "          </rule>\n",
+        new_uuid(),
+        $iface,
+        $iface,
+        $dest,
+        $marker,
+        $dest
+    );
+}
+
+/** 移除本插件的全部规则（两种标记都要认） */
+function remove_all_our_rules(string $xml, string $policyMarker, string $localMarker, string $gwName, array &$removed): string
+{
+    if (!preg_match_all('@[ \t]*<rule\b[^>]*>.*?</rule>\r?\n?@s', $xml, $m, PREG_OFFSET_CAPTURE)) {
+        return $xml;
+    }
+    $out = '';
+    $last = 0;
+    foreach ($m[0] as [$block, $offset]) {
+        $isPolicy = str_contains($block, $policyMarker) && str_contains($block, '<gateway>' . $gwName . '</gateway>');
+        $isLocal = str_contains($block, $localMarker);
+        if (!$isPolicy && !$isLocal) {
+            continue;
+        }
+        $out .= substr($xml, $last, $offset - $last);
+        $last = $offset + strlen($block);
+        preg_match('@<interface>([^<]+)</interface>@', $block, $im);
+        $removed[] = ($isLocal ? 'bypass ' : 'policy ') . ($im[1] ?? '?');
+    }
+    return $out . substr($xml, $last);
+}
+
 function build_plan(array $plan): array
 {
-    global $GATEWAY_NAME;
+    global $GATEWAY_NAME, $CONFIG_FILE;
 
     $state = current_state();
     $existing = array_column($state['rules'], 'interface');
@@ -252,6 +397,21 @@ function build_plan(array $plan): array
 
     foreach ($remove as $iface) {
         $changes[] = sprintf('config.xml: unbind interface %s (remove its policy routing rule)', $iface);
+    }
+
+    $bypassWanted = 0;
+    foreach ($desired as $iface) {
+        foreach (local_networks((string)@file_get_contents($CONFIG_FILE)) as $destName => $destCidr) {
+            if ($destName !== $iface) {
+                $bypassWanted++;
+            }
+        }
+    }
+    if ($bypassWanted > 0) {
+        $changes[] = sprintf(
+            'config.xml: pass local networks directly (so LAN to LAN traffic does not enter mihomo, %d rules)',
+            $bypassWanted
+        );
     }
 
     if ($desired === [] && ($existing !== [] || $state['gateway_present'] || !empty($state['interface']))) {
@@ -462,49 +622,14 @@ if ($addIfaces !== []) {
     }
 }
 
-/* ---------------- 4. 策略路由规则：先移除不再需要的，再添加新的 ---------------- */
-$removed = [];
-if ($removeIfaces !== []) {
-    $after = remove_our_rules($after, $removeIfaces, $RULE_MARKER, $GATEWAY_NAME, $removed);
-    foreach ($removed as $iface) {
-        $messages[] = 'unbound interface ' . $iface . ' (policy routing rule removed)';
-    }
-}
-
-foreach ($addIfaces as $iface) {
-    $uuid = sprintf(
-        '%s-%s-%s-%s-%s',
-        bin2hex(random_bytes(4)),
-        bin2hex(random_bytes(2)),
-        bin2hex(random_bytes(2)),
-        bin2hex(random_bytes(2)),
-        bin2hex(random_bytes(6))
-    );
-    $rule = sprintf(
-        "          <rule uuid=\"%s\">\n"
-        . "            <type>pass</type>\n"
-        . "            <interface>%s</interface>\n"
-        . "            <ipprotocol>inet</ipprotocol>\n"
-        . "            <source><network>%s</network></source>\n"
-        . "            <destination><any/></destination>\n"
-        . "            <gateway>%s</gateway>\n"
-        . "            <descr>%s (%s)</descr>\n"
-        . "          </rule>\n",
-        $uuid,
-        $iface,
-        $iface,
-        $GATEWAY_NAME,
-        $RULE_MARKER,
-        $iface
-    );
-    if (preg_match('@^(\s*)<filter\s*/>@m', $after)) {
-        $after = preg_replace('@^(\s*)<filter\s*/>@m', '$1<filter>' . "\n" . $rule . '$1</filter>', $after, 1);
-    } elseif (preg_match('@^(\s*)<filter>@m', $after, $mm)) {
-        $after = preg_replace('@^(\s*)<filter>@m', '$0' . "\n" . $rule, $after, 1);
-    } else {
-        fail('config.xml has no <filter> section', 3);
-    }
-    $messages[] = 'bound interface ' . $iface . ' to mihomo (gateway ' . $GATEWAY_NAME . ')';
+/* ---------------- 4. 旧版遗留规则的清理（规则本体改由核心防火墙模块的浮动规则负责） ----------------
+ * 说明：本脚本早先版本把规则写进旧版根 <filter>，实测会被接口的默认放行规则抢先
+ * （pf 里顺序在后、Evaluations=0），因此规则改由 Api\RoutingController::syncFloatingRules()
+ * 以「浮动规则」形式写入核心防火墙模块。这里只负责把旧版遗留清掉。 */
+$dropped = [];
+$after = remove_all_our_rules($after, $RULE_MARKER, $RULE_MARKER_LOCAL, $GATEWAY_NAME, $dropped);
+if ($dropped !== []) {
+    $messages[] = 'legacy inline rules removed: ' . implode(', ', array_unique($dropped));
 }
 
 /* ---------------- 4b. 全部解绑时清理网关与接口块 ---------------- */

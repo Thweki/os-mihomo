@@ -310,10 +310,22 @@ class RoutingController extends ApiMutableModelControllerBase
         $this->throwReadOnly();
 
         $payload = $this->netPayload();
+
+        /* 1) 防火墙规则：写进核心防火墙模块的「浮动规则」——
+         *    浮动规则先于接口规则执行，因此不会被该接口的默认放行规则挡住。
+         *    （写进旧版根 <filter> 的规则会被默认放行规则抢先，实测 Evaluations=0） */
+        try {
+            $result['messages'] = array_merge($result['messages'], $this->syncFloatingRules($payload['interfaces']));
+        } catch (\Throwable $e) {
+            $result['message'] = sprintf(gettext('Firewall rules could not be updated: %s'), $e->getMessage());
+            return $result;
+        }
+
+        /* 2) 接口 + 网关（root 脚本，文本级编辑 + 备份），并清理旧版遗留规则 */
         $staging = null;
         try {
             $staging = $this->writeStaging($payload);
-            return $this->configdJson('policy-net-apply', [$staging]);
+            $netResult = $this->configdJson('policy-net-apply', [$staging]);
         } catch (\Throwable $e) {
             $result['message'] = $e->getMessage();
             return $result;
@@ -322,6 +334,115 @@ class RoutingController extends ApiMutableModelControllerBase
                 @unlink($staging);
             }
         }
+
+        if (($netResult['status'] ?? '') !== 'ok') {
+            return $netResult;
+        }
+
+        return [
+            'status' => 'ok',
+            'messages' => array_merge($result['messages'], $netResult['messages'] ?? []),
+            'diff' => $netResult['diff'] ?? '',
+            'state' => $netResult['state'] ?? [],
+        ];
+    }
+
+    /**
+     * 在核心防火墙模块里维护本插件的浮动规则：
+     *   · 每个绑定接口：先「内网直达」（无网关）× N，再「策略路由」（带网关）——顺序即优先级
+     *   · 未绑定的接口：删除其规则
+     * 规则用 description 标记（Mihomo local bypass (x) / Mihomo policy routing (x)）。
+     */
+    private function syncFloatingRules(array $interfaces): array
+    {
+        $messages = [];
+        $model = new \OPNsense\Firewall\Filter();
+        $subnets = Config::interfaceSubnets();
+
+        /* 现有本插件规则：description → uuid 列表（同一描述出现多次视为重复，保留一个） */
+        $existing = [];
+        foreach ($model->rules->rule->iterateItems() as $uuid => $node) {
+            if (preg_match('/^Mihomo (bypass|policy) \(([^)]*)\)$/', (string)$node->description, $m)) {
+                $existing[$m[1] . '(' . $m[2] . ')'][] = $uuid;
+            }
+        }
+        $existingKey = [];
+        foreach ($existing as $key => $uuids) {
+            $existingKey[$key] = $uuids[0];
+        }
+
+        /* 期望集合：绑定接口的内网直达 + 策略路由（键与 description 一致，便于比对） */
+        $desired = [];
+        foreach ($interfaces as $iface) {
+            foreach (array_keys($subnets) as $destIface) {
+                if ($destIface === $iface) {
+                    continue;
+                }
+                $desired['bypass(' . $destIface . ')'] = ['kind' => 'bypass', 'iface' => $iface, 'dest' => $destIface];
+            }
+            $desired['policy(' . $iface . ')'] = ['kind' => 'policy', 'iface' => $iface, 'dest' => ''];
+        }
+
+        /* 删除不再需要的规则 + 同名重复项 */
+        $removed = 0;
+        foreach ($existing as $key => $uuids) {
+            if (!isset($desired[$key])) {
+                foreach ($uuids as $uuid) {
+                    $model->rules->rule->del($uuid);
+                    $removed++;
+                }
+            } else {
+                foreach (array_slice($uuids, 1) as $uuid) {
+                    $model->rules->rule->del($uuid);
+                    $removed++;
+                }
+            }
+        }
+        if ($removed > 0) {
+            $messages[] = sprintf('firewall: %d obsolete/duplicate rules removed', $removed);
+        }
+
+        /* 添加缺失的（浮动规则：不设置 interface；sequence 留空由框架按浮动组递增分配，
+           保证「内网直达」排在「策略路由」之前） */
+        $added = 0;
+        foreach ($desired as $key => $spec) {
+            if (isset($existingKey[$key])) {
+                continue;
+            }
+            $rule = $model->rules->rule->Add();
+            $rule->enabled = '1';
+            $rule->action = 'pass';
+            $rule->quick = '1';
+            $rule->ipprotocol = 'inet';
+            $rule->direction = 'in';
+            $rule->description = sprintf('Mihomo %s (%s)', $spec['kind'], $spec['kind'] === 'policy' ? $spec['iface'] : $spec['dest']);
+            if ($spec['kind'] === 'policy') {
+                $rule->source_net = $spec['iface'];
+                $rule->destination_net = 'any';
+                $rule->gateway = 'MIHOMO_TUN';
+            } else {
+                $rule->source_net = $spec['iface'];
+                $rule->destination_net = $spec['dest'];
+            }
+            $added++;
+        }
+        if ($added > 0) {
+            $messages[] = sprintf('firewall: %d floating rules added (%s)', $added, implode(', ', $interfaces));
+        }
+        if ($added === 0 && $removed === 0 && count($existingKey) === count($desired)) {
+            $messages[] = 'firewall: floating rules already in place';
+        }
+
+        $validations = $model->performValidation();
+        foreach ($validations as $validation) {
+            if ($validation->getType() === 'error') {
+                throw new \RuntimeException((string)$validation);
+            }
+        }
+        $model->serializeToConfig();
+        \OPNsense\Core\Config::getInstance()->save();
+
+        return $messages;
     }
 
     /** 回滚最近一次网络侧改动 */

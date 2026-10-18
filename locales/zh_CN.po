@@ -40,6 +40,9 @@ msgstr "允许局域网"
 msgid "Apply failed"
 msgstr "应用失败"
 
+msgid "Auto update"
+msgstr "自动更新"
+
 msgid "Automatic Route"
 msgstr "自动路由"
 
@@ -112,6 +115,9 @@ msgstr "内核日志"
 msgid "Create"
 msgstr "创建"
 
+msgid "Create a scheduled task for the subscription update."
+msgstr "创建定时任务执行订阅更新。"
+
 msgid "Create: the plugin creates the interface, gateway and firewall rule for this interface. Keep: you route the traffic yourself."
 msgstr "创建：由插件创建该接口对应的接口、网关与防火墙规则；不创建：路由由你自己处理。"
 
@@ -172,6 +178,12 @@ msgstr "请输入 http(s) 地址，可留空。"
 msgid "Enter dashboard access secret"
 msgstr "输入控制面板访问密钥"
 
+msgid "Every 12 hours"
+msgstr "每 12 小时"
+
+msgid "Every 6 hours"
+msgstr "每 6 小时"
+
 msgid "External Controller"
 msgstr "外部控制器"
 
@@ -198,6 +210,9 @@ msgstr "仅国外：国内直连，国外走所选出口；全部：所有流量
 
 msgid "Group and member are required."
 msgstr "需要提供分组与节点名称。"
+
+msgid "How often the scheduled task runs."
+msgstr "定时任务的执行频率。"
 
 msgid "Import failed"
 msgstr "导入失败"
@@ -345,6 +360,15 @@ msgstr "用虚拟网卡把流量导入 mihomo。"
 
 msgid "Save failed"
 msgstr "保存失败"
+
+msgid "Scheduled task could not be updated: %s"
+msgstr "定时任务更新失败：%s"
+
+msgid "Scheduled task enabled: subscription update (%s)."
+msgstr "定时任务已启用：订阅更新（%s）。"
+
+msgid "Scheduled task removed: subscription update."
+msgstr "定时任务已删除：订阅更新。"
 
 msgid "Scope"
 msgstr "规则范围"
@@ -525,6 +549,9 @@ msgstr "最多 128 字符：字母、数字与 . - _。"
 
 msgid "Up to 15 characters: letters, digits, underscore."
 msgstr "最多 15 字符：字母、数字、下划线。"
+
+msgid "Update the subscription on a schedule."
+msgstr "按计划更新订阅。"
 
 msgid "Use %sSettings%s to enable it, then start it from the controls in the page header."
 msgstr "请到 %s设置%s 中启用，然后使用页面右上角的控件启动。"

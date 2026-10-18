@@ -144,4 +144,16 @@
         <type>checkbox</type>
         <help>Restart the service after a successful update.</help>
     </field>
+    <field>
+        <id>mihomo.subscription.updateEnabled</id>
+        <label>Auto update</label>
+        <type>checkbox</type>
+        <help>Create a scheduled task for the subscription update.</help>
+    </field>
+    <field>
+        <id>mihomo.subscription.updateInterval</id>
+        <label>Interval</label>
+        <type>dropdown</type>
+        <help>How often the scheduled task runs.</help>
+    </field>
 </form>

@@ -123,6 +123,20 @@
                 <Required>Y</Required>
                 <ValidationMessage>Restart the service after a successful update.</ValidationMessage>
             </restartAfterUpdate>
+            <updateEnabled type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Update the subscription on a schedule.</ValidationMessage>
+            </updateEnabled>
+            <updateInterval type="OptionField">
+                <Default>v24</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <v6>Every 6 hours</v6>
+                    <v12>Every 12 hours</v12>
+                    <v24>Daily</v24>
+                </OptionValues>
+            </updateInterval>
         </subscription>
         <!--
           路由策略：按接口(/源)决定流量走哪个代理出口。
