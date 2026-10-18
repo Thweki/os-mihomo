@@ -49,9 +49,7 @@ class Safety
                 'level' => self::LEVEL_DANGER,
                 'title' => gettext('TUN with automatic route takeover is enabled'),
                 'detail' => gettext(
-                    'Starting the service will insert routes for all IPv4 traffic into the TUN device. ' .
-                    'If the proxy nodes are not reachable or not configured, every device behind this ' .
-                    'firewall loses Internet access.'
+                    'Starting the service will insert routes for all IPv4 traffic into the TUN device. If the proxy nodes are not reachable or not configured, every device behind this firewall loses Internet access.'
                 ),
             ];
         } elseif ($tunEnabled) {
@@ -79,8 +77,7 @@ class Safety
                 'level' => self::LEVEL_DANGER,
                 'title' => gettext('Placeholder proxy nodes detected'),
                 'detail' => gettext(
-                    'The configuration still contains the placeholder server 88.88.88.88 shipped with the ' .
-                    'plugin. Replace it with a real subscription or real proxy nodes before starting the service.'
+                    'The configuration still contains the placeholder server 88.88.88.88 shipped with the plugin. Replace it with a real subscription or real proxy nodes before starting the service.'
                 ),
             ];
         }
@@ -97,9 +94,7 @@ class Safety
                 'title' => gettext('External controller is reachable from the network'),
                 'detail' => sprintf(
                     gettext(
-                        'external-controller is bound to %s. Anyone who can reach that address and knows the ' .
-                        'secret can reconfigure the proxy. Bind it to 127.0.0.1 — this WebGUI talks to the ' .
-                        'controller over the loopback interface only.'
+                        'external-controller is bound to %s. Anyone who can reach that address and knows the secret can reconfigure the proxy. Bind it to 127.0.0.1 — this WebGUI talks to the controller over the loopback interface only.'
                     ),
                     $bind
                 ),
@@ -121,8 +116,7 @@ class Safety
                 'level' => self::LEVEL_WARNING,
                 'title' => gettext('DNS hijacking is configured'),
                 'detail' => gettext(
-                    'DNS queries on port 53 are redirected into mihomo while the service runs. If the proxy ' .
-                    'is broken, name resolution for all clients behind this firewall breaks with it.'
+                    'DNS queries on port 53 are redirected into mihomo while the service runs. If the proxy is broken, name resolution for all clients behind this firewall breaks with it.'
                 ),
             ];
         }
@@ -142,8 +136,7 @@ class Safety
                 'level' => self::LEVEL_WARNING,
                 'title' => gettext('Service is enabled at boot but not running'),
                 'detail' => gettext(
-                    'On the next reboot mihomo will take over routing as soon as it starts. Verify the ' .
-                    'configuration before you reboot.'
+                    'On the next reboot mihomo will take over routing as soon as it starts. Verify the configuration before you reboot.'
                 ),
             ];
         }

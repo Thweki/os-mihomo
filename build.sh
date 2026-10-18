@@ -155,6 +155,23 @@ chmod 0755 "$STAGEDIR/usr/bin/mihomo_sub"
 chmod 0755 "$STAGEDIR/usr/local/etc/rc.d/mihomo"
 chmod 0755 "$STAGEDIR/usr/local/opnsense/scripts/mihomo/setup_unbound.php"
 
+# 二次开发新增的可执行文件（configd 会直接执行其中的 shell 脚本；
+# PHP 脚本虽由 php 解释器调用，也统一给执行位，便于手工调试）
+for extra in \
+    usr/local/opnsense/scripts/mihomo/config_apply.php \
+    usr/local/opnsense/scripts/mihomo/env.php \
+    usr/local/opnsense/scripts/mihomo/logclear.php \
+    usr/local/opnsense/scripts/mihomo/logtail.php \
+    usr/local/opnsense/scripts/mihomo/service_enable.php \
+    usr/local/opnsense/scripts/mihomo/subscription_run.sh ; do
+    [ -f "$STAGEDIR/$extra" ] && chmod 0755 "$STAGEDIR/$extra"
+done
+
+# 配置文件按最小权限落包
+chmod 0600 "$STAGEDIR/usr/local/etc/mihomo/sub/env" 2>/dev/null || true
+chmod 0600 "$STAGEDIR/usr/local/etc/mihomo/sub/template_config.yaml" 2>/dev/null || true
+chmod 0644 "$STAGEDIR/usr/local/etc/mihomo/config.yaml" 2>/dev/null || true
+
 echo "==> Generating plist"
 find "$STAGEDIR" -type f | sed "s#^$STAGEDIR##" | sort > "$PLIST"
 

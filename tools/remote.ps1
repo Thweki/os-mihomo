@@ -30,8 +30,23 @@ function Get-Sha256([string]$path) {
     (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower()
 }
 
+function Invoke-WithRetry {
+    param([scriptblock]$Action, [int]$Attempts = 4, [int]$DelayMs = 2500)
+    for ($i = 1; $i -le $Attempts; $i++) {
+        $out = & $Action 2>&1
+        $text = ($out -join "`n")
+        # Windows OpenSSH 偶发 "getsockname failed: Not a socket" / 连接被拒 → 重试
+        if ($text -notmatch 'getsockname failed|Connection reset|Connection refused|Broken pipe|kex_exchange_identification') {
+            return $out
+        }
+        Write-Host ("  [retry {0}/{1}] transient ssh error, waiting {2}ms" -f $i, $Attempts, $DelayMs) -ForegroundColor DarkYellow
+        Start-Sleep -Milliseconds $DelayMs
+    }
+    return (& $Action 2>&1)
+}
+
 if ($Cmd) {
-    & ssh @SSH_OPTS $TARGET $Cmd 2>&1
+    Invoke-WithRetry { & ssh @SSH_OPTS $TARGET $Cmd }
     exit $LASTEXITCODE
 }
 
@@ -63,7 +78,8 @@ if ($Script) {
         exit 1
     }
 
-    & ssh @SSH_OPTS $TARGET "exec sh /tmp/__remote.sh $ScriptArgs" 2>&1
+    $result = Invoke-WithRetry { & ssh @SSH_OPTS $TARGET "exec sh /tmp/__remote.sh $ScriptArgs" }
+    $result | ForEach-Object { $_ }
     $rc = $LASTEXITCODE
     Remove-Item -Force $tmp -ErrorAction SilentlyContinue
     exit $rc
