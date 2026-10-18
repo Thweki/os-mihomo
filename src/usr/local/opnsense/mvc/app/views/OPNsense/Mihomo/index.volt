@@ -110,13 +110,21 @@
                 $box.empty();
                 return;
             }
+            /* 条目文字一律继承横幅的配色：主题里 text-danger/warning 与 alert 底色可能撞色，
+               之前在深色横幅上就看不见内容（只有一个空框） */
             html += '<div class="alert alert-' + worst + '">';
-            html += '<i class="fa fa-exclamation-triangle fa-fw"></i> <b>{{ lang._('Please review before starting the service') }}</b><ul style="margin-bottom:0;margin-top:6px;">';
+            html += '<i class="fa fa-exclamation-triangle fa-fw"></i> <b>'
+                + (worst === 'danger'
+                    ? '{{ lang._('Fix these before starting the service') }}'
+                    : '{{ lang._('Check these before starting the service') }}')
+                + '</b><ul style="margin-bottom:0;margin-top:6px;padding-left:20px;">';
             items.forEach(function (item) {
                 if (item['level'] === 'info') {
                     return;
                 }
-                html += '<li class="text-' + item['level'] + '"><b>' + escapeHtml(item['title']) + '</b> — ' + escapeHtml(item['detail']) + '</li>';
+                const icon = item['level'] === 'danger' ? 'fa-times-circle' : 'fa-exclamation-circle';
+                html += '<li style="color:inherit;"><i class="fa ' + icon + ' fa-fw"></i> <b>'
+                    + escapeHtml(item['title']) + '</b>：' + escapeHtml(item['detail']) + '</li>';
             });
             html += '</ul></div>';
             $box.html(html);

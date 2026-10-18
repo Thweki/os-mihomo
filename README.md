@@ -221,6 +221,7 @@ configctl mihomo status|config-current|env-get   # 插件的 configd 动作
 
 | 文档 | 内容 |
 |---|---|
+| [`docs/config-guide.md`](docs/config-guide.md) | **配置说明**：YAML 文件与 WebUI 选项的交叉/重复关系、谁说了算、如何确认"此刻真实配置"（含三方对照脚本） |
 | [`docs/report.md`](docs/report.md) | 交付报告：需求分析、架构、**真实截图**、安全证明、验证矩阵、回滚步骤、事故记录 |
 | [`docs/design.md`](docs/design.md) | 设计说明：MVC 结构、接口契约、configd 动作、YAML 补丁器规则 |
 | [`AGENTS.md`](AGENTS.md) / [`TODO.md`](TODO.md) | 协作手册 / 状态看板（含安全红线与验证方法） |

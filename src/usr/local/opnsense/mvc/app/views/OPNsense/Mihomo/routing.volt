@@ -96,6 +96,7 @@
                 });
                 $('#routeState').text(parts.length ? parts.join('　') : '{{ lang._('nothing bound') }}')
                     .toggleClass('text-muted', parts.length === 0);
+                $('#policyEmptyHint').toggleClass('hidden', parts.length > 0);
                 $('#routeNotes').text(
                     data.tun_enabled ? '' : '（' + '{{ lang._('TUN off') }}' + '）'
                 );
@@ -336,6 +337,10 @@
 </script>
 
 <div class="content-box __mb">
+    <div id="policyEmptyHint" class="alert alert-info hidden" style="margin-bottom:0;">
+        <i class="fa fa-info-circle fa-fw"></i>
+        {{ lang._('Nothing is bound yet — click Add, pick an interface and a proxy group, then Apply.') }}
+    </div>
     {{ partial('layout_partials/base_bootgrid_table', formGridPolicy) }}
 </div>
 

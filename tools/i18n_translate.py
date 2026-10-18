@@ -84,7 +84,6 @@ TRANSLATIONS: dict[str, str] = {
     'Only HTTP or HTTPS subscription URLs are allowed.': '订阅地址仅允许使用 HTTP 或 HTTPS。',
     'POST required.': '需要 POST 请求。',
     'Placeholder proxy nodes detected': '检测到占位节点',
-    'Please review before starting the service': '启动服务前请先确认以下风险',
     'Save failed': '保存失败',
     'Service is enabled at boot but not running': '已设置为开机自启，但当前未运行',
     'Service is not enabled; nothing to restart.': '服务未启用，无需重启。',
@@ -92,9 +91,7 @@ TRANSLATIONS: dict[str, str] = {
     'Service restart requested.': '已请求重启服务。',
     'Service will not start automatically on boot.': '服务不会在开机时自动启动。',
     'Service will start automatically on boot.': '服务将在开机时自动启动。',
-    'Set a secret in the configuration, otherwise the API is unauthenticated.':
-        '请在配置中设置密钥，否则 API 将无需认证。',
-    'Set a subscription URL before starting an update.': '请先设置订阅地址再执行更新。',
+        'Set a subscription URL before starting an update.': '请先设置订阅地址再执行更新。',
     'Settings applied': '设置已应用',
     'Settings imported': '设置已导入',
     'Settings imported from the active configuration.': '已从当前配置导入设置。',
@@ -174,6 +171,19 @@ TRANSLATIONS: dict[str, str] = {
     'TUN off': 'TUN 未启用',
     # ---- 订阅自动更新（④）----
     'Auto update': '自动更新',
+    'Fix these before starting the service': '启动服务前请先修正以下问题',
+    'Check these before starting the service': '启动服务前请先确认以下事项',
+    'Firewall rules could not be updated: %s': '防火墙规则未能更新：%s',
+    'Nothing is bound yet — click Add, pick an interface and a proxy group, then Apply.':
+        '还没有绑定接口 —— 点「添加」选择接口与代理组，再点「应用」生效。',
+    'External controller has no secret (loopback only)': '外部控制器未设置密钥（仅监听本机）',
+    'The controller listens on 127.0.0.1, so it cannot be reached from the network. A secret is only needed when you bind the controller to a network address.':
+        '控制器只监听 127.0.0.1，网络侧访问不到；只有把它绑到网络地址时才需要密钥。',
+    'Updating the subscription rebuilds config.yaml from the subscription template, so manual edits are replaced. The current file is backed up as config.yaml.bak.sub_* first.':
+        '更新订阅会用订阅模板整份重写 config.yaml，手工改过的内容会被替换；更新前会自动备份成 config.yaml.bak.sub_*。',
+    'External controller is exposed without a secret': '外部控制器对外暴露且没有密钥',
+    'The controller is reachable from the network and has no secret, so anyone who can reach it may reconfigure the proxy. Set a secret or bind it to 127.0.0.1.':
+        '控制器对网络开放且未设密钥，任何能访问它的人都能改代理配置。请设置密钥，或改为只监听 127.0.0.1。',
     'Create a scheduled task for the subscription update.': '创建定时任务执行订阅更新。',
     'How often the scheduled task runs.': '定时任务的执行频率。',
     'Every 6 hours': '每 6 小时',

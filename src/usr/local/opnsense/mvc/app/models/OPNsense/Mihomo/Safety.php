@@ -82,13 +82,15 @@ class Safety
             ];
         }
 
-        /* --- 3. 控制器对外暴露 --- */
+        /* --- 3. 控制器可达性与密钥 ---
+         * 只监听回环时不设密钥并不危险（网络侧访问不到），因此不再一律报 danger。 */
         $bind = trim((string)(Config::scan()['external-controller'] ?? ''));
         $host = strstr($bind, ':', true);
         if ($host === '' || $host === false) {
             $host = '127.0.0.1';
         }
-        if (!in_array($host, ['127.0.0.1', '::1', '[::1]', 'localhost'], true)) {
+        $loopbackOnly = in_array($host, ['127.0.0.1', '::1', '[::1]', 'localhost'], true);
+        if (!$loopbackOnly) {
             $items[] = [
                 'level' => self::LEVEL_WARNING,
                 'title' => gettext('External controller is reachable from the network'),
@@ -100,14 +102,24 @@ class Safety
                 ),
             ];
         }
-
-        /* --- 4. 空 secret --- */
         if (Config::secret() === '') {
-            $items[] = [
-                'level' => self::LEVEL_DANGER,
-                'title' => gettext('External controller has no secret'),
-                'detail' => gettext('Set a secret in the configuration, otherwise the API is unauthenticated.'),
-            ];
+            if ($loopbackOnly) {
+                $items[] = [
+                    'level' => self::LEVEL_INFO,
+                    'title' => gettext('External controller has no secret (loopback only)'),
+                    'detail' => gettext(
+                        'The controller listens on 127.0.0.1, so it cannot be reached from the network. A secret is only needed when you bind the controller to a network address.'
+                    ),
+                ];
+            } else {
+                $items[] = [
+                    'level' => self::LEVEL_DANGER,
+                    'title' => gettext('External controller is exposed without a secret'),
+                    'detail' => gettext(
+                        'The controller is reachable from the network and has no secret, so anyone who can reach it may reconfigure the proxy. Set a secret or bind it to 127.0.0.1.'
+                    ),
+                ];
+            }
         }
 
         /* --- 5. DNS 劫持 --- */

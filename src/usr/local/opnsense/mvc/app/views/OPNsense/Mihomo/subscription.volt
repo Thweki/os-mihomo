@@ -113,6 +113,15 @@
 
 <div class="row">
     <section class="col-xs-12">
+        <div class="alert alert-warning">
+            <i class="fa fa-exclamation-triangle fa-fw"></i>
+            {{ lang._('Updating the subscription rebuilds config.yaml from the subscription template, so manual edits are replaced. The current file is backed up as config.yaml.bak.sub_* first.') }}
+        </div>
+    </section>
+</div>
+
+<div class="row">
+    <section class="col-xs-12">
         <div class="content-box">
             <div style="padding: 12px 14px; border-bottom: 1px solid #eeeeee;">
                 <i class="fa fa-link text-muted"></i> <b>{{ lang._('Subscription Management') }}</b>

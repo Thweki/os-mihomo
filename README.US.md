@@ -230,6 +230,7 @@ Scheduled subscription updates: `System → Settings → Cron`, add a task and p
 
 | Document | Content |
 |---|---|
+| [`docs/config-guide.md`](docs/config-guide.md) | **Configuration guide**: how the YAML file and the WebGUI options overlap, who wins, and how to check the configuration that is really in effect (with a three-way compare script) — currently Chinese |
 | [`docs/report.md`](docs/report.md) | Delivery report: requirements, architecture, **real screenshots**, safety proof, verification matrix, rollback procedure, incident log |
 | [`docs/design.md`](docs/design.md) | Design notes: MVC structure, API contract, configd actions, YAML patcher rules |
 | [`AGENTS.md`](AGENTS.md) / [`TODO.md`](TODO.md) | Working manual / status board (safety red lines and verification method) |
