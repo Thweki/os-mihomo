@@ -183,24 +183,7 @@ src/
     └── www/mihomo*.php                                   legacy URLs → 302 redirects
 ```
 
-## 8. Translation (zh_CN)
-
-The UI ships Simplified Chinese entries (146 of them: four pages, form labels, help texts and the
-safety details). OPNsense uses a **single gettext domain**, so plugin strings can only be translated
-by merging into `/usr/local/share/locale/<locale>/LC_MESSAGES/OPNsense.mo`. This project provides
-add-only tooling for that:
-
-```sh
-powershell -File tools/i18n.ps1              # backup → merge → verify → restart WebGUI
-powershell -File tools/i18n.ps1 -Status      # is it applied?
-powershell -File tools/i18n.ps1 -Rollback    # restore the backup
-```
-
-* `locales/zh_CN.po` is a standard gettext catalog (usable with `msgfmt`, submittable upstream);
-* existing core translations are **never overwritten** (verified entry by entry; 0 overwrites);
-* an OPNsense upgrade may reset that `.mo` — just re-run `tools/i18n.ps1`.
-
-## 9. Building
+## 8. Building
 
 Build on FreeBSD / OPNsense (needs `pkg`, `tar`, `make`, `xz`, `sha256` and `curl` or `fetch`):
 
@@ -215,17 +198,7 @@ The core binary defaults to the in-tree asset `src/usr/local/bin/clash-meta-free
 only downloaded from [Vincent-Loeng/clash-meta](https://github.com/Vincent-Loeng/clash-meta) when
 missing; its SHA256 from `packaging/freebsd/binary-source.json` is always verified.
 
-## 10. Plugin identity
-
-| Item | Value |
-|---|---|
-| Package / origin | `os-mihomo` / `opnsense/os-mihomo` |
-| Version | `1.1.0` (same plugin slot; must sort above upstream 1.0.4 to be seen as an upgrade) |
-| ABI / arch | `FreeBSD:<major>:amd64` / `freebsd:<major>:x86:64` |
-| Registration points | `models/OPNsense/Mihomo/{ACL,Menu}`, `etc/inc/plugins.inc.d/mihomo.inc`, `version/mihomo`, `actions_mihomo.conf` |
-| Dependencies | `jq`, `curl` |
-
-## 11. Uninstall
+## 9. Uninstall
 
 ```sh
 # Plugin manager: System → Firmware → Plugins → Remove
@@ -238,7 +211,7 @@ the Unbound forwarding and cleans related cron entries; `+POST_DEINSTALL` clears
 deletes `actions_mihomo.conf`, restarts configd and then removes `/usr/local/etc/mihomo`.
 **Back up `/usr/local/etc/mihomo/` (configuration and subscription credentials) before uninstalling.**
 
-## 12. Common commands
+## 10. Common commands
 
 ```sh
 service mihomo start|stop|restart|status|rcvar   # service control
@@ -253,7 +226,7 @@ configctl mihomo status|config-current|env-get   # plugin configd actions
 Scheduled subscription updates: `System → Settings → Cron`, add a task and pick the command
 `Renew mihomo Subscription`.
 
-## 13. Documentation
+## 11. Documentation
 
 | Document | Content |
 |---|---|
@@ -261,14 +234,14 @@ Scheduled subscription updates: `System → Settings → Cron`, add a task and p
 | [`docs/design.md`](docs/design.md) | Design notes: MVC structure, API contract, configd actions, YAML patcher rules |
 | [`AGENTS.md`](AGENTS.md) / [`TODO.md`](TODO.md) | Working manual / status board (safety red lines and verification method) |
 
-## 14. Credits
+## 12. Credits
 
 [mihomo](https://github.com/MetaCubeX/mihomo) ·
 [Vincent-Loeng/clash-meta](https://github.com/Vincent-Loeng/clash-meta) (FreeBSD core) ·
 [Opnwall/OPNsense-repo](https://github.com/Opnwall/OPNsense-repo) (source of the runtime assets) ·
 [OPNsense](https://opnsense.org/)
 
-## 15. Disclaimer
+## 13. Disclaimer
 
 > [!CAUTION]
 > Unofficial plugin, not supported by the OPNsense team. The proxy core and the network settings it

@@ -176,23 +176,7 @@ src/
     └── www/mihomo*.php                                   旧地址 → 302 跳转
 ```
 
-## 8. 中文化
-
-界面已提供简体中文词条（146 条，覆盖四个页面、表单标签、帮助文本、风险详情）。
-OPNsense 用**单一 gettext 域**，插件字符串要显示中文只能合并进
-`/usr/local/share/locale/<locale>/LC_MESSAGES/OPNsense.mo`，因此本项目提供一套"只增不改"的工具：
-
-```sh
-powershell -File tools/i18n.ps1              # 备份 → 合并 → 校验 → 重启 WebGUI
-powershell -File tools/i18n.ps1 -Status      # 查看当前是否已应用
-powershell -File tools/i18n.ps1 -Rollback    # 还原
-```
-
-* `locales/zh_CN.po` 是标准 gettext 词条（可直接 `msgfmt`，也可提交到官方翻译平台）；
-* 合并时**不会覆盖**核心已有译文（校验脚本会逐条比对，实测覆盖 0 条）；
-* 系统升级可能重置该 `.mo`，重跑一次 `tools/i18n.ps1` 即可。
-
-## 9. 编译
+## 8. 编译
 
 在 FreeBSD / OPNsense 上构建（需要 `pkg`、`tar`、`make`、`xz`、`sha256`、`curl` 或 `fetch`）：
 
@@ -207,17 +191,7 @@ pkg info -F dist/os-mihomo.pkg
 缺失时才从 [Vincent-Loeng/clash-meta](https://github.com/Vincent-Loeng/clash-meta) 下载，
 并校验 `packaging/freebsd/binary-source.json` 里记录的 SHA256。
 
-## 10. 插件标识
-
-| 项 | 值 |
-|---|---|
-| 包名 / 来源 | `os-mihomo` / `opnsense/os-mihomo` |
-| 版本 | `1.1.0`（同一插件位，版本高于上游 1.0.4 才能被插件管理器视为升级） |
-| ABI / 架构 | `FreeBSD:<major>:amd64` / `freebsd:<major>:x86:64` |
-| 注册点 | `models/OPNsense/Mihomo/{ACL,Menu}`、`etc/inc/plugins.inc.d/mihomo.inc`、`version/mihomo`、`actions_mihomo.conf` |
-| 依赖 | `jq`、`curl` |
-
-## 11. 卸载
+## 9. 卸载
 
 ```sh
 # 插件管理器：系统 → 固件 → 插件 → 卸载
@@ -229,7 +203,7 @@ pkg delete os-mihomo
 `+POST_DEINSTALL` 会清菜单缓存、删掉 `actions_mihomo.conf` 并重启 configd，随后删除 `/usr/local/etc/mihomo`。
 **卸载前请自行备份 `/usr/local/etc/mihomo/`（配置与订阅凭据都在里面）。**
 
-## 12. 常用命令
+## 10. 常用命令
 
 ```sh
 service mihomo start|stop|restart|status|rcvar   # 服务控制
@@ -243,7 +217,7 @@ configctl mihomo status|config-current|env-get   # 插件的 configd 动作
 
 订阅自动更新：`系统 → 设置 → 任务`，添加任务时选择命令 `Renew mihomo Subscription`。
 
-## 13. 文档
+## 11. 文档
 
 | 文档 | 内容 |
 |---|---|
@@ -251,14 +225,14 @@ configctl mihomo status|config-current|env-get   # 插件的 configd 动作
 | [`docs/design.md`](docs/design.md) | 设计说明：MVC 结构、接口契约、configd 动作、YAML 补丁器规则 |
 | [`AGENTS.md`](AGENTS.md) / [`TODO.md`](TODO.md) | 协作手册 / 状态看板（含安全红线与验证方法） |
 
-## 14. 致谢
+## 12. 致谢
 
 [mihomo](https://github.com/MetaCubeX/mihomo) ·
 [Vincent-Loeng/clash-meta](https://github.com/Vincent-Loeng/clash-meta)（FreeBSD 适配内核） ·
 [Opnwall/OPNsense-repo](https://github.com/Opnwall/OPNsense-repo)（本项目的运行期资产来源） ·
 [OPNsense](https://opnsense.org/)
 
-## 15. 免责声明
+## 13. 免责声明
 
 > [!CAUTION]
 > 非官方插件，OPNsense 团队不提供支持。代理核心与网络配置的作用域很大：
