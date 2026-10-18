@@ -1,4 +1,4 @@
-# Compare the pre-existing plugin tree at the repo root with the upstream src/os-mihomo.
+﻿# Compare the pre-existing plugin tree at the repo root with the upstream src/os-mihomo.
 $ErrorActionPreference = 'Continue'
 $root = 'C:\Users\17187\Documents\os-mihomo'
 $up = Join-Path $root 'upstream\src\os-mihomo'

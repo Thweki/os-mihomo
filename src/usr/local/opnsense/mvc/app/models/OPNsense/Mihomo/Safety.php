@@ -157,7 +157,9 @@ class Safety
                 'title' => $valid
                     ? gettext('Configuration syntax is valid')
                     : gettext('Configuration syntax is invalid'),
-                'detail' => $output === '' ? gettext('No output from the configuration test.') : $output,
+                'detail' => self::shorten(
+                    $output === '' ? gettext('No output from the configuration test.') : $output
+                ),
             ];
         }
 
@@ -182,5 +184,18 @@ class Safety
             return false;
         }
         return (bool)preg_match('/^\s*mihomo_enable\s*=\s*"?YES"?/mi', (string)file_get_contents($file));
+    }
+
+    /**
+     * 校验器输出的最后若干行（mihomo -t 会打印一长串 geodata 加载日志）。
+     */
+    public static function shorten(string $text, int $lines = 8): string
+    {
+        $all = preg_split('/\r\n|\n|\r/', $text) ?: [];
+        $all = array_values(array_filter($all, fn ($line) => trim($line) !== ''));
+        if (count($all) <= $lines) {
+            return implode("\n", $all);
+        }
+        return implode("\n", array_slice($all, -$lines));
     }
 }

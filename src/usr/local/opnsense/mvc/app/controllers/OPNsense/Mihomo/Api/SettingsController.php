@@ -298,7 +298,9 @@ class SettingsController extends ApiMutableModelControllerBase
         $ok = !str_contains($output, 'invalid') && !str_contains($output, 'error');
         return [
             'status' => $ok ? 'ok' : 'failed',
-            'message' => $output === '' ? gettext('No output from the configuration test.') : $output,
+            'message' => $output === ''
+                ? gettext('No output from the configuration test.')
+                : Safety::shorten($output, 12),
         ];
     }
 }

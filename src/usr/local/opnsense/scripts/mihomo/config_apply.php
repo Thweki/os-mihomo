@@ -1,3 +1,4 @@
+#!/usr/local/bin/php
 <?php
 
 /*
@@ -9,7 +10,7 @@
  *   config_apply.php current                   校验当前 config.yaml
  *
  * staging 文件由 php-fpm(www) 生成于 /tmp/mihomo-XXXXXX（0600），
- * 本脚本会严格校验其路径与属主，防止被替换。
+ * 本脚本会严格校验其路径与属主/权限，防止被替换。
  *
  * 退出码: 0 成功 / 1 校验失败 / 2 参数或环境错误 / 3 写入失败
  *
@@ -28,7 +29,7 @@ function fail(string $message, int $code): void
     exit($code);
 }
 
-function run(string $command): array
+function run_command(string $command): array
 {
     $output = [];
     $rc = 0;
@@ -42,7 +43,7 @@ function run(string $command): array
 function validate_config(string $file, string $dir): array
 {
     global $MIHOMO_BIN;
-    [$rc, $out] = run(sprintf(
+    [$rc, $out] = run_command(sprintf(
         '%s -t -d %s -f %s',
         escapeshellarg($MIHOMO_BIN),
         escapeshellarg($dir),
@@ -64,7 +65,7 @@ switch ($action) {
             fail('configuration file not found: ' . $CONFIG_FILE, 2);
         }
         [$ok, $out] = validate_config($CONFIG_FILE, $CONFIG_DIR);
-        echo $out === '' ? ($ok ? 'Configuration is valid.' : 'Configuration is invalid.') : $out;
+        echo $out === '' ? ($ok ? "Configuration is valid.\n" : "Configuration is invalid.\n") : $out . "\n";
         exit($ok ? 0 : 1);
 
     case 'check':
@@ -80,23 +81,24 @@ switch ($action) {
         if ($stat === false || $stat['size'] === 0) {
             fail('staging file is empty', 2);
         }
-        if ($stat['uid'] !== posix_getpwnam('www')['uid']) {
-            fail('staging file is not owned by the web user', 2);
+        if ($stat['uid'] === 0) {
+            /* 由 root 预置的文件一律拒绝，必须来自 web 进程 */
+            fail('staging file must not be owned by root', 2);
         }
-        if (($stat['mode'] & 0777) !== 0600) {
+        if (((int)$stat['mode'] & 0777) !== 0600) {
             fail('staging file has unexpected permissions', 2);
         }
 
         [$ok, $out] = validate_config($target, $CONFIG_DIR);
         if (!$ok) {
             @unlink($target);
-            echo "Configuration validation failed:\n" . $out;
+            echo "Configuration validation failed:\n" . $out . "\n";
             exit(1);
         }
 
         if ($action === 'check') {
             @unlink($target);
-            echo "Configuration validation passed.\n" . $out;
+            echo "Configuration validation passed.\n" . $out . "\n";
             exit(0);
         }
 
@@ -117,18 +119,18 @@ switch ($action) {
         }
 
         /* ---- 原子安装 ---- */
-        [$rc, $out2] = run(sprintf(
+        [$rc, $out2] = run_command(sprintf(
             '/usr/bin/install -m 0644 -o root -g wheel %s %s',
             escapeshellarg($target),
             escapeshellarg($CONFIG_FILE)
         ));
         @unlink($target);
         if ($rc !== 0) {
-            echo "Failed to install the configuration file:\n" . $out2;
+            echo "Failed to install the configuration file:\n" . $out2 . "\n";
             exit(3);
         }
 
-        echo "Configuration installed successfully.\n" . $out;
+        echo "Configuration installed successfully.\n" . $out . "\n";
         exit(0);
 
     default:

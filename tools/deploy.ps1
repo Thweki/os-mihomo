@@ -1,4 +1,4 @@
-# 一键部署：本地净化 -> scp 暂存 -> 远端安全安装 -> 语法检查
+﻿# 一键部署：本地净化 -> scp 暂存 -> 远端安全安装 -> 语法检查
 #
 #   .\tools\deploy.ps1              # 只装 WebUI / 脚本（不动内核二进制）
 #   .\tools\deploy.ps1 -WithBinary  # 同时安装 mihomo 内核（首次需要）
@@ -27,7 +27,7 @@ Write-Host "`n=== 3.5/4 上传测试用例 ===" -ForegroundColor Cyan
 
 Write-Host "`n=== 4/4 远端安装 ===" -ForegroundColor Cyan
 $arg = if ($WithBinary) { " --with-binary" } else { "" }
-& .\tools\remote.ps1 -Script ".\scripts\deploy.sh" -Args $arg
+& .\tools\remote.ps1 -Script ".\scripts\deploy.sh" -ScriptArgs $arg
 
 Pop-Location
 exit $LASTEXITCODE

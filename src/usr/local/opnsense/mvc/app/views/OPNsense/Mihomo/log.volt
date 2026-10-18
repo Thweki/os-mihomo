@@ -80,7 +80,7 @@
             </div>
             <div style="padding: 14px;">
                 <textarea id="log-viewer" class="form-control" rows="30" readonly
-                          style="font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre; overflow-wrap: normal;"></textarea>
+                          style="width: 100%; max-width: 100%; font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere;"></textarea>
             </div>
         </div>
     </section>

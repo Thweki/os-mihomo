@@ -65,6 +65,29 @@
         updateServiceControlUI('mihomo');
 
         /* ------------------------------------------------------------------ *
+         * 服务状态提示（标准控件在标题栏；这里补充 disabled 状态的说明）
+         * ------------------------------------------------------------------ */
+        function loadServiceState() {
+            ajaxGet('/api/mihomo/service/status', {}, function (data) {
+                const $box = $('#mihomo-service-state');
+                if (data['status'] === 'disabled') {
+                    $box.html('<div class="alert alert-warning">'
+                        + '<i class="fa fa-power-off fa-fw"></i> '
+                        + '<b>{{ lang._('The service is not enabled at boot.') }}</b> '
+                        + '{{ lang._('Use %sSettings%s to enable it, then start it from the controls in the page header.') | format('<a href="/ui/mihomo/settings">', '</a>') }}'
+                        + '</div>');
+                } else if (data['status'] === 'stopped') {
+                    $box.html('<div class="alert alert-danger">'
+                        + '<i class="fa fa-stop-circle fa-fw"></i> '
+                        + '{{ lang._('The service is stopped. Use the start button in the page header to bring it up.') }}'
+                        + '</div>');
+                } else {
+                    $box.empty();
+                }
+            });
+        }
+
+        /* ------------------------------------------------------------------ *
          * 安全体检横幅
          * ------------------------------------------------------------------ */
         function renderSafety(data) {
@@ -185,16 +208,16 @@
 
             let html = '<div class="row">';
             groups.forEach(function (group) {
-                html += '<div class="col-md-6 col-lg-4" style="margin-bottom: 15px;">';
-                html += '<div class="content-box" style="height: 100%; margin-bottom: 0;">';
-                html += '<div style="padding: 10px 12px; border-bottom: 1px solid #eeeeee;">';
+                html += '<div class="col-md-6" style="margin-bottom: 15px;">';
+                html += '<div class="content-box" style="height: 300px; margin-bottom: 0; display: flex; flex-direction: column;">';
+                html += '<div style="padding: 10px 12px; border-bottom: 1px solid #eeeeee; flex: 0 0 auto;">';
                 html += '<b>' + escapeHtml(group['name']) + '</b> ';
                 html += '<span class="label label-opnsense label-opnsense-sm label-info">' + escapeHtml(group['type']) + '</span>';
                 html += '<span class="pull-right">';
                 html += '<button type="button" class="btn btn-xs btn-default cmd-test-group" data-group="' + escapeHtml(group['name']) + '"><i class="fa fa-tachometer fa-fw"></i></button>';
                 html += '</span>';
                 html += '</div>';
-                html += '<ul class="list-group" style="margin-bottom: 0; max-height: 320px; overflow-y: auto;">';
+                html += '<ul class="list-group" style="margin-bottom: 0; flex: 1 1 auto; overflow-y: auto;">';
                 group['members'].forEach(function (member) {
                     const selected = member['selected'];
                     html += '<li class="list-group-item' + (selected ? ' active' : '') + '" style="cursor: pointer; padding: 8px 12px;"';
@@ -385,13 +408,21 @@
         loadSafety();
         loadOverview();
         loadGroups();
+        loadServiceState();
         refreshAll();
 
         setInterval(loadOverview, 2000);
         setInterval(loadGroups, 15000);
         setInterval(loadSafety, 60000);
+        setInterval(loadServiceState, 30000);
     });
 </script>
+
+<div class="row">
+    <section class="col-xs-12">
+        <div id="mihomo-service-state"></div>
+    </section>
+</div>
 
 <div class="row">
     <section class="col-xs-12">
@@ -401,45 +432,52 @@
 
 <div class="row">
     <section class="col-xs-12">
-        <div class="content-box">
-            <div class="container-fluid" style="padding-left: 0; padding-right: 0;">
-                <div class="row">
-                    <div class="col-sm-6 col-md-2" style="margin-bottom: 10px;">
-                        <div style="text-align: center;">
-                            <div class="text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: .5px;">{{ lang._('Active Connections') }}</div>
-                            <div style="font-size: 26px; font-weight: 600;" id="stat-connections">—</div>
+        <div class="content-box" style="padding: 10px 4px 4px 4px;">
+            <div class="row">
+                <div class="col-sm-6 col-lg-3" style="margin-bottom: 10px;">
+                    <div style="height: 5em; display: flex; align-items: stretch; border: 1px solid rgba(217, 79, 0, 0.2); border-radius: 0.3em; background: rgba(217, 79, 0, 0.06); overflow: hidden;">
+                        <div style="width: 42%; display: flex; align-items: center; justify-content: center; background: rgba(217, 79, 0, 0.12);">
+                            <i class="fa fa-exchange fa-2x" style="color: #d94f00;"></i>
+                        </div>
+                        <div style="width: 58%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 4px;">
+                            <div style="font-size: 17px; font-weight: 600;" id="stat-connections">—</div>
+                            <div class="text-muted" style="font-size: 11px; text-align: center; line-height: 1.2;">{{ lang._('Active Connections') }}</div>
                         </div>
                     </div>
-                    <div class="col-sm-6 col-md-2" style="margin-bottom: 10px;">
-                        <div style="text-align: center;">
-                            <div class="text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: .5px;">{{ lang._('Download') }} / {{ lang._('Upload') }}</div>
+                </div>
+                <div class="col-sm-6 col-lg-3" style="margin-bottom: 10px;">
+                    <div style="height: 5em; display: flex; align-items: stretch; border: 1px solid rgba(217, 79, 0, 0.2); border-radius: 0.3em; background: rgba(217, 79, 0, 0.06); overflow: hidden;">
+                        <div style="width: 42%; display: flex; align-items: center; justify-content: center; background: rgba(217, 79, 0, 0.12);">
+                            <i class="fa fa-area-chart fa-2x text-success"></i>
+                        </div>
+                        <div style="width: 58%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 4px;">
                             <div style="font-size: 15px; font-weight: 600; color: #3c8dbc;" id="stat-rate-down">—</div>
                             <div style="font-size: 15px; font-weight: 600; color: #a94442;" id="stat-rate-up">—</div>
+                            <div class="text-muted" style="font-size: 11px; line-height: 1.2;">{{ lang._('Download / Upload') }}</div>
                         </div>
                     </div>
-                    <div class="col-sm-6 col-md-2" style="margin-bottom: 10px;">
-                        <div style="text-align: center;">
-                            <div class="text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: .5px;">{{ lang._('Total Downloaded') }}</div>
-                            <div style="font-size: 20px; font-weight: 600;" id="stat-download">—</div>
+                </div>
+                <div class="col-sm-6 col-lg-3" style="margin-bottom: 10px;">
+                    <div style="height: 5em; display: flex; align-items: stretch; border: 1px solid rgba(217, 79, 0, 0.2); border-radius: 0.3em; background: rgba(217, 79, 0, 0.06); overflow: hidden;">
+                        <div style="width: 42%; display: flex; align-items: center; justify-content: center; background: rgba(217, 79, 0, 0.12);">
+                            <i class="fa fa-database fa-2x text-primary"></i>
+                        </div>
+                        <div style="width: 58%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 4px;">
+                            <div style="font-size: 15px; font-weight: 600;" id="stat-download">—</div>
+                            <div style="font-size: 15px; font-weight: 600;" id="stat-upload">—</div>
+                            <div class="text-muted" style="font-size: 11px; line-height: 1.2;">{{ lang._('Total Downloaded / Uploaded') }}</div>
                         </div>
                     </div>
-                    <div class="col-sm-6 col-md-2" style="margin-bottom: 10px;">
-                        <div style="text-align: center;">
-                            <div class="text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: .5px;">{{ lang._('Total Uploaded') }}</div>
-                            <div style="font-size: 20px; font-weight: 600;" id="stat-upload">—</div>
+                </div>
+                <div class="col-sm-6 col-lg-3" style="margin-bottom: 10px;">
+                    <div style="height: 5em; display: flex; align-items: stretch; border: 1px solid rgba(217, 79, 0, 0.2); border-radius: 0.3em; background: rgba(217, 79, 0, 0.06); overflow: hidden;">
+                        <div style="width: 42%; display: flex; align-items: center; justify-content: center; background: rgba(217, 79, 0, 0.12);">
+                            <i class="fa fa-microchip fa-2x text-info"></i>
                         </div>
-                    </div>
-                    <div class="col-sm-6 col-md-2" style="margin-bottom: 10px;">
-                        <div style="text-align: center;">
-                            <div class="text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: .5px;">{{ lang._('Memory In Use') }}</div>
-                            <div style="font-size: 20px; font-weight: 600;" id="stat-memory">—</div>
-                        </div>
-                    </div>
-                    <div class="col-sm-6 col-md-2" style="margin-bottom: 10px;">
-                        <div style="text-align: center;">
-                            <div class="text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: .5px;">{{ lang._('Core Version') }}</div>
-                            <div style="font-size: 20px; font-weight: 600;" id="mihomo-version">—</div>
-                            <div class="text-muted" style="font-size: 11px;" id="stat-version">—</div>
+                        <div style="width: 58%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 4px;">
+                            <div style="font-size: 15px; font-weight: 600;" id="stat-memory">—</div>
+                            <div style="font-size: 13px; font-weight: 600;" id="mihomo-version">—</div>
+                            <div class="text-muted" style="font-size: 11px; line-height: 1.2;">{{ lang._('Memory / Core Version') }}</div>
                         </div>
                     </div>
                 </div>

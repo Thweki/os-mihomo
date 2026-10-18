@@ -197,9 +197,12 @@ rm -f /var/lib/php/tmp/mdl_cache_OPNsense_Mihomo*.json
 log "  cleared menu/ACL/model caches"
 
 if command -v configctl >/dev/null 2>&1; then
-    configctl configd restart >/dev/null 2>&1 || true
+    # 必须用 rc.d 重启：`configctl configd restart` 不会重新加载 actions.d
+    service configd restart >/dev/null 2>&1 || true
     log "  configd restarted (to register new actions)"
 fi
+skip_count=$(configctl configd actions 2>/dev/null | grep -c '^mihomo ' || true)
+log "  registered mihomo actions: $skip_count (expected 14)"
 
 log "== installed file inventory =="
 find /usr/local/opnsense/mvc/app/models/OPNsense/Mihomo \
