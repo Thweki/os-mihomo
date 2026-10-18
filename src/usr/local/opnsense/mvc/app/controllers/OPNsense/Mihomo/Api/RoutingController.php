@@ -72,7 +72,7 @@ class RoutingController extends ApiMutableModelControllerBase
      */
     public function optionsAction()
     {
-        $subnets = Config::interfaceSubnets();
+        $subnets = $this->bindableInterfaces();
         $descr = [];
         try {
             $cfg = CoreConfig::getInstance()->object();
@@ -283,6 +283,14 @@ class RoutingController extends ApiMutableModelControllerBase
         return $this->configdJson('policy-net-check');
     }
 
+    /** 可用于绑定的接口（排除回环/动态接口） */
+    private function bindableInterfaces(): array
+    {
+        $subnets = Config::interfaceSubnets();
+        unset($subnets['lo0']);
+        return $subnets;
+    }
+
     /** 网络侧变更计划（只读，供弹窗展示） */
     public function netplanAction()
     {
@@ -357,7 +365,7 @@ class RoutingController extends ApiMutableModelControllerBase
     {
         $messages = [];
         $model = new \OPNsense\Firewall\Filter();
-        $subnets = Config::interfaceSubnets();
+        $subnets = $this->bindableInterfaces();
 
         /* 现有本插件规则：description → uuid 列表（同一描述出现多次视为重复，保留一个） */
         $existing = [];

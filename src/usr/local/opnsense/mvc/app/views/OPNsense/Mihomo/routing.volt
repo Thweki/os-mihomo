@@ -40,7 +40,14 @@
             return '{{ lang._('Manual') }}';
         }
 
+        /* 下拉数据：bootstrap-select（selectpicker）会隐藏原生 select，
+           往里面加选项后必须 refresh，否则界面上看不到、也选不了 */
+        let optionCache = { interfaces: [], targets: [] };
+
         function fillSelect(el, items, keep) {
+            if (!el) {
+                return;
+            }
             const $el = $(el);
             const previous = keep || $el.val();
             $el.empty();
@@ -51,7 +58,32 @@
                 $el.append($('<option>').val(previous).text(previous + ' *'));
                 $el.val(previous);
             }
+            if ($el.hasClass('selectpicker')) {
+                $el.selectpicker('refresh');
+            }
         }
+
+        function refreshSelects(keepCurrent) {
+            fillSelect(document.getElementById('mihomo.interface'), optionCache.interfaces, keepCurrent);
+            fillSelect(document.getElementById('mihomo.target'), optionCache.targets, keepCurrent);
+        }
+
+        ajaxGet('/api/mihomo/routing/options', {}, function (data, status) {
+            if (status !== 'success') {
+                return;
+            }
+            optionCache.interfaces = data.interfaces || [];
+            optionCache.targets = data.targets || [];
+            refreshSelects();
+            if (!data.tun_enabled) {
+                $('#policyTunHint').removeClass('hidden');
+            }
+        });
+
+        /* 打开行编辑对话框时，按该行当前值补齐选项（否则已有值会显示为空） */
+        $(document).on('show.bs.modal', '#{{formGridPolicy['edit_dialog_id']}}', function () {
+            refreshSelects();
+        });
 
         /* 一行状态：绑定关系 + 网络侧 */
         function loadState() {
