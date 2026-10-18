@@ -1,0 +1,33 @@
+# ---- 工作日志与本地取证（不入库） ----
+logs/
+*.log
+
+# ---- 从设备导出的参考资料（不入库，可由 scripts/dump_*.sh 重新生成） ----
+refs/
+
+# ---- 上游只读克隆（不入库） ----
+upstream/
+
+# ---- 大体积 / 可再生成的二进制与数据文件（不入库） ----
+# 上游以 xz 形式随包分发 mihomo 内核；本仓库只保留构建脚本与校验和。
+# 重新获取：见 src/os-mihomo/README.md「获取内核二进制」一节。
+src/os-mihomo/src/usr/local/bin/*.xz
+src/os-mihomo/src/usr/local/etc/mihomo/*.dat
+src/os-mihomo/work/
+src/os-mihomo/dist/
+*.pkg
+*.tzst
+
+# ---- 本机构建/编辑器杂物 ----
+.DS_Store
+Thumbs.db
+*.swp
+__pycache__/
+node_modules/
+.venv/
+.idea/
+.vscode/
+
+# ---- 截图例外：docs/screenshots 需要入库作为验收证据 ----
+!docs/screenshots/**
+docs/screenshots/*.tmp

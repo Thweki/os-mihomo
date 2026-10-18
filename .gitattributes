@@ -1,0 +1,19 @@
+# 源文件统一 LF：OPNsense/FreeBSD 环境对 CRLF 敏感（尤其是 .sh 与 shebang 执行）
+* text=auto eol=lf
+
+# 明确二进制，避免被当作文本改动
+*.xz   binary
+*.dat  binary
+*.png  binary
+*.jpg  binary
+*.pkg  binary
+
+# package manifest 模板需要保留原样
+packaging/freebsd/+MANIFEST.in text eol=lf
+packaging/freebsd/+POST_INSTALL text eol=lf
+packaging/freebsd/+PRE_DEINSTALL text eol=lf
+packaging/freebsd/+POST_DEINSTALL text eol=lf
+packaging/freebsd/+* text eol=lf
+
+# 本机脚本（PowerShell）保留 CRLF，便于 Windows 直接运行
+*.ps1 text eol=crlf
