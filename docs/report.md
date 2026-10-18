@@ -882,6 +882,38 @@ pass in quick on igb0 route-to (tun_mihomo 198.18.0.2) inet from (igb0:network) 
 
 截图：`docs/screenshots/12-routing-opnsense-side.png`
 
+### 16.6 绑定 / 解绑的完整生命周期（WebUI 全控）
+
+按用户澄清：**"绑了 mihomo 的物理接口默认走 mihomo，其他不走，并且要 WebUI 控制"** ——
+即"绑定"的对象是 **OPNsense 的物理接口**（不是 TCP 端口）。P12-2 的语义正是如此，
+但原先只支持"加绑定"，缺"解绑"；本轮补齐后 `apply` 变成**双向对账**：
+
+```
+desired = 表里「启用 + 策略路由=自动」的接口集合
+add     = desired − 现有规则
+remove  = 现有规则 − desired
+· 有 add  → 确保接口块与网关存在，然后逐条加规则
+· 有 remove → 逐条删掉对应接口的策略路由规则
+· desired 为空 → 连网关、以及本插件的 tun_mihomo 接口块一起清理（仅在它是最后一个 optN 时）
+· 只要还有绑定 → 写后安全自检（必须有 route-to … tun_mihomo），否则自动回滚
+```
+
+实测（每一步都只动 lan / LanUS，LanDirect 全程未碰）：
+
+| 步骤 | 结果 |
+|---|---|
+| 加绑 `LanUS (opt2)` | 规则 2 条；pf：`igb5→tun_mihomo` + `igb0→tun_mihomo`；两行状态都 `active` |
+| 删除 LanUS 行 → 解绑 | 规则 1 条；pf 回到 `igb0→tun_mihomo`；lan 仍 `active` |
+| 全部解绑（lan 改手动） | 规则 0 条、网关移除、接口块移除、`route-to` 归零 |
+| 重新绑定 lan | 接口块/网关/规则重新创建，pf 恢复 `igb0→tun_mihomo`，行状态 `active` |
+| 安全自检 | LanDirect `route-to` 恒为 0、pass 规则仍 10 条、默认路由/Unbound 指纹未变、本机出网 200 |
+
+由此形成的操作模型（全部在 `VPN → Proxy Suite → 路由策略` 页面）：
+
+* **绑定**：新增一行（接口 / 规则范围 / 出站 / **策略路由=自动**）→ 点「应用」（写 mihomo 规则）→ 点「同步 OPNsense 网络侧」（弹窗确认 → 写 config.xml → 重载防火墙）
+* **解绑**：删除该行（或把「策略路由」改成 `手动`/取消勾选）→ 「同步 OPNsense 网络侧」会自动移除该接口的规则；全部解绑时会连网关与 tun 接口一起清理
+* **兜底**：「回滚 OPNsense 网络侧」一键还原最近一次 config.xml 备份
+
 ---
 
 ## 17. 附录：命令速查

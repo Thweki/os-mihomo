@@ -299,7 +299,7 @@ class RoutingController extends ApiMutableModelControllerBase
         }
     }
 
-    /** 应用网络侧变更（写 config.xml + filter reload） */
+    /** 应用网络侧变更（写 config.xml + filter reload）。interfaces 为空 = 全部解绑 */
     public function netapplyAction()
     {
         $result = ['status' => 'failed', 'messages' => []];
@@ -310,13 +310,6 @@ class RoutingController extends ApiMutableModelControllerBase
         $this->throwReadOnly();
 
         $payload = $this->netPayload();
-        if ($payload['interfaces'] === []) {
-            $result['message'] = gettext(
-                'No row requests automatic policy routing: enable a row and set its policy routing to "Automatic".'
-            );
-            return $result;
-        }
-
         $staging = null;
         try {
             $staging = $this->writeStaging($payload);

@@ -172,6 +172,16 @@ function current_state(): array
     [$rc, $out] = run_command('ifconfig ' . escapeshellarg($device));
     $deviceUp = ($rc === 0);
 
+    $gwConfigured = '';
+    if (preg_match(
+        '@<gateway_item>(?:(?!</gateway_item>).)*?<name>' . $GATEWAY_NAME
+        . '</name>(?:(?!</gateway_item>).)*?</gateway_item>@s',
+        $raw,
+        $gwBlock
+    ) && preg_match('@<gateway>([^<]+)</gateway>@', $gwBlock[0], $gm)) {
+        $gwConfigured = $gm[1];
+    }
+
     return [
         'device' => $device,
         'device_up' => $deviceUp,
@@ -179,42 +189,85 @@ function current_state(): array
         'gateway_name' => $GATEWAY_NAME,
         'gateway_present' => str_contains($raw, '<name>' . $GATEWAY_NAME . '</name>'),
         'gateway_ip' => $gateway,
-        'gateway_ip_configured' => (bool)(preg_match('@<name>' . $GATEWAY_NAME . '</name>.*?<gateway>([^<]+)</gateway>@s', $raw, $gm))
-            ? $gm[1] : '',
+        'gateway_ip_configured' => $gwConfigured,
         'rules' => $rules,
         'backups' => array_slice($backups, -5),
     ];
 }
 
+/**
+ * 从 config.xml 中移除本插件为指定接口生成的策略路由规则
+ * @param string[] $ifaces 要移除的接口
+ * @param string[] $removed 输出：实际移除的接口
+ */
+function remove_our_rules(string $xml, array $ifaces, string $marker, string $gwName, array &$removed): string
+{
+    if (!preg_match_all('@[ \t]*<rule\b[^>]*>.*?</rule>\r?\n?@s', $xml, $m, PREG_OFFSET_CAPTURE)) {
+        return $xml;
+    }
+    $out = '';
+    $last = 0;
+    foreach ($m[0] as $entry) {
+        [$block, $offset] = $entry;
+        if (!str_contains($block, $marker) || !str_contains($block, '<gateway>' . $gwName . '</gateway>')) {
+            continue;
+        }
+        if (!preg_match('@<interface>([^<]+)</interface>@', $block, $im) || !in_array($im[1], $ifaces, true)) {
+            continue;
+        }
+        $out .= substr($xml, $last, $offset - $last);
+        $last = $offset + strlen($block);
+        $removed[] = $im[1];
+    }
+    return $out . substr($xml, $last);
+}
+
 function build_plan(array $plan): array
 {
-    global $GATEWAY_NAME, $RULE_MARKER;
+    global $GATEWAY_NAME;
 
     $state = current_state();
-    $changes = [];
-    if (empty($state['interface'])) {
-        $changes[] = 'config.xml: add interface block for ' . $state['device'];
-    }
-    if (!$state['gateway_present']) {
-        $changes[] = sprintf(
-            'config.xml: add gateway %s (%s%s)',
-            $GATEWAY_NAME,
-            $state['device'],
-            $plan['gateway'] !== '' ? ' -> ' . $plan['gateway'] : ' -> (auto)'
-        );
-    }
     $existing = array_column($state['rules'], 'interface');
-    foreach ($plan['interfaces'] as $iface) {
-        if (!in_array($iface, $existing, true)) {
-            $changes[] = sprintf('config.xml: add policy routing rule on %s (gateway %s)', $iface, $GATEWAY_NAME);
+    $desired = array_values(array_unique($plan['interfaces']));
+    $add = array_values(array_diff($desired, $existing));
+    $remove = array_values(array_diff($existing, $desired));
+    $changes = [];
+
+    if ($add !== []) {
+        if (empty($state['interface'])) {
+            $changes[] = 'config.xml: add interface block for ' . $state['device'];
+        }
+        if (!$state['gateway_present']) {
+            $changes[] = sprintf(
+                'config.xml: add gateway %s (%s%s)',
+                $GATEWAY_NAME,
+                $state['device'],
+                $plan['gateway'] !== '' ? ' -> ' . $plan['gateway'] : ' -> (auto)'
+            );
+        }
+        foreach ($add as $iface) {
+            $changes[] = sprintf('config.xml: bind interface %s to mihomo (policy routing rule via %s)', $iface, $GATEWAY_NAME);
         }
     }
-    $changes[] = 'run: configctl filter reload';
+
+    foreach ($remove as $iface) {
+        $changes[] = sprintf('config.xml: unbind interface %s (remove its policy routing rule)', $iface);
+    }
+
+    if ($desired === [] && ($existing !== [] || $state['gateway_present'] || !empty($state['interface']))) {
+        $changes[] = sprintf('config.xml: remove gateway %s and the %s interface (nothing is bound anymore)', $GATEWAY_NAME, $state['device']);
+    }
+
+    if ($changes !== []) {
+        $changes[] = 'run: configctl filter reload';
+    }
 
     return [
         'status' => 'ok',
         'changes' => $changes,
         'state' => $state,
+        'add' => $add,
+        'remove' => $remove,
         'note' => empty($changes) ? 'nothing to do' : '',
     ];
 }
@@ -304,9 +357,10 @@ foreach ($payload['interfaces'] ?? [] as $iface) {
     }
     $interfaces[] = $iface;
 }
-if ($interfaces === []) {
-    fail('no interfaces requested', 2);
+if (!array_key_exists('interfaces', $payload)) {
+    fail('staging payload must contain an "interfaces" list (may be empty to unbind everything)', 2);
 }
+$interfaces = array_values(array_unique($interfaces));
 
 $before = (string)file_get_contents($CONFIG_FILE);
 $after = $before;
@@ -321,11 +375,23 @@ if ($gwIp !== '' && !filter_var($gwIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
     fail('invalid gateway address: ' . $gwIp, 2);
 }
 
-/* ---------------- 2. 接口块 ---------------- */
+/* ---------------- 2. 接口块（仅在有接口需要绑定时） ---------------- */
 $existingInterface = interface_name_for_device($after, $DEFAULT_DEVICE);
-if ($existingInterface !== '') {
-    $messages[] = 'interface block already present: ' . $existingInterface;
-} else {
+$existingRuleIfaces = [];
+if (preg_match_all('@<rule\b[^>]*>.*?</rule>@s', $after, $rm)) {
+    foreach ($rm[0] as $block) {
+        if (!str_contains($block, $RULE_MARKER) || !str_contains($block, '<gateway>' . $GATEWAY_NAME . '</gateway>')) {
+            continue;
+        }
+        if (preg_match('@<interface>([^<]+)</interface>@', $block, $im)) {
+            $existingRuleIfaces[$im[1]] = true;
+        }
+    }
+}
+$addIfaces = array_values(array_diff($interfaces, array_keys($existingRuleIfaces)));
+$removeIfaces = array_values(array_diff(array_keys($existingRuleIfaces), $interfaces));
+
+if ($addIfaces !== [] && $existingInterface === '') {
     /* 仿上游 +POST_INSTALL：取下一个空闲 optN，插在根接口段的 </lo0> 之后 */
     [$rootStart, $rootEnd, $rootInner] = root_interfaces_range($after);
     $maxOpt = 0;
@@ -354,63 +420,58 @@ if ($existingInterface !== '') {
     }
     $existingInterface = $newName;
     $messages[] = 'interface block added: ' . $newName . ' -> ' . $DEFAULT_DEVICE;
+} elseif ($existingInterface !== '') {
+    $messages[] = 'interface block present: ' . $existingInterface . ' -> ' . $DEFAULT_DEVICE;
 }
 
-/* ---------------- 3. 网关 ---------------- */
-if (str_contains($after, '<name>' . $GATEWAY_NAME . '</name>')) {
-    $messages[] = 'gateway already present: ' . $GATEWAY_NAME;
-} else {
-    if ($gwIp === '') {
-        fail('unable to determine TUN peer address; start the service with TUN enabled first', 1);
-    }
-    $gwBlock = sprintf(
-        "            <gateway_item>\n"
-        . "                <interface>%s</interface>\n"
-        . "                <gateway>%s</gateway>\n"
-        . "                <name>%s</name>\n"
-        . "                <weight>1</weight>\n"
-        . "                <ipprotocol>inet</ipprotocol>\n"
-        . "                <monitor_disable>1</monitor_disable>\n"
-        . "                <descr>Mihomo TUN gateway</descr>\n"
-        . "            </gateway_item>\n",
-        $existingInterface,
-        $gwIp,
-        $GATEWAY_NAME
-    );
-    if (str_contains($after, '<Gateways>')) {
-        $after = preg_replace('@(<Gateways>\s*)@', '$1' . "\n" . $gwBlock, $after, 1);
-    } elseif (preg_match('@<OPNsense>\s*@', $after, $mm)) {
-        $after = preg_replace(
-            '@(<OPNsense>\s*)@',
-            '$1<Gateways>' . "\n" . $gwBlock . "        </Gateways>\n",
-            $after,
-            1
-        );
+/* ---------------- 3. 网关（有绑定时确保存在；全部解绑时移除） ---------------- */
+if ($addIfaces !== []) {
+    if (str_contains($after, '<name>' . $GATEWAY_NAME . '</name>')) {
+        $messages[] = 'gateway already present: ' . $GATEWAY_NAME;
     } else {
-        fail('config.xml has neither <Gateways> nor <OPNsense>', 3);
+        if ($gwIp === '') {
+            fail('unable to determine TUN peer address; start the service with TUN enabled first', 1);
+        }
+        $gwBlock = sprintf(
+            "            <gateway_item>\n"
+            . "                <interface>%s</interface>\n"
+            . "                <gateway>%s</gateway>\n"
+            . "                <name>%s</name>\n"
+            . "                <weight>1</weight>\n"
+            . "                <ipprotocol>inet</ipprotocol>\n"
+            . "                <monitor_disable>1</monitor_disable>\n"
+            . "                <descr>Mihomo TUN gateway</descr>\n"
+            . "            </gateway_item>\n",
+            $existingInterface,
+            $gwIp,
+            $GATEWAY_NAME
+        );
+        if (str_contains($after, '<Gateways>')) {
+            $after = preg_replace('@(<Gateways>\s*)@', '$1' . "\n" . $gwBlock, $after, 1);
+        } elseif (preg_match('@<OPNsense>\s*@', $after, $mm)) {
+            $after = preg_replace(
+                '@(<OPNsense>\s*)@',
+                '$1<Gateways>' . "\n" . $gwBlock . "        </Gateways>\n",
+                $after,
+                1
+            );
+        } else {
+            fail('config.xml has neither <Gateways> nor <OPNsense>', 3);
+        }
+        $messages[] = sprintf('gateway added: %s -> %s via %s', $GATEWAY_NAME, $gwIp, $existingInterface);
     }
-    $messages[] = sprintf('gateway added: %s -> %s via %s', $GATEWAY_NAME, $gwIp, $existingInterface);
 }
 
-/* ---------------- 4. 策略路由规则 ---------------- */
-/** 列出 config.xml 里已有的「本插件策略路由规则」所在接口 */
-$existingRuleIfaces = [];
-if (preg_match_all('@<rule\b[^>]*>.*?</rule>@s', $after, $rm)) {
-    foreach ($rm[0] as $block) {
-        if (!str_contains($block, $RULE_MARKER) || !str_contains($block, '<gateway>' . $GATEWAY_NAME . '</gateway>')) {
-            continue;
-        }
-        if (preg_match('@<interface>([^<]+)</interface>@', $block, $im)) {
-            $existingRuleIfaces[$im[1]] = true;
-        }
+/* ---------------- 4. 策略路由规则：先移除不再需要的，再添加新的 ---------------- */
+$removed = [];
+if ($removeIfaces !== []) {
+    $after = remove_our_rules($after, $removeIfaces, $RULE_MARKER, $GATEWAY_NAME, $removed);
+    foreach ($removed as $iface) {
+        $messages[] = 'unbound interface ' . $iface . ' (policy routing rule removed)';
     }
 }
 
-foreach ($interfaces as $iface) {
-    if (isset($existingRuleIfaces[$iface])) {
-        $messages[] = 'policy routing rule already present on ' . $iface;
-        continue;
-    }
+foreach ($addIfaces as $iface) {
     $uuid = sprintf(
         '%s-%s-%s-%s-%s',
         bin2hex(random_bytes(4)),
@@ -443,7 +504,46 @@ foreach ($interfaces as $iface) {
     } else {
         fail('config.xml has no <filter> section', 3);
     }
-    $messages[] = 'policy routing rule added on ' . $iface . ' (gateway ' . $GATEWAY_NAME . ')';
+    $messages[] = 'bound interface ' . $iface . ' to mihomo (gateway ' . $GATEWAY_NAME . ')';
+}
+
+/* ---------------- 4b. 全部解绑时清理网关与接口块 ---------------- */
+if ($interfaces === []) {
+    if (str_contains($after, '<name>' . $GATEWAY_NAME . '</name>')) {
+        $after = preg_replace(
+            '@[ \t]*<gateway_item>(?:(?!</gateway_item>).)*?<name>' . preg_quote($GATEWAY_NAME, '@')
+            . '</name>(?:(?!</gateway_item>).)*?</gateway_item>\r?\n?@s',
+            '',
+            $after,
+            1
+        );
+        $messages[] = 'gateway removed: ' . $GATEWAY_NAME . ' (nothing is bound anymore)';
+    }
+    $ifaceName = interface_name_for_device($after, $DEFAULT_DEVICE);
+    if ($ifaceName !== '') {
+        [, , $rootInner] = root_interfaces_range($after);
+        $higher = false;
+        if (preg_match_all('@<opt(\d+)>@', $rootInner, $mm)) {
+            $ours = (int)substr($ifaceName, 3);
+            foreach ($mm[1] as $num) {
+                if ((int)$num > $ours) {
+                    $higher = true;
+                }
+            }
+        }
+        if ($higher) {
+            $messages[] = 'interface block kept (' . $ifaceName . '): other opt interfaces exist, remove it manually if you want';
+        } elseif (preg_match(
+            '@[ \t]*<' . preg_quote($ifaceName, '@') . '>(?:(?!</' . preg_quote($ifaceName, '@') . '>).)*?</'
+            . preg_quote($ifaceName, '@') . '>\r?\n?@s',
+            $after,
+            $mm,
+            PREG_OFFSET_CAPTURE
+        )) {
+            $after = substr($after, 0, $mm[0][1]) . substr($after, $mm[0][1] + strlen($mm[0][0]));
+            $messages[] = 'interface block removed: ' . $ifaceName . ' -> ' . $DEFAULT_DEVICE;
+        }
+    }
 }
 
 if ($after === $before) {
@@ -483,20 +583,25 @@ $messages[] = 'config.xml written (backup ' . basename($backup) . ')';
 [$rc, $filterOut] = run_command('configctl filter reload');
 $messages[] = $rc === 0 ? 'filter reload: OK' : 'filter reload failed: ' . $filterOut;
 
-/* 关键自检：生成的 pf 规则必须把流量送进 TUN 设备；否则立刻还原并报错 */
-[$rc2, $routeOut] = run_command("pfctl -sr | grep 'route-to' | grep -c 'tun_mihomo'");
-$routeCount = (int)trim($routeOut);
-if ($routeCount < 1) {
-    copy($backup, $CONFIG_FILE);
-    chmod($CONFIG_FILE, 0644);
-    run_command('configctl filter reload');
-    fail(
-        "safety check failed: no pf route-to rule points at tun_mihomo; config.xml was restored from "
-        . basename($backup) . ". Check that the gateway interface is the TUN interface.",
-        1
-    );
+/* 关键自检：只要还有绑定，生成的 pf 规则就必须把流量送进 TUN 设备；否则立刻还原并报错 */
+if ($interfaces !== []) {
+    [$rc2, $routeOut] = run_command("pfctl -sr | grep 'route-to' | grep -c 'tun_mihomo'");
+    $routeCount = (int)trim($routeOut);
+    if ($routeCount < 1) {
+        copy($backup, $CONFIG_FILE);
+        chmod($CONFIG_FILE, 0644);
+        run_command('configctl filter reload');
+        fail(
+            "safety check failed: no pf route-to rule points at tun_mihomo; config.xml was restored from "
+            . basename($backup) . ". Check that the gateway interface is the TUN interface.",
+            1
+        );
+    }
+    $messages[] = 'pf route-to rules into tun_mihomo: ' . $routeCount;
+} else {
+    [$rc2, $routeOut] = run_command("pfctl -sr | grep 'route-to' | grep -c 'tun_mihomo'");
+    $messages[] = 'pf route-to rules into tun_mihomo after unbind: ' . (int)trim($routeOut);
 }
-$messages[] = 'pf route-to rules into tun_mihomo: ' . $routeCount;
 
 @unlink($staging);
 

@@ -329,7 +329,7 @@
         <h3>{{ lang._('Policy Routing') }}</h3>
     </header>
     <p class="text-muted">
-        {{ lang._('Pick an interface and the outbound its traffic should use. Interfaces without a row here are never routed into mihomo.') }}
+        {{ lang._('Bind a physical interface to mihomo: its traffic is policy routed into the TUN device, while interfaces without a row here are never routed into mihomo.') }}
         <span id="policyTunHint" class="text-warning hidden">
             {{ lang._('TUN is currently disabled, so these rules are stored but no traffic reaches mihomo yet.') }}
         </span>

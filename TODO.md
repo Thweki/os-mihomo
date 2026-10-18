@@ -87,6 +87,8 @@
 - [x] 体检横幅新增告警：策略路由生效的接口，在 mihomo 停止期间会断网
 - [x] 事故与修复：①接口块误插到 WebGUI 的 `<interfaces>`（已回滚 + 改为识别根接口段 + 加自动回滚安全网）②脚本内 `service configd restart` 自杀（已移除）③规则去重正则脆弱（改为按 rule 块解析）
 - [x] 截图：`docs/screenshots/12-routing-opnsense-side.png`
+- [x] **绑定/解绑双向对账**（用户澄清：绑定对象是**物理接口**）：加绑/解绑/全部解绑清理网关与接口块/重新绑定，全部经实测；写后安全自检在没有 route-to 时自动回滚
+- [x] 截图：`docs/screenshots/13-routing-bind-unbind.png`
 
 ## P12-3 可选（待确认）
 

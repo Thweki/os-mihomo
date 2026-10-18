@@ -241,8 +241,8 @@ TRANSLATIONS: dict[str, str] = {
     'The following mihomo rules will be written:': '将写入以下 mihomo 规则：',
     'Target files:': '目标文件：',
     'config.yaml snippet (managed block):': 'config.yaml 片段（受管区块）：',
-    'Pick an interface and the outbound its traffic should use. Interfaces without a row here are never routed into mihomo.':
-        '选择接口，以及它的流量应该走哪个出口。这里没有出现的接口，流量完全不会进入 mihomo。',
+    'Bind a physical interface to mihomo: its traffic is policy routed into the TUN device, while interfaces without a row here are never routed into mihomo.':
+        '把一个物理接口绑给 mihomo：它的流量会被策略路由进 TUN 设备；这里没有出现的接口，流量完全不会进入 mihomo。',
     'TUN is currently disabled, so these rules are stored but no traffic reaches mihomo yet.':
         'TUN 当前关闭：规则会被写入并通过校验，但暂时没有流量会进入 mihomo。',
     'TUN is disabled: these rules are written and validated, but no traffic reaches mihomo yet.':
@@ -308,8 +308,6 @@ TRANSLATIONS: dict[str, str] = {
     'up': '已启用',
     'down': '未就绪',
     'nothing to do': '无需改动',
-    'No row requests automatic policy routing: enable a row and set its policy routing to "Automatic".':
-        '没有任何一行要求自动策略路由：请启用某行并把它的「策略路由」设为「自动」。',
 }
 
 

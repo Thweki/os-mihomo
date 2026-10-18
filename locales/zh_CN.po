@@ -73,6 +73,9 @@ msgstr "自动把所有流量的路由指向 TUN 设备。这是 mihomo 成为�
 msgid "Bind Address"
 msgstr "绑定地址"
 
+msgid "Bind a physical interface to mihomo: its traffic is policy routed into the TUN device, while interfaces without a row here are never routed into mihomo."
+msgstr "把一个物理接口绑给 mihomo：它的流量会被策略路由进 TUN 设备；这里没有出现的接口，流量完全不会进入 mihomo。"
+
 msgid "Chain"
 msgstr "链路"
 
@@ -262,9 +265,6 @@ msgstr "还没有策略行。没有规则的接口永远不会进入 mihomo。"
 msgid "No proxy groups are defined in the configuration."
 msgstr "配置中未定义代理分组。"
 
-msgid "No row requests automatic policy routing: enable a row and set its policy routing to \"Automatic\"."
-msgstr "没有任何一行要求自动策略路由：请启用某行并把它的「策略路由」设为「自动」。"
-
 msgid "No rule would be generated: every row is disabled, has no source, or has no outbound selected."
 msgstr "不会生成任何规则：所有行要么未启用、要么没有源、要么没有选出站。"
 
@@ -291,9 +291,6 @@ msgstr "可留空以使用接口网段，或填写 CIDR（如 192.168.1.0/24）�
 
 msgid "POST required."
 msgstr "需要 POST 请求。"
-
-msgid "Pick an interface and the outbound its traffic should use. Interfaces without a row here are never routed into mihomo."
-msgstr "选择接口，以及它的流量应该走哪个出口。这里没有出现的接口，流量完全不会进入 mihomo。"
 
 msgid "Pick an interface, e.g. lan or opt2."
 msgstr "请选择接口，例如 lan 或 opt2。"
