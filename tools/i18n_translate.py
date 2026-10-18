@@ -113,8 +113,6 @@ TRANSLATIONS: dict[str, str] = {
         '配置文件未写入，mihomo 校验未通过：%s',
     'The controller is not reachable. Start the service to see proxy groups.':
         '控制器不可达；启动服务后可查看代理分组。',
-    'The full mihomo configuration. It is validated with "mihomo -t" before it replaces the active file, and the previous file is kept as a timestamped backup.':
-        '完整的 mihomo 配置。落盘前会先用 "mihomo -t" 校验，并保留带时间戳的备份。',
     'The running service keeps its current in-memory configuration until it is restarted.':
         '运行中的服务在重启前仍使用内存中的旧配置。',
     'The selected log file will be emptied.': '选中的日志文件将被清空。',
@@ -138,69 +136,17 @@ TRANSLATIONS: dict[str, str] = {
 
     # ---- 表单 XML 的标签与帮助（由 ControllerBase::parseFormNode 统一 gettext）----
     'Enable mihomo': '启用 mihomo',
-    'Enable the mihomo service at boot time.': '开机时启动 mihomo 服务。',
-    'Start the mihomo service at boot time. It is deliberately disabled by default:':
-        '开机时启动 mihomo 服务。默认刻意关闭：在开启 TUN 自动接管路由的情况下，'
-        '未配置好就启动代理会让整个网络断网。',
-    'Port of the RESTful controller.': 'RESTful 控制器的端口。',
     'Bind Address': '绑定地址',
-    'Address the RESTful controller listens on. Keep 127.0.0.1 so that only this firewall':
-        '控制器监听的地址。保持 127.0.0.1，使只有本机可以访问 —— '
-        '本 WebGUI 通过回环接口与控制器通信。',
-    'Shared secret for the controller API. Leave empty only if the controller is bound':
-        '控制器 API 的共享密钥。只有当控制器绑定在回环地址时才可留空。',
     'Allow LAN': '允许局域网',
-    'Allow clients from the local network to use the SOCKS/HTTP proxy ports directly.':
-        '允许局域网客户端直接使用 SOCKS/HTTP 代理端口。',
-    'Create a virtual network device so that traffic can be routed into mihomo without':
-        '创建虚拟网络设备，无需改动客户端配置即可把流量导入 mihomo。',
-    'Interface name of the TUN device. It must match the interface that the firewall rules':
-        'TUN 设备的接口名。必须与防火墙规则引用的接口一致（默认 tun_mihomo）。',
     'Stack': '协议栈',
-    'gvisor is the most compatible option on FreeBSD; system may fail under some conditions; mixed combines both.':
-        'gvisor 在 FreeBSD 上兼容性最好；system 在某些环境下可能失败；mixed 两者兼用。',
-    'Automatically insert routes for all traffic into the TUN device. This is what makes':
-        '自动把所有流量的路由指向 TUN 设备。这是 mihomo 成为透明网关的关键 —— '
-        '也正因如此，节点未配置好就启动会导致断网。',
-    'Make sure the TUN device wins over other default routes while the service is running.':
-        '服务运行时，确保 TUN 设备优先于其它默认路由。',
-    'Maximum transmission unit of the TUN device.': 'TUN 设备的最大传输单元。',
     'DNS Module': 'DNS 模块',
-    'Let mihomo answer DNS queries itself (needed for fake-ip mode and rule based resolution).':
-        '由 mihomo 自行应答 DNS 查询（fake-ip 模式与基于规则的解析需要）。',
-    'Loopback address and port mihomo listens on for DNS, e.g. 127.0.0.1:1053.':
-        'mihomo 监听 DNS 的回环地址与端口，例如 127.0.0.1:1053。',
     'Enhanced Mode': '增强模式',
-    'fake-ip returns a synthetic address and resolves on connection; redir-host resolves up front and reports real addresses.':
-        'fake-ip 返回合成地址、在建立连接时才解析；redir-host 提前解析并返回真实地址。',
     'Restart After Update': '更新后重启',
-    'Restart mihomo automatically once a subscription update finished successfully. Keep this off until you have verified the new nodes.':
-        '订阅更新成功后自动重启 mihomo。在确认新节点可用之前请保持关闭。',
-    'Secret that the subscription updater writes into the generated configuration.':
-        '订阅更新器写入生成配置的密钥。',
-    'Enter an http(s) subscription URL, or leave empty.': '输入 http(s) 订阅地址，也可以留空。',
-    'Enter a listen address including port, e.g. 127.0.0.1:1053.':
-        '输入监听地址（含端口），例如 127.0.0.1:1053。',
-    'Enter an IP address, e.g. 127.0.0.1 (loopback only, recommended) or 0.0.0.0 (all interfaces).':
-        '输入 IP 地址，例如 127.0.0.1（仅回环，推荐）或 0.0.0.0（所有接口）。',
-    'Use up to 128 characters: letters, digits, ".", "-" and "_".':
-        '最多 128 个字符：字母、数字、"."、"-" 和 "_"。',
-    'Interface name is limited to 15 characters (letters, digits, underscore).':
-        '接口名最多 15 个字符（字母、数字、下划线）。',
-    'Verbosity of the mihomo log file. Use "error" or "silent" for long term operation':
-        'mihomo 日志的详细程度。长期运行时建议用 "error" 或 "silent" 以免日志过大。',
-    'rule: follow the routing rules (normal operation)':
-        'rule：按分流规则处理（常规用法）；global：全部走所选节点；direct：全部直连。',
-    'HTTP(S) URL of your subscription. It is stored in the plugin environment file and used by the subscription updater.':
-        '订阅的 HTTP(S) 地址。它保存在插件的环境文件中，供订阅更新器使用。',
     'External Controller': '外部控制器',
     'TUN Device': 'TUN 设备',
     'TUN Mode': 'TUN 模式',
     'Automatic Route': '自动路由',
     'Strict Route': '严格路由',
-    'Restart mihomo right after a successful subscription update.':
-        '订阅更新成功后立即重启 mihomo。',
-
     # ---- 安全体检的长句详情（原为跨行拼接，已并成单字面量以便提取）----
     'Starting the service will insert routes for all IPv4 traffic into the TUN device.':
         '启动服务会把所有 IPv4 流量的路由指向 TUN 设备。若节点不可达或尚未配置，'
@@ -226,6 +172,40 @@ TRANSLATIONS: dict[str, str] = {
         'TUN 已关闭：规则会写入并通过校验，但暂时没有流量进入 mihomo。',
     'TUN is disabled: traffic does not reach mihomo.': 'TUN 已关闭：流量不会进入 mihomo。',
     'TUN off': 'TUN 未启用',
+    # ---- 表单短句（设置页 / 模型校验）----
+    'Start the service at boot.': '开机时启动服务。',
+    'Log verbosity. Use error or silent for long term operation.': '日志级别；长期运行建议 error 或 silent。',
+    'rule: follow the routing rules. global: everything through the selected proxy. direct: no proxy.':
+        'rule：按规则分流；global：全部走所选节点；direct：全部直连。',
+    'Let local clients use the proxy ports directly.': '允许局域网客户端直接使用代理端口。',
+    'Controller listen address. Keep 127.0.0.1 unless you really need remote access.':
+        '控制器监听地址，一般保持 127.0.0.1。',
+    'Controller port.': '控制器端口。',
+    'Controller API secret.': '控制器 API 密钥。',
+    'Route traffic into mihomo through a virtual device.': '用虚拟网卡把流量导入 mihomo。',
+    'Device name, must match the firewall rules (default tun_mihomo).': '设备名，需与防火墙规则一致（默认 tun_mihomo）。',
+    'gvisor is recommended on FreeBSD.': 'FreeBSD 下建议 gvisor。',
+    'Take over the default route. Without working proxy nodes this cuts the network off.':
+        '接管默认路由；节点不可用时会断网。',
+    'Keep the TUN device above other default routes.': '保持 TUN 设备优先于其它默认路由。',
+    'Device MTU.': '设备 MTU。',
+    'Let mihomo resolve DNS itself (required for fake-ip).': '由 mihomo 解析 DNS（fake-ip 需要）。',
+    'DNS listen address, e.g. 127.0.0.1:1053.': 'DNS 监听地址，如 127.0.0.1:1053。',
+    'fake-ip returns synthetic addresses, redir-host returns real ones.': 'fake-ip 返回合成地址；redir-host 返回真实地址。',
+    'Subscription URL, stored in the plugin environment file.': '订阅地址，保存在插件环境文件中。',
+    'Secret written into the generated configuration.': '写入生成配置的密钥。',
+    'Restart the service after a successful update.': '更新成功后重启服务。',
+    'Enter an IP address, e.g. 127.0.0.1 or 0.0.0.0.': '请输入 IP，如 127.0.0.1 或 0.0.0.0。',
+    'Up to 128 characters: letters, digits, ".", "-" and "_".': '最多 128 字符：字母、数字与 . - _。',
+    'Up to 15 characters: letters, digits, underscore.': '最多 15 字符：字母、数字、下划线。',
+    'Enter address and port, e.g. 127.0.0.1:1053.': '请输入地址与端口，如 127.0.0.1:1053。',
+    'Enter an http(s) URL, or leave empty.': '请输入 http(s) 地址，可留空。',
+    'Pick an interface, e.g. lan or opt2.': '请选择接口，如 lan 或 opt2。',
+    'Proxy group name.': '代理组名。',
+    'Optional. Empty uses the interface network.': '可留空，使用接口网段。',
+    'Validated with mihomo -t before it replaces the active file; the previous file is kept as a backup.':
+        '保存前用 mihomo -t 校验；原文件保留为备份。',
+
     'apply to take effect': '应用后生效',
     'Undo network changes': '撤销网络配置',
     'Undo': '撤销',
@@ -264,11 +244,7 @@ TRANSLATIONS: dict[str, str] = {
     'Manual: make sure the interface is policy routed into the TUN device.':
         '手动模式：请自行确保该接口的策略路由指向 TUN 设备。',
     'Policy routing is in place.': '策略路由已就位。',
-    'Optional. Leave empty to use the interface network, or enter a CIDR like 192.168.1.0/24.':
-        '可留空以使用接口网段，或填写 CIDR（如 192.168.1.0/24）。',
     'Pick an interface, e.g. lan or opt2.': '请选择接口，例如 lan 或 opt2。',
-    'Proxy group name, e.g. 🇺🇸United States. Ignored when the scope is "direct".':
-        '代理组名字，例如 🇺🇸United States；规则范围为“直连”时忽略。',
     # ---- 路由策略网络侧（P12-2）----
     'Policy routing is active': '策略路由已启用',
     'Traffic from these interfaces is routed into the mihomo TUN device: %s. While the service is stopped or fails to start, clients on these interfaces lose Internet access.':

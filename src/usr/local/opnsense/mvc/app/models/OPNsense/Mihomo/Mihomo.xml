@@ -8,7 +8,7 @@
             <enabled type="BooleanField">
                 <Default>0</Default>
                 <Required>Y</Required>
-                <ValidationMessage>Enable the mihomo service at boot time.</ValidationMessage>
+                <ValidationMessage>Start the service at boot.</ValidationMessage>
             </enabled>
             <logLevel type="OptionField">
                 <Default>info</Default>
@@ -34,7 +34,7 @@
                 <Default>127.0.0.1</Default>
                 <Required>Y</Required>
                 <Mask>/^(?:\*|[0-9]{1,3}(?:\.[0-9]{1,3}){3}|\[[0-9a-fA-F:]+\])$/</Mask>
-                <ValidationMessage>Enter an IP address, e.g. 127.0.0.1 (loopback only, recommended) or 0.0.0.0 (all interfaces).</ValidationMessage>
+                <ValidationMessage>Enter an IP address, e.g. 127.0.0.1 or 0.0.0.0.</ValidationMessage>
             </controllerBind>
             <controllerPort type="PortField">
                 <Default>9090</Default>
@@ -42,7 +42,7 @@
             </controllerPort>
             <secret type="TextField">
                 <Mask>/^[0-9a-zA-Z_.\-]{0,128}$/</Mask>
-                <ValidationMessage>Use up to 128 characters: letters, digits, ".", "-" and "_".</ValidationMessage>
+                <ValidationMessage>Up to 128 characters: letters, digits, ".", "-" and "_".</ValidationMessage>
             </secret>
             <allowLan type="BooleanField">
                 <Default>0</Default>
@@ -58,7 +58,7 @@
                 <Default>tun_mihomo</Default>
                 <Required>Y</Required>
                 <Mask>/^[a-zA-Z0-9_]{1,15}$/</Mask>
-                <ValidationMessage>Interface name is limited to 15 characters (letters, digits, underscore).</ValidationMessage>
+                <ValidationMessage>Up to 15 characters: letters, digits, underscore.</ValidationMessage>
             </device>
             <stack type="OptionField">
                 <Default>gvisor</Default>
@@ -93,7 +93,7 @@
                 <Default>127.0.0.1:1053</Default>
                 <Required>Y</Required>
                 <Mask>/^(?:\*|[0-9]{1,3}(?:\.[0-9]{1,3}){3}|\[[0-9a-fA-F:]+\]):[0-9]{1,5}$/</Mask>
-                <ValidationMessage>Enter a listen address including port, e.g. 127.0.0.1:1053.</ValidationMessage>
+                <ValidationMessage>Enter address and port, e.g. 127.0.0.1:1053.</ValidationMessage>
             </listen>
             <enhancedMode type="OptionField">
                 <Default>fake-ip</Default>
@@ -107,16 +107,16 @@
         <subscription>
             <url type="TextField">
                 <Mask>/^(?:https?:\/\/[^\s]{1,500})?$/</Mask>
-                <ValidationMessage>Enter an http(s) subscription URL, or leave empty.</ValidationMessage>
+                <ValidationMessage>Enter an http(s) URL, or leave empty.</ValidationMessage>
             </url>
             <secret type="TextField">
                 <Mask>/^[0-9a-zA-Z_.\-]{0,128}$/</Mask>
-                <ValidationMessage>Use up to 128 characters: letters, digits, ".", "-" and "_".</ValidationMessage>
+                <ValidationMessage>Up to 128 characters: letters, digits, ".", "-" and "_".</ValidationMessage>
             </secret>
             <restartAfterUpdate type="BooleanField">
                 <Default>0</Default>
                 <Required>Y</Required>
-                <ValidationMessage>Restart mihomo right after a successful subscription update.</ValidationMessage>
+                <ValidationMessage>Restart the service after a successful update.</ValidationMessage>
             </restartAfterUpdate>
         </subscription>
         <!--
@@ -138,7 +138,7 @@
                 </interface>
                 <source type="TextField">
                     <Mask>/^[0-9a-zA-Z_.:\/-]{0,64}$/</Mask>
-                    <ValidationMessage>Optional. Leave empty to use the interface network, or enter a CIDR like 192.168.1.0/24.</ValidationMessage>
+                    <ValidationMessage>Optional. Empty uses the interface network.</ValidationMessage>
                 </source>
                 <scope type="OptionField">
                     <Default>foreign</Default>
@@ -152,7 +152,7 @@
                 <target type="TextField">
                     <Default></Default>
                     <Mask>/^[^\r\n]{0,64}$/</Mask>
-                    <ValidationMessage>Proxy group name, e.g. 🇺🇸United States. Ignored when the scope is "direct".</ValidationMessage>
+                    <ValidationMessage>Proxy group name.</ValidationMessage>
                 </target>
                 <firewall type="OptionField">
                     <Default>manual</Default>

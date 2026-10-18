@@ -125,7 +125,7 @@
         <div style="padding: 12px 14px;">
             <div class="alert alert-info" style="margin-bottom: 10px;">
                 <i class="fa fa-info-circle fa-fw"></i>
-                {{ lang._('The full mihomo configuration. It is validated with "mihomo -t" before it replaces the active file, and the previous file is kept as a timestamped backup.') }}
+                {{ lang._('Validated with mihomo -t before it replaces the active file; the previous file is kept as a backup.') }}
                 <span class="pull-right" id="config-info"></span>
             </div>
             <textarea id="config-editor" class="form-control" rows="26" spellcheck="false"
