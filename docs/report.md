@@ -638,6 +638,56 @@ pkg version -t 1.1.0 1.0.4   →  >          # 插件管理器会视为「上游
 
 ![概览（中文）](screenshots/09-overview-zh_CN.png)
 
+### 13.4 首次上手试用（P11）：安全启动 + 修掉两个服务控制缺陷
+
+把插件交给用户试用时，按"默认配置启动"的诉求做了一次安全落地：**只把 `tun.enable` 改一行**
+（走插件自己的 `import → set → apply` 通道），其余保持默认。`apply` 的 diff 恰好 1 行：
+
+```
+48c48
+<   enable: true
+---
+>   enable: false
+```
+
+> 为什么必须关 TUN：随包 `config.yaml` 是 `tun.enable: true` + `auto-route: true` + `dns-hijack: any:53`，
+> 节点是占位 `88.88.88.88`。启动后 mihomo 会把默认路由改到 `tun_mihomo`，而 config.xml 里
+> **并没有** `tun_mihomo` 接口与放行规则（那是上游 `+POST_INSTALL` 才做的）→ 不是"走代理"，
+> 而是**全屋断网**。节点本来就是死的，开着 TUN 也拿不到任何额外能力，只有掉线风险。
+
+**试用中暴露并修掉两个真实缺陷**（都属于"关掉开机自启 ⇒ 服务控制彻底不可用"）：
+
+| # | 现象 | 根因 | 修复 |
+|---|---|---|---|
+| 1 | 点"启动"没有任何反应，服务起不来 | configd 动作用 `rc.d mihomo start`，而 `/etc/rc.subr` 在 `rcvar=NO` 时直接拒绝：`Cannot 'start' mihomo. Set mihomo_enable to YES ... or use 'onestart'`。修复前 rc.d 脚本被拒后仍以 0 退出，所以界面连报错都没有 | 动作改为 `onestart` / `onestop` / `onerestart`（绕过 rcvar，只影响"现在启停"，不影响开机自启策略） |
+| 2 | 服务停止时，页面右上角**没有任何按钮** | 基类 `ApiMutableServiceControllerBase::statusAction()` 在"未启用 + 未运行"时返回 `disabled`，而核心 JS `updateServiceControlUI()` 只对 `running`/`stopped` 渲染按钮 | 覆盖 `statusAction()`，把 `disabled` 归一为 `stopped`，并附 `boot_enabled` 供前端表达自启状态 |
+
+**修复后实测**（全部经界面接口，非命令行硬来）：
+
+```
+GET  /api/mihomo/service/status   → {"status":"stopped",  "boot_enabled":false}   ← 有按钮了
+POST /api/mihomo/service/start    → {"response":"OK"} → mihomo is running: pid 34802
+GET  /api/mihomo/dashboard/overview → controller{ alive:true, version:"1.19.31-vincent" }
+                                      runtime{ mode:"rule", ready:true }
+POST /api/mihomo/service/restart  → pid 34802 → 2400（重启生效）
+```
+
+**安全复核（启动前后逐项对比）**：
+
+| 项 | 结果 |
+|---|---|
+| 监听 | 仅 `127.0.0.1:9090 / 7891 / 1053`（`allow-lan:false` + `bind-address:127.0.0.1`） |
+| TUN 接口 | 0 个 |
+| pf / NAT / 路由 / Unbound 指纹 | 与基线**逐字节一致** |
+| 开机自启 | 仍为 `mihomo_enable="NO"`（重启后不会自动接管） |
+| 服务状态 | 运行中（用户可随时用页面右上角按钮停止） |
+
+截图：`docs/screenshots/10-trial-live-dashboard.png`（实时仪表盘：7 个代理分组、安全横幅、模式切换）。
+
+> **尚有一步需要用户明确同意**：以上只是"插件自身能跑"。要让局域网设备真正走代理，
+> 还需要 `tun_mihomo` 接口 + 一条防火墙放行规则（可选再把 Unbound 转发指向 1053）——
+> 这些属于网络配置变更，本交付不做，需用户确认后再动，且会先备份 config.xml 并留 diff 证据。
+
 ---
 
 ## 14. 附录：命令速查

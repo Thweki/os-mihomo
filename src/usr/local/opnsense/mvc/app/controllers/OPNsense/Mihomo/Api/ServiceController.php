@@ -35,6 +35,30 @@ class ServiceController extends ApiMutableServiceControllerBase
     }
 
     /**
+     * 覆盖基类的服务状态判定。
+     *
+     * 基类在「服务未启用（rcvar=NO）」时返回 "disabled"，而核心 JS
+     * (updateServiceControlUI) 对 "disabled" 不渲染任何按钮 —— 于是
+     * 「关掉开机自启」就等于「界面上再也无法启动/停止服务」，这在
+     * 「先手动试跑、确认可用后再开自启」的场景下完全说不通。
+     *
+     * 这里把 "disabled" 归一到 "stopped"：启动/停止按钮始终可用；
+     * 「是否开机自启」只由设置页的复选框与仪表盘的安全体检横幅表达。
+     */
+    public function statusAction()
+    {
+        $result = parent::statusAction();
+        if (($result['status'] ?? '') === 'disabled') {
+            $result['status'] = 'stopped';
+            $result['boot_enabled'] = false;
+        } else {
+            $result['boot_enabled'] = (string)$this->getModel()->general->enabled === '1';
+        }
+
+        return $result;
+    }
+
+    /**
      * 重启前是否强制 stop→start（mihomo 没有 reload 命令）。
      */
     protected function reconfigureForceRestart()

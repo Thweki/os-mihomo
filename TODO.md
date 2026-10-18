@@ -17,6 +17,7 @@
 | P8 | 收尾：打包脚本、README、回滚演练 | [x] |
 | P9 | 修复：表单布尔控件、Apply 落盘链路、补丁器最小化 | [x] |
 | P10 | 项目定位与分发格式：标准 OPNsense 插件包 + 插件管理器可管理 + README 重写 | [x] |
+| P11 | 上手试用：安全启动（TUN 关闭）+ 修复服务控制缺陷 | [x] |
 
 ## 交付结果（2026-10-18）
 
@@ -47,6 +48,17 @@
 - [x] 验证后复原：仓库配置改回 `enabled: no`、删除该仓库的本地缓存、`pkg search` 只剩上游 1.0.4
 - [x] 目标机保留物：`/usr/local/opnsense/_bak/os-mihomo-repo/<ABI>/`（仓库）+ `/usr/local/etc/pkg/repos/os-mihomo.conf`（默认不启用）
 
+## P11 上手试用（已完成）
+
+- [x] 安全启动：`tun.enable: true → false`（走插件自己的 import→set→apply，diff 恰好 1 行），服务已运行
+- [x] 服务控制缺陷 1：configd 动作用 `start`，`rcvar=NO` 时被 `/etc/rc.subr` 拒绝 → 改用 `onestart/onestop/onerestart`
+- [x] 服务控制缺陷 2：基类 `statusAction()` 在未启用时返回 `disabled`，核心 JS 对 `disabled` 不渲染按钮
+      → 覆盖 `statusAction()` 归一为 `stopped`（+ `boot_enabled` 字段）
+- [x] 实测：界面 start/restart 均生效（pid 变化），控制器 alive、7 个代理分组、9 个监听全在 127.0.0.1
+- [x] 安全复核：pf/NAT/路由/Unbound 指纹与基线逐字节一致；无 TUN 接口；开机自启仍为 NO
+- [x] 截图：`docs/screenshots/10-trial-live-dashboard.png`
+- [ ] **待用户确认**：要跑透明代理还需加 `tun_mihomo` 接口 + 防火墙放行（可选 Unbound 转发 1053）——属网络配置变更，需明确同意
+
 ## 后续可选（不在本轮范围）
 
 - [ ] 把 146 条词条提交到 OPNsense 官方翻译平台（translate.opnsense.org），
@@ -73,3 +85,5 @@
 | R12 | Apply 会重写受管行从而丢掉行尾注释 | 补丁器改为"值相同不动 + 改动时保留行尾注释"，Apply 实测只产生 1 行 diff |
 | R13 | 插件要"可被 OPNsense 自带插件管理器管理" | 光有 `.pkg` 不够：必须是 `os-*` 命名 + native ABI + `annotations.repository`，且由**仓库**提供（固件系统走 `pkg install`）；已补 `make repo` 与仓库配置模板，并实测插件页数据源可见 |
 | R14 | `make package` 两次构建哈希不同 | tar 记录 mtime，构建不可复现；文档标注以最后一次产物为准 |
+| R15 | 关掉"开机自启"后，界面无法启停服务 | `/etc/rc.subr` 在 `rcvar=NO` 时拒绝 `start`，而 configd 动作正是 `start`（且被拒后仍以 0 退出，界面无任何报错）→ 动作改 `onestart/onestop/onerestart`；"当前启停"与"开机自启"彻底解耦 |
+| R16 | 服务未启用时页面右上角没有启停按钮 | 基类 `statusAction()` 返回 `disabled`，核心 JS 只认 `running`/`stopped` → 覆盖归一为 `stopped`，自启状态由 `boot_enabled` 字段与安全横幅表达 |
