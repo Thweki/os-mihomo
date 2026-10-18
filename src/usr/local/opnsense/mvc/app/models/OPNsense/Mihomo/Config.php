@@ -376,4 +376,228 @@ class Config
     {
         return (bool)preg_match('@^/tmp/mihomo-[A-Za-z0-9.]{6,}$@', $path);
     }
+
+    /* =====================================================================
+     * 路由策略（按接口/源分流）
+     *
+     * 设计：模型里只存「谁的流量（接口 + 源）」与「走哪个出口」；
+     * 渲染成 mihomo 规则后写入 config.yaml 的受管区块（带标记、整块替换，
+     * 其余内容逐字节保留）；受管区块同时写进订阅模板，避免订阅更新把它冲掉。
+     * ===================================================================== */
+
+    public const POLICY_MARK_BEGIN = '# >>> os-mihomo:policy-routing (managed, do not edit) >>>';
+    public const POLICY_MARK_END = '# <<< os-mihomo:policy-routing <<<';
+
+    /** 国外流量判定用的规则集（与随包模板里的规则保持一致） */
+    private const POLICY_FOREIGN_RULESETS = ['geolocation-!cn', 'gfw'];
+
+    /**
+     * 把策略行渲染成 mihomo 规则字符串。
+     *
+     * @param array $rules      每项: enabled, interface, source, scope, target
+     * @param array $ifSubnets  接口 => 网段（source 留空时用它），例如 ['lan' => '192.168.1.0/24']
+     * @return string[]         mihomo 规则行（不含缩进与 '- '）
+     */
+    public static function renderPolicyRules(array $rules, array $ifSubnets = []): array
+    {
+        $rendered = [];
+        foreach ($rules as $rule) {
+            if (!$rule instanceof \Traversable && !is_array($rule)) {
+                continue;
+            }
+            $get = fn (string $key): string => trim((string)($rule[$key] ?? ''));
+            if ($get('enabled') === '0') {
+                continue;
+            }
+
+            $source = $get('source');
+            if ($source === '') {
+                $source = trim((string)($ifSubnets[$get('interface')] ?? ''));
+            }
+            if ($source === '') {
+                /* 没有源就没有规则：宁可少生成，也不要生成一条会误伤所有流量的规则 */
+                continue;
+            }
+
+            $target = $get('target');
+            $scope = $get('scope') !== '' ? $get('scope') : 'foreign';
+
+            if ($scope === 'direct') {
+                $rendered[] = sprintf('SRC-IP-CIDR,%s,DIRECT', $source);
+                continue;
+            }
+            if ($target === '') {
+                /* 未选出口就不生成，避免把流量交给一个不存在的组导致规则校验失败 */
+                continue;
+            }
+            if ($scope === 'all') {
+                $rendered[] = sprintf('SRC-IP-CIDR,%s,%s', $source, $target);
+                continue;
+            }
+            /* scope = foreign：只把国外流量交给该出口，国内仍按原有规则直连 */
+            foreach (self::POLICY_FOREIGN_RULESETS as $ruleset) {
+                $rendered[] = sprintf(
+                    'AND,((SRC-IP-CIDR,%s),(GEOSITE,%s)),%s',
+                    $source,
+                    $ruleset,
+                    $target
+                );
+            }
+        }
+        return $rendered;
+    }
+
+    /**
+     * 把受管区块写入/替换到 YAML 文本里（纯字符串操作，最小 diff）。
+     *
+     * 规则块插在 `rules:` 之后（作为最先匹配的规则）；已存在标记时整块替换；
+     * 没有 `rules:` 时在文件末尾补一个。其它内容逐字节保留。
+     */
+    public static function applyPolicyBlock(string $content, array $ruleLines): string
+    {
+        $eol = str_contains($content, "\r\n") ? "\r\n" : "\n";
+        $lines = preg_split("/\r\n|\n|\r/", $content) ?: [];
+        if ($lines !== [] && end($lines) === '') {
+            array_pop($lines);   // 末尾空行稍后统一补回
+        }
+
+        /* 找已存在的受管区块 */
+        $start = $end = null;
+        foreach ($lines as $i => $line) {
+            if (trim($line) === self::POLICY_MARK_BEGIN) {
+                $start = $i;
+            } elseif ($start !== null && trim($line) === self::POLICY_MARK_END) {
+                $end = $i;
+                break;
+            }
+        }
+
+        /* 决定块的缩进：沿用规则列表第一项的缩进，否则用两个空格 */
+        $indent = '  ';
+        if ($start === null) {
+            foreach ($lines as $i => $line) {
+                if (preg_match('/^rules:\s*$/', $line)) {
+                    for ($j = $i + 1; $j < count($lines); $j++) {
+                        if (preg_match('/^(\s*)-\s/', $lines[$j], $m)) {
+                            $indent = $m[1];
+                            break;
+                        }
+                        if (preg_match('/^\S/', $lines[$j])) {
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        } elseif (isset($lines[$start + 1]) && preg_match('/^(\s*)-/', $lines[$start + 1], $m)) {
+            $indent = $m[1];
+        }
+
+        $block = [];
+        if ($ruleLines !== []) {
+            $block[] = $indent . self::POLICY_MARK_BEGIN;
+            foreach ($ruleLines as $rule) {
+                $block[] = $indent . '- ' . $rule;
+            }
+            $block[] = $indent . self::POLICY_MARK_END;
+        }
+
+        if ($start !== null && $end !== null) {
+            array_splice($lines, $start, $end - $start + 1, $block);
+        } elseif ($block !== []) {
+            $inserted = false;
+            foreach ($lines as $i => $line) {
+                if (preg_match('/^rules:\s*$/', $line)) {
+                    array_splice($lines, $i + 1, 0, $block);
+                    $inserted = true;
+                    break;
+                }
+            }
+            if (!$inserted) {
+                if ($lines !== [] && trim(end($lines)) !== '') {
+                    $lines[] = '';
+                }
+                $lines[] = 'rules:';
+                $lines = array_merge($lines, $block);
+            }
+        }
+
+        return implode($eol, $lines) . $eol;
+    }
+
+    /**
+     * 从 config.yaml 里取代理组名字（供下拉与校验用）。
+     * 只做缩进扫描，不引入 YAML 解析器；两种常见写法都要认：
+     *   块风格:  - name: 🇺🇸 United States
+     *   flow 风格: - { name: '🇺🇸 United States', type: select, ... }
+     */
+    public static function policyTargets(?string $file = null): array
+    {
+        $lines = preg_split("/\r\n|\n|\r/", self::rawTextOf($file)) ?: [];
+        $names = [];
+        $inGroups = false;
+        foreach ($lines as $line) {
+            if (preg_match('/^proxy-groups:\s*$/', $line)) {
+                $inGroups = true;
+                continue;
+            }
+            if (!$inGroups) {
+                continue;
+            }
+            if (preg_match('/^[a-zA-Z_-]/', $line)) {
+                break;   // 进入下一个顶层键
+            }
+            if (!preg_match('/\bname:\s*(.+)$/', $line, $m)) {
+                continue;
+            }
+            /* flow 风格里 name 之后还有其它字段，按 ", key:" 截断 */
+            $value = preg_split('/,\s*[a-zA-Z_-]+:/', $m[1])[0];
+            $value = trim(rtrim(trim($value), ','));
+            $value = trim($value, " \t\"'");
+            if ($value !== '') {
+                $names[] = $value;
+            }
+        }
+        return array_values(array_unique($names));
+    }
+
+    /** 读取任意文件内容（默认 config.yaml），失败返回空串 */
+    private static function rawTextOf(?string $file = null): string
+    {
+        $path = $file ?? self::file();
+        $text = @file_get_contents($path);
+        return $text === false ? '' : $text;
+    }
+
+    /**
+     * OPNsense 已配置接口 => 网段 映射（如 ['lan' => '192.168.1.0/24']）。
+     * 依赖框架的 Core\Config；仅在 WebGUI 上下文中调用。
+     */
+    public static function interfaceSubnets(): array
+    {
+        $result = [];
+        try {
+            $config = \OPNsense\Core\Config::getInstance()->object();
+        } catch (\Throwable $e) {
+            return $result;
+        }
+        if (!isset($config->interfaces)) {
+            return $result;
+        }
+        foreach ($config->interfaces->children() as $name => $node) {
+            $ip = trim((string)$node->ipaddr);
+            $mask = trim((string)$node->subnet);
+            if ($ip === '' || $mask === '' || !ctype_digit($mask)) {
+                continue;
+            }
+            $long = ip2long($ip);
+            if ($long === false) {
+                continue;
+            }
+            $bits = (int)$mask;
+            $netmask = $bits === 0 ? 0 : (-1 << (32 - $bits));
+            $result[$name] = long2ip($long & $netmask) . '/' . $bits;
+        }
+        return $result;
+    }
 }

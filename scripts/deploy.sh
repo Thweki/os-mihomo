@@ -1,4 +1,4 @@
-#!/bin/sh
+﻿#!/bin/sh
 # os-mihomo —— 安全部署脚本（在目标机以 root 运行）
 #
 # 前提：源码已由 tools/deploy.ps1 通过 scp 暂存到 /tmp/mihomo-stage/src
@@ -84,16 +84,20 @@ for rel in \
     usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/SettingsController.php \
     usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/SubscriptionController.php \
     usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/LogController.php \
+    usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/RoutingController.php \
     usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml \
+    usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/policy_rule.xml \
     usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/DashboardController.php \
     usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/ServiceController.php \
     usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SettingsController.php \
     usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SubscriptionController.php \
     usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/LogController.php \
+    usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/RoutingController.php \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt \
+    usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt \
     usr/local/www/mihomo.php \
     usr/local/www/mihomo_sub.php \
     usr/local/www/mihomo_logs.php \
@@ -118,6 +122,7 @@ for rel in \
     usr/local/opnsense/scripts/mihomo/service_enable.php \
     usr/local/opnsense/scripts/mihomo/setup_unbound.php \
     usr/local/opnsense/scripts/mihomo/subscription_run.sh \
+    usr/local/opnsense/scripts/mihomo/policy_apply.php \
     usr/local/etc/rc.d/mihomo \
     usr/bin/mihomo_sub \
     usr/local/etc/mihomo/sub/sub.sh ; do
@@ -202,7 +207,7 @@ if command -v configctl >/dev/null 2>&1; then
     log "  configd restarted (to register new actions)"
 fi
 skip_count=$(configctl configd actions 2>/dev/null | grep -c '^mihomo ' || true)
-log "  registered mihomo actions: $skip_count (expected 14)"
+log "  registered mihomo actions: $skip_count (expected 15)"
 
 log "== installed file inventory =="
 find /usr/local/opnsense/mvc/app/models/OPNsense/Mihomo \

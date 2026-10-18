@@ -215,6 +215,70 @@ TRANSLATIONS: dict[str, str] = {
         '若代理失效，本机后面所有客户端的域名解析也会随之失效。',
     'On the next reboot mihomo will take over routing as soon as it starts. Verify the configuration':
         '下次重启后 mihomo 一启动就会接管路由。重启前请先确认配置无误。',
+
+    # ---- 路由策略（P12-1）----
+    'Policy Routing': '路由策略',
+    'Edit Policy Rule': '编辑路由策略',
+    'Scope': '规则范围',
+    'Only foreign traffic': '仅国外流量',
+    'All traffic': '全部流量',
+    'Direct, no proxy': '直连（不走代理）',
+    'Effective state': '当前生效状态',
+    'Notes': '说明',
+    'Preview': '预览',
+    'Changes': '变更',
+    'on': '开',
+    'present': '已存在',
+    'absent': '不存在',
+    'in effect': '生效中',
+    'waiting for the OPNsense side': '待同步网络侧',
+    'not reached by mihomo': '未经过 mihomo',
+    'manual routing': '手动路由',
+    'not in the current configuration': '不在当前配置中',
+    '(no rule)': '（无规则）',
+    'Apply routing policy': '应用路由策略',
+    'Routing policy applied': '路由策略已应用',
+    'The following mihomo rules will be written:': '将写入以下 mihomo 规则：',
+    'Target files:': '目标文件：',
+    'config.yaml snippet (managed block):': 'config.yaml 片段（受管区块）：',
+    'Pick an interface and the outbound its traffic should use. Interfaces without a row here are never routed into mihomo.':
+        '选择接口，以及它的流量应该走哪个出口。这里没有出现的接口，流量完全不会进入 mihomo。',
+    'TUN is currently disabled, so these rules are stored but no traffic reaches mihomo yet.':
+        'TUN 当前关闭：规则会被写入并通过校验，但暂时没有流量会进入 mihomo。',
+    'TUN is disabled: these rules are written and validated, but no traffic reaches mihomo yet.':
+        'TUN 已关闭：规则会写入并通过校验，但暂时没有流量进入 mihomo。',
+    'TUN is disabled: traffic does not reach mihomo.': 'TUN 已关闭：流量不会进入 mihomo。',
+    'No policy rule yet. Interfaces without a rule never reach mihomo.':
+        '还没有策略行。没有规则的接口永远不会进入 mihomo。',
+    'No rule would be generated: every row is disabled, has no source, or has no outbound selected.':
+        '不会生成任何规则：所有行要么未启用、要么没有源、要么没有选出站。',
+    'Proxy group "%s" does not exist in the current configuration file.':
+        '代理组 "%s" 不在当前配置文件里。',
+    'Interface "%s" has no IPv4 network; set a source explicitly.':
+        '接口 "%s" 没有 IPv4 网段，请显式填写源。',
+    'Waiting for the OPNsense side: interface, gateway and policy routing rule.':
+        '等待同步 OPNsense 网络侧：接口、网关与策略路由规则。',
+    'Manual: make sure the interface is policy routed into the TUN device.':
+        '手动模式：请自行确保该接口的策略路由指向 TUN 设备。',
+    'Policy routing is in place.': '策略路由已就位。',
+    'Automatic route takeover is enabled: every interface ends up in the TUN device.':
+        '已启用自动接管路由：所有接口的流量都会进入 TUN 设备。',
+    'Policy routing gateway': '策略路由网关',
+    'Policy routing firewall rule': '策略路由防火墙规则',
+    'Interface whose clients should be routed into mihomo. Interfaces without a rule here never reach mihomo at all.':
+        '希望其客户端流量进入 mihomo 的接口。这里没有规则的接口，其流量完全不会进入 mihomo。',
+    'Which traffic of this source should use the selected outbound.': '该来源的哪些流量使用所选出站。',
+    'Proxy group the traffic should egress through. Ignored when the scope is "direct".':
+        '流量出口所用的代理组；规则范围为“直连”时忽略此项。',
+    'Leave empty to use the interface network. A CIDR (192.168.1.0/24) or an alias name is also accepted.':
+        '留空则使用接口网段；也可以填 CIDR（如 192.168.1.0/24）或别名。',
+    'Optional. Leave empty to use the interface network, or enter a CIDR like 192.168.1.0/24.':
+        '可留空以使用接口网段，或填写 CIDR（如 192.168.1.0/24）。',
+    'Pick an interface, e.g. lan or opt2.': '请选择接口，例如 lan 或 opt2。',
+    'Proxy group name, e.g. 🇺🇸United States. Ignored when the scope is "direct".':
+        '代理组名字，例如 🇺🇸United States；规则范围为“直连”时忽略。',
+    'Auto: the plugin also creates the OPNsense side (interface, gateway, firewall rule) after you confirm a dialog. Manual: only the mihomo rules are written, you route the traffic yourself.':
+        '自动：确认弹窗后，插件还会创建 OPNsense 侧配置（接口、网关、防火墙规则）。手动：只写 mihomo 规则，路由由你自己处理。',
 }
 
 

@@ -25,7 +25,8 @@
 10. [事故记录](#10-事故记录)
 11. [已知限制与后续建议](#11-已知限制与后续建议)
 13. [P8 收尾：打包 / 回滚演练 / 中文化](#13-p8-收尾打包--回滚演练--中文化)
-14. [附录：命令速查](#14-附录命令速查)
+14. [路由策略（P12-1）](#15-路由策略p12-1按接口源分流原生表格--真实节点实测)
+16. [附录：命令速查](#16-附录命令速查)
 
 ---
 
@@ -690,7 +691,107 @@ POST /api/mihomo/service/restart  → pid 34802 → 2400（重启生效）
 
 ---
 
-## 14. 附录：命令速查
+## 15. 路由策略（P12-1）：按接口/源分流，原生表格 + 真实节点实测
+
+> 需求原话：**"能让不同接口走不同代理出网，未设置的接口不走 mihomo"**，并且要
+> **"符合 OPNsense 规范地在 WebUI 里配（表格里选 xx 接口 xx 规则走 xx 代理）"**。
+> 本节是 P12-1（只写 mihomo 侧，零网络改动）的实现与实测；P12-2（同步 OPNsense 网络侧）见 §15.5。
+
+### 15.1 交付物
+
+| 文件 | 作用 |
+|---|---|
+| `models/OPNsense/Mihomo/Mihomo.xml` | 新增 `policyRouting.rule`（**ArrayField**）节点：enabled/interface/source/scope/target/firewall/descr |
+| `controllers/OPNsense/Mihomo/forms/policy_rule.xml` | 行编辑对话框 + 表格列定义（`grid_view`），与核心 `dialogFilterRule.xml` 同一套写法 |
+| `controllers/OPNsense/Mihomo/RoutingController.php` | 页面控制器（`getForm` / `getFormGrid`，核心 tunables 页同一套） |
+| `controllers/OPNsense/Mihomo/Api/RoutingController.php` | `search/get/set/add/del/toggle_rule`（核心 CRUD 约定）+ `options/preview/apply/status` |
+| `views/OPNsense/Mihomo/routing.volt` | `base_bootgrid_table` + `base_dialog` + 底部应用按钮 + 只读状态表 |
+| `scripts/mihomo/policy_apply.php` + `actions_mihomo.conf[policy-apply]` | configd(root)：写 `config.yaml` 与订阅模板的受管区块（`mihomo -t` 校验 + 时间戳备份 + 原子替换） |
+| `models/.../Config.php` | `renderPolicyRules()` / `applyPolicyBlock()` / `policyTargets()` / `interfaceSubnets()`（纯函数，可回归测试） |
+| `Menu.xml` | 新增 `VPN → Proxy Suite → 路由策略` |
+
+表格列：**启用 | 接口 | 规则范围（仅国外/全部/直连）| 出站（当前配置里的代理组）| 描述 | 命令**
+下方只读状态表：接口 / 源 / 出站 / 状态（生效中·待同步网络侧·未经过 mihomo·手动路由）/ 说明。
+
+生成的规则（受管区块，插在 `rules:` 最前，整块替换、幂等）：
+
+```yaml
+rules:
+  # >>> os-mihomo:policy-routing (managed, do not edit) >>>
+  - AND,((SRC-IP-CIDR,192.168.1.0/24),(GEOSITE,geolocation-!cn)),🇺🇸 United States
+  - AND,((SRC-IP-CIDR,192.168.1.0/24),(GEOSITE,gfw)),🇺🇸 United States
+  # <<< os-mihomo:policy-routing <<<
+  ...原有规则逐字节保留...
+```
+
+### 15.2 关键设计：为什么"未配置的接口不走 mihomo"能成立
+
+* 这张表**只**决定"进入 mihomo 的流量走哪个出口"；**让流量进入 mihomo 是 pf 策略路由的事**（P12-2）。
+* 没有出现在表里的接口 → 不生成任何 mihomo 规则、也不加任何防火墙规则 → 流量走系统默认路由，
+  **连 mihomo 进程都不经过**（不是"进去再 DIRECT"）。mihomo 崩溃/重启也不影响它。
+* 前提是 `tun.auto-route` 必须为 **false**（true 会把默认路由抢到 TUN = 所有接口都进 mihomo，与需求互斥）。
+  页面在 TUN 关闭时会明确提示"规则已写入但暂无流量进入"。
+
+### 15.3 用真实节点做的功能实测（lan 侧，LanDirect 全程零改动）
+
+测试材料：`tests/config.yaml`（用户提供的真实节点，49 个 anytls 节点 + 34 个分组 + 41 条规则）。
+装入前做脱敏：`bind-address: '*' → 127.0.0.1`、`allow-lan → false`、`dns.listen → 127.0.0.1:1053`；
+其余受管键由插件的"应用"统一写入。
+
+```
+# 内核日志（/var/log/mihomo.log）——最直接的证据
+[TCP] 127.0.0.1:41697(curl) --> api.ipify.org:443
+      match Match using SSRDOG[🇭🇰 Hong Kong 01]                     ← 环回源：走全局规则
+[TCP] 192.168.1.1:25800 --> api.ipify.org:443
+      match AND(((SrcIPCIDR,192.168.1.0/24) && (GeoSite,geolocation-!cn)))
+      using 🇺🇸 United States[🇺🇸 United States 01]                  ← ★ 按源命中策略规则 → 美国组
+[TCP] 192.168.1.1:60704 --> www.baidu.com:443
+      match RuleSet(ChinaMax) using DIRECT                           ← 国内直连
+```
+
+| 验证项 | 结果 |
+|---|---|
+| 出口 IP（环回源） | `188.253.115.13`（HK/SSRDOG） |
+| 出口 IP（**LAN 源 192.168.1.1**） | **`5.34.216.210`（美国组）** |
+| 国内目标（同源） | HTTP 200，走 `DIRECT` |
+| 内核加载的规则数 | 43（受管区块在最前且出口正确） |
+| 代理组识别 | 19 个（含 flow 风格写法的分组名） |
+
+**LanDirect（192.168.2.0/24）侧的证明**：`config.yaml` 中零出现、mihomo 无任何监听在 192.168.2.x、
+pf 规则里没有该网段的策略路由；pf / NAT / 路由 / Unbound 指纹与基线**逐字节一致**；
+整个过程本机（挂在 LanDirect）出网自检 200 —— 即：**测试期间本机网络全程未受影响**。
+
+### 15.4 实测中发现并修掉的问题
+
+| # | 问题 | 根因 | 修复 |
+|---|---|---|---|
+| 1 | `add_rule` 报 500：`ContainerField::Add()` 不存在 | 模型里 `rule` 未声明 `type="ArrayField"` | 声明为 ArrayField（与核心 `Route.xml` 等一致） |
+| 2 | 分组下拉为空、预览误报"分组不存在" | 扫描器只认块风格 `- name: X`，用户的配置是 **flow 风格** `- { name: 'X', type: select }` | `policyTargets()` 兼容两种写法（含 `, key:` 截断）；补 2 条回归用例 |
+| 3 | 对话框里 `>>>` 显示成 `&gt;&gt;&gt;` | OPNsense API 会转义 HTML 实体 | 视图侧 `decodeEntities()` 还原 |
+| 4 | 回归测试用线上配置当夹具 → 用户换配置后大量误报 | 夹具不确定 | 改用仓库随包配置作为确定性夹具（`/tmp/mihomo-test/fixture-config.yaml`） |
+| 5 | 新文案半中半英 | i18n 提取器没扫模型的 `OptionValues` 标签 | 提取器补 `OptionValues`；新增 46 条词条（192 条总计，合并后 0 覆盖） |
+
+> 顺带确认：`config-install` 只接受插件自己生成的 `/tmp/mihomo-XXXXXX` staging 路径，
+> 直接塞别的路径会被拒绝（`invalid staging path`）—— 这是有意为之的安全护栏，实测生效。
+
+### 15.5 还剩什么（P12-2，需要用户点头）
+
+| 事项 | 说明 |
+|---|---|
+| TUN 打开 | `tun.enable: true` + **`auto-route: false`**（策略路由而非抢默认路由） |
+| 接口 | config.xml 增加 `tun_mihomo`（上游 `+POST_INSTALL` 做的是同一件事） |
+| 网关 | `MIHOMO_TUN`（tun_mihomo，**关闭监控**）—— 需要先实测 TUN 的地址形态 |
+| 防火墙 | 在被选中的接口上各加一条 `pass + 网关=MIHOMO_TUN`（pf `route-to`） |
+| DNS（可选） | 被选中接口的 53 端口 NAT 重定向到 `127.0.0.1:1053`（否则那些客户端仍由 Unbound 解析） |
+| 同步方式 | 弹窗逐条列出将发生的变更 → 用户确认 → 自动备份 `config.xml` → 应用 → 展示 diff → 可一键回滚 |
+
+这些都属于**网络配置变更**，按本项目红线需用户明确同意后才执行。
+
+界面截图：`docs/screenshots/11-routing-policy.png`
+
+---
+
+## 16. 附录：命令速查
 
 ```sh
 # ---- 本机 ----

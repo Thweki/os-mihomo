@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <model>
     <mount>//OPNsense/mihomo</mount>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <description>mihomo proxy integration settings</description>
     <items>
         <general>
@@ -119,5 +119,53 @@
                 <ValidationMessage>Restart mihomo right after a successful subscription update.</ValidationMessage>
             </restartAfterUpdate>
         </subscription>
+        <!--
+          路由策略：按接口(/源)决定流量走哪个代理出口。
+          本节点只描述「谁的流量」与「走哪个出口」，实际生效需要两件事：
+            1) 生成的规则写入 config.yaml（本插件负责，见 Api/RoutingController::applyAction）
+            2) 该接口的流量经 pf 策略路由进入 TUN（P12-2 的网络侧同步；manual 表示用户自行处理）
+        -->
+        <policyRouting>
+            <rule type="ArrayField">
+                <enabled type="BooleanField">
+                    <Default>1</Default>
+                    <Required>Y</Required>
+                </enabled>
+                <interface type="TextField">
+                    <Required>Y</Required>
+                    <Mask>/^[a-z0-9_]{2,16}$/</Mask>
+                    <ValidationMessage>Pick an interface, e.g. lan or opt2.</ValidationMessage>
+                </interface>
+                <source type="TextField">
+                    <Mask>/^[0-9a-zA-Z_.:\/-]{0,64}$/</Mask>
+                    <ValidationMessage>Optional. Leave empty to use the interface network, or enter a CIDR like 192.168.1.0/24.</ValidationMessage>
+                </source>
+                <scope type="OptionField">
+                    <Default>foreign</Default>
+                    <Required>Y</Required>
+                    <OptionValues>
+                        <foreign>Only foreign traffic</foreign>
+                        <all>All traffic</all>
+                        <direct>Direct, no proxy</direct>
+                    </OptionValues>
+                </scope>
+                <target type="TextField">
+                    <Default></Default>
+                    <Mask>/^[^\r\n]{0,64}$/</Mask>
+                    <ValidationMessage>Proxy group name, e.g. 🇺🇸United States. Ignored when the scope is "direct".</ValidationMessage>
+                </target>
+                <firewall type="OptionField">
+                    <Default>manual</Default>
+                    <Required>Y</Required>
+                    <OptionValues>
+                        <manual>Manual</manual>
+                        <auto>Automatic</auto>
+                    </OptionValues>
+                </firewall>
+                <descr type="DescriptionField">
+                    <Required>N</Required>
+                </descr>
+            </rule>
+        </policyRouting>
     </items>
 </model>

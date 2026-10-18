@@ -16,6 +16,9 @@ msgstr "%s 不存在，服务无法启动。"
 msgid "(no output)"
 msgstr "（无输出）"
 
+msgid "(no rule)"
+msgstr "（无规则）"
+
 msgid "A node name is required."
 msgstr "需要提供节点名称。"
 
@@ -37,6 +40,9 @@ msgstr "控制器监听的地址。保持 127.0.0.1，使只有本机可以访�
 msgid "All connections closed."
 msgstr "已关闭全部连接。"
 
+msgid "All traffic"
+msgstr "全部流量"
+
 msgid "Allow LAN"
 msgstr "允许局域网"
 
@@ -46,8 +52,17 @@ msgstr "允许局域网客户端直接使用 SOCKS/HTTP 代理端口。"
 msgid "Apply failed"
 msgstr "应用失败"
 
+msgid "Apply routing policy"
+msgstr "应用路由策略"
+
+msgid "Auto: the plugin also creates the OPNsense side (interface, gateway, firewall rule) after you confirm a dialog. Manual: only the mihomo rules are written, you route the traffic yourself."
+msgstr "自动：确认弹窗后，插件还会创建 OPNsense 侧配置（接口、网关、防火墙规则）。手动：只写 mihomo 规则，路由由你自己处理。"
+
 msgid "Automatic Route"
 msgstr "自动路由"
+
+msgid "Automatic route takeover is enabled: every interface ends up in the TUN device."
+msgstr "已启用自动接管路由：所有接口的流量都会进入 TUN 设备。"
 
 msgid "Automatically insert routes for all traffic into the TUN device. This is what makes mihomo a transparent gateway — and what turns an unconfigured proxy into an outage."
 msgstr "自动把所有流量的路由指向 TUN 设备。这是 mihomo 成为透明网关的关键 —— 也正因如此，节点未配置好就启动会导致断网。"
@@ -57,6 +72,9 @@ msgstr "绑定地址"
 
 msgid "Chain"
 msgstr "链路"
+
+msgid "Changes"
+msgstr "变更"
 
 msgid "Clear Log"
 msgstr "清空日志"
@@ -115,8 +133,17 @@ msgstr "已配置 DNS 劫持"
 msgid "DNS queries on port 53 are redirected into mihomo while the service runs. If the proxy is broken, name resolution for all clients behind this firewall breaks with it."
 msgstr "服务运行期间，53 端口的 DNS 查询会被重定向到 mihomo。若代理失效，本机后面所有客户端的域名解析也会随之失效。"
 
+msgid "Direct, no proxy"
+msgstr "直连（不走代理）"
+
 msgid "Download / Upload"
 msgstr "下载 / 上传"
+
+msgid "Edit Policy Rule"
+msgstr "编辑路由策略"
+
+msgid "Effective state"
+msgstr "当前生效状态"
 
 msgid "Enable mihomo"
 msgstr "启用 mihomo"
@@ -169,17 +196,26 @@ msgstr "导入失败"
 msgid "Import from configuration file"
 msgstr "从配置文件导入"
 
+msgid "Interface \"%s\" has no IPv4 network; set a source explicitly."
+msgstr "接口 \"%s\" 没有 IPv4 网段，请显式填写源。"
+
 msgid "Interface name is limited to 15 characters (letters, digits, underscore)."
 msgstr "接口名最多 15 个字符（字母、数字、下划线）。"
 
 msgid "Interface name of the TUN device. It must match the interface that the firewall rules refer to (default tun_mihomo)."
 msgstr "TUN 设备的接口名。必须与防火墙规则引用的接口一致（默认 tun_mihomo）。"
 
+msgid "Interface whose clients should be routed into mihomo. Interfaces without a rule here never reach mihomo at all."
+msgstr "希望其客户端流量进入 mihomo 的接口。这里没有规则的接口，其流量完全不会进入 mihomo。"
+
 msgid "Invalid log level."
 msgstr "无效的日志层级。"
 
 msgid "Invalid mode."
 msgstr "无效的模式。"
+
+msgid "Leave empty to use the interface network. A CIDR (192.168.1.0/24) or an alias name is also accepted."
+msgstr "留空则使用接口网段；也可以填 CIDR（如 192.168.1.0/24）或别名。"
 
 msgid "Let mihomo answer DNS queries itself (needed for fake-ip mode and rule based resolution)."
 msgstr "由 mihomo 自行应答 DNS 查询（fake-ip 模式与基于规则的解析需要）。"
@@ -199,6 +235,9 @@ msgstr "mihomo 监听 DNS 的回环地址与端口，例如 127.0.0.1:1053。"
 msgid "Make sure the TUN device wins over other default routes while the service is running."
 msgstr "服务运行时，确保 TUN 设备优先于其它默认路由。"
 
+msgid "Manual: make sure the interface is policy routed into the TUN device."
+msgstr "手动模式：请自行确保该接口的策略路由指向 TUN 设备。"
+
 msgid "Maximum transmission unit of the TUN device."
 msgstr "TUN 设备的最大传输单元。"
 
@@ -211,8 +250,17 @@ msgstr "已切换到 %s 模式。"
 msgid "No output from the configuration test."
 msgstr "配置校验没有输出。"
 
+msgid "No policy rule yet. Interfaces without a rule never reach mihomo."
+msgstr "还没有策略行。没有规则的接口永远不会进入 mihomo。"
+
 msgid "No proxy groups are defined in the configuration."
 msgstr "配置中未定义代理分组。"
+
+msgid "No rule would be generated: every row is disabled, has no source, or has no outbound selected."
+msgstr "不会生成任何规则：所有行要么未启用、要么没有源、要么没有选出站。"
+
+msgid "Notes"
+msgstr "说明"
 
 msgid "On the next reboot mihomo will take over routing as soon as it starts. Verify the configuration before you reboot."
 msgstr "下次重启后 mihomo 一启动就会接管路由。重启前请先确认配置无误。"
@@ -220,8 +268,20 @@ msgstr "下次重启后 mihomo 一启动就会接管路由。重启前请先确�
 msgid "Only HTTP or HTTPS subscription URLs are allowed."
 msgstr "订阅地址仅允许使用 HTTP 或 HTTPS。"
 
+msgid "Only foreign traffic"
+msgstr "仅国外流量"
+
+msgid "Optional. Leave empty to use the interface network, or enter a CIDR like 192.168.1.0/24."
+msgstr "可留空以使用接口网段，或填写 CIDR（如 192.168.1.0/24）。"
+
 msgid "POST required."
 msgstr "需要 POST 请求。"
+
+msgid "Pick an interface and the outbound its traffic should use. Interfaces without a row here are never routed into mihomo."
+msgstr "选择接口，以及它的流量应该走哪个出口。这里没有出现的接口，流量完全不会进入 mihomo。"
+
+msgid "Pick an interface, e.g. lan or opt2."
+msgstr "请选择接口，例如 lan 或 opt2。"
 
 msgid "Placeholder proxy nodes detected"
 msgstr "检测到占位节点"
@@ -229,11 +289,35 @@ msgstr "检测到占位节点"
 msgid "Please review before starting the service"
 msgstr "启动服务前请先确认以下风险"
 
+msgid "Policy Routing"
+msgstr "路由策略"
+
+msgid "Policy routing firewall rule"
+msgstr "策略路由防火墙规则"
+
+msgid "Policy routing gateway"
+msgstr "策略路由网关"
+
+msgid "Policy routing is in place."
+msgstr "策略路由已就位。"
+
 msgid "Port of the RESTful controller."
 msgstr "RESTful 控制器的端口。"
 
+msgid "Preview"
+msgstr "预览"
+
 msgid "Proxy Groups"
 msgstr "代理分组"
+
+msgid "Proxy group \"%s\" does not exist in the current configuration file."
+msgstr "代理组 \"%s\" 不在当前配置文件里。"
+
+msgid "Proxy group name, e.g. 🇺🇸United States. Ignored when the scope is \"direct\"."
+msgstr "代理组名字，例如 🇺🇸United States；规则范围为“直连”时忽略。"
+
+msgid "Proxy group the traffic should egress through. Ignored when the scope is \"direct\"."
+msgstr "流量出口所用的代理组；规则范围为“直连”时忽略此项。"
 
 msgid "Restart After Update"
 msgstr "更新后重启"
@@ -253,8 +337,14 @@ msgstr "重启服务？"
 msgid "Restart the service after applying"
 msgstr "应用后重启服务"
 
+msgid "Routing policy applied"
+msgstr "路由策略已应用"
+
 msgid "Save failed"
 msgstr "保存失败"
+
+msgid "Scope"
+msgstr "规则范围"
 
 msgid "Secret that the subscription updater writes into the generated configuration."
 msgstr "订阅更新器写入生成配置的密钥。"
@@ -346,11 +436,23 @@ msgstr "TUN 设备"
 msgid "TUN Mode"
 msgstr "TUN 模式"
 
+msgid "TUN is currently disabled, so these rules are stored but no traffic reaches mihomo yet."
+msgstr "TUN 当前关闭：规则会被写入并通过校验，但暂时没有流量会进入 mihomo。"
+
+msgid "TUN is disabled: these rules are written and validated, but no traffic reaches mihomo yet."
+msgstr "TUN 已关闭：规则会写入并通过校验，但暂时没有流量进入 mihomo。"
+
+msgid "TUN is disabled: traffic does not reach mihomo."
+msgstr "TUN 已关闭：流量不会进入 mihomo。"
+
 msgid "TUN mode is enabled (automatic route takeover off)"
 msgstr "已启用 TUN 模式（未自动接管路由）"
 
 msgid "TUN with automatic route takeover is enabled"
 msgstr "已启用 TUN 且自动接管路由"
+
+msgid "Target files:"
+msgstr "目标文件："
 
 msgid "Test Active Configuration"
 msgstr "校验当前配置"
@@ -366,6 +468,9 @@ msgstr "配置里仍是随包分发的占位服务器 88.88.88.88。请在启动
 
 msgid "The controller is not reachable. Start the service to see proxy groups."
 msgstr "控制器不可达；启动服务后可查看代理分组。"
+
+msgid "The following mihomo rules will be written:"
+msgstr "将写入以下 mihomo 规则："
 
 msgid "The full mihomo configuration. It is validated with \"mihomo -t\" before it replaces the active file, and the previous file is kept as a timestamped backup."
 msgstr "完整的 mihomo 配置。落盘前会先用 \"mihomo -t\" 校验，并保留带时间戳的备份。"
@@ -424,8 +529,20 @@ msgstr "校验通过"
 msgid "Verbosity of the mihomo log file. Use \"error\" or \"silent\" for long term operation to keep the log small."
 msgstr "mihomo 日志的详细程度。长期运行时建议用 \"error\" 或 \"silent\" 以免日志过大。"
 
+msgid "Waiting for the OPNsense side: interface, gateway and policy routing rule."
+msgstr "等待同步 OPNsense 网络侧：接口、网关与策略路由规则。"
+
+msgid "Which traffic of this source should use the selected outbound."
+msgstr "该来源的哪些流量使用所选出站。"
+
+msgid "absent"
+msgstr "不存在"
+
 msgid "bytes"
 msgstr "字节"
+
+msgid "config.yaml snippet (managed block):"
+msgstr "config.yaml 片段（受管区块）："
 
 msgid "external-controller is bound to %s. Anyone who can reach that address and knows the secret can reconfigure the proxy. Bind it to 127.0.0.1 — this WebGUI talks to the controller over the loopback interface only."
 msgstr "external-controller 绑定在 %s。任何能访问该地址并知道密钥的人都能改代理配置。建议改为 127.0.0.1 —— 本 WebGUI 只通过回环接口与控制器通信。"
@@ -436,14 +553,35 @@ msgstr "fake-ip 返回合成地址、在建立连接时才解析；redir-host �
 msgid "gvisor is the most compatible option on FreeBSD; system may fail under some conditions; mixed combines both."
 msgstr "gvisor 在 FreeBSD 上兼容性最好；system 在某些环境下可能失败；mixed 两者兼用。"
 
+msgid "in effect"
+msgstr "生效中"
+
+msgid "manual routing"
+msgstr "手动路由"
+
 msgid "mihomo is active and will start again after a reboot."
 msgstr "mihomo 正在运行，并会在重启后自动启动。"
+
+msgid "not in the current configuration"
+msgstr "不在当前配置中"
+
+msgid "not reached by mihomo"
+msgstr "未经过 mihomo"
 
 msgid "not running"
 msgstr "未运行"
 
+msgid "on"
+msgstr "开"
+
+msgid "present"
+msgstr "已存在"
+
 msgid "rule: follow the routing rules (normal operation) global: send everything through the selected proxy direct: bypass every proxy"
 msgstr "rule：按分流规则处理（常规用法）；global：全部走所选节点；direct：全部直连。"
+
+msgid "waiting for the OPNsense side"
+msgstr "待同步网络侧"
 
 msgid "…"
 msgstr "未知"

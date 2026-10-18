@@ -1,3 +1,8 @@
+/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/RoutingController.php
+/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/policy_rule.xml
+/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/RoutingController.php
+/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt
+/usr/local/opnsense/scripts/mihomo/policy_apply.php
 usr/bin/mihomo_sub
 usr/local/etc/inc/plugins.inc.d/mihomo.inc
 usr/local/etc/newsyslog.conf.d/mihomo.conf
@@ -7,11 +12,11 @@ usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/LogController.php
 usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/ServiceController.php
 usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SettingsController.php
 usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SubscriptionController.php
+usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml
 usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/IndexController.php
 usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/LogController.php
 usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/SettingsController.php
 usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/SubscriptionController.php
-usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml
 usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/ACL/ACL.xml
 usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Config.php
 usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Controller.php

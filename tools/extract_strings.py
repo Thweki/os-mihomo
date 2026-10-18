@@ -33,7 +33,7 @@ PATTERNS = [
 # 表单/模型 XML 里会被框架统一 gettext() 的节点
 #   · ControllerBase::parseFormNode() 对 label / help / hint 调 gettext()
 #   · 模型的 ValidationMessage 由 BaseField 输出时翻译
-XML_NODES = ('label', 'help', 'hint', 'ValidationMessage')
+XML_NODES = ('label', 'help', 'hint', 'ValidationMessage', 'OptionValues')
 XML_TAGS = re.compile(
     r'<(' + '|'.join(XML_NODES) + r')>(.*?)</\1>', re.S
 )
@@ -78,11 +78,16 @@ def collect() -> dict[str, list[str]]:
                         add(unescape(match.group(1)), rel)
 
             elif path.suffix == '.xml':
-                # 表单定义与模型定义：label / help / hint / ValidationMessage
+                # 表单定义与模型定义：label / help / hint / ValidationMessage / OptionValues
                 text = path.read_text(encoding='utf-8', errors='replace')
                 for match in XML_TAGS.finditer(text):
                     # 只取第一行有内容的；长帮助文本把换行折叠成空格（与 gettext 原文一致）
                     value = re.sub(r'\s+', ' ', match.group(2)).strip()
+                    if match.group(1) == 'OptionValues':
+                        # 选项值是一组 <key>Label</key>，只收集标签
+                        for key, label in re.findall(r'<([A-Za-z0-9_-]+)>(.*?)</\1>', match.group(2), re.S):
+                            add(re.sub(r'\s+', ' ', label).strip(), rel)
+                        continue
                     add(value, rel)
 
     return found

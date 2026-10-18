@@ -74,13 +74,14 @@ check(
 @unlink($tmp);
 
 echo "\n=== 1b. 值相同时零改动 / 行尾注释保留 ===\n";
+/* 用夹具自身的当前值做「原值」判断，避免夹具被改过导致误报（例如 tun.enable 已改成 false） */
 $noop = Config::patchKeys($original, [
-    'mode' => 'rule',
-    'allow-lan' => false,
-    'tun.enable' => true,
-    'log-level' => 'info',
+    'mode' => $scan['mode'],
+    'allow-lan' => ($scan['allow-lan'] ?? 'false') === 'true',
+    'tun.enable' => ($scan['tun.enable'] ?? 'false') === 'true',
+    'log-level' => $scan['log-level'],
 ]);
-check('全部键都是原值时字节完全不变', $noop === $original);
+check('全部键都是原值时字节完全不变', $noop === $original, 'tun.enable=' . ($scan['tun.enable'] ?? '?'));
 $fixture = "# header comment\nlog-level: info #行尾注释要保留\nmode: rule\ntun:\n  enable: true #keep-tun\n";
 $out = Config::patchKeys($fixture, ['log-level' => 'debug', 'tun.enable' => false]);
 check('改值后保留行尾中文注释', str_contains($out, 'log-level: debug #行尾注释要保留'), $out);
@@ -157,6 +158,87 @@ if (!is_file('/usr/local/bin/mihomo')) {
     check('mihomo -t 接受补丁结果', $rc === 0, implode(' | ', array_slice($out, 0, 3)));
     @unlink($tmp);
 }
+
+echo "\n=== 8. 路由策略：受管区块 ===\n";
+$policyRules = [
+    'AND,((SRC-IP-CIDR,192.168.1.0/24),(GEOSITE,geolocation-!cn)),PROXY-US',
+    'AND,((SRC-IP-CIDR,192.168.1.0/24),(GEOSITE,gfw)),PROXY-US',
+    'SRC-IP-CIDR,192.168.2.0/24,DIRECT',
+];
+$blocked = Config::applyPolicyBlock($original, $policyRules);
+check('区块含开始标记', str_contains($blocked, Config::POLICY_MARK_BEGIN));
+check('区块含结束标记', str_contains($blocked, Config::POLICY_MARK_END));
+check('规则已写入', substr_count($blocked, 'SRC-IP-CIDR,192.168.1.0/24') === 2, (string)substr_count($blocked, 'SRC-IP-CIDR,192.168.1.0/24'));
+check('规则缩进与文件一致', str_contains($blocked, "\n  - AND,((SRC-IP-CIDR,192.168.1.0/24)"), 'expect 2-space indent');
+check('插在 rules: 之后且位于原有规则之前', (bool)preg_match('/rules:\s*\n\s*# >>> os-mihomo:policy-routing.*GEOSITE,private,DIRECT/s', $blocked));
+check('原有规则保持不变', str_contains($blocked, 'GEOSITE,private,DIRECT'));
+check('其余内容逐字节保留（除新增块）', str_contains($blocked, 'external-controller:'), '');
+
+echo "\n=== 9. 路由策略：幂等与替换 ===\n";
+$again = Config::applyPolicyBlock($blocked, $policyRules);
+check('重复应用内容不变（幂等）', $again === $blocked);
+$changed = Config::applyPolicyBlock($blocked, ['SRC-IP-CIDR,10.0.0.0/8,DIRECT']);
+check('替换旧块而非追加', substr_count($changed, Config::POLICY_MARK_BEGIN) === 1, (string)substr_count($changed, Config::POLICY_MARK_BEGIN));
+check('旧规则已被移除', !str_contains($changed, '192.168.1.0/24'));
+check('空规则时整块移除', !str_contains(Config::applyPolicyBlock($blocked, []), Config::POLICY_MARK_BEGIN));
+
+echo "\n=== 10. 路由策略：规则渲染 ===\n";
+$rows = [
+    ['enabled' => '1', 'interface' => 'lan', 'source' => '', 'scope' => 'foreign', 'target' => 'PROXY-US'],
+    ['enabled' => '1', 'interface' => 'opt2', 'source' => '10.0.0.0/8', 'scope' => 'all', 'target' => 'PROXY-JP'],
+    ['enabled' => '1', 'interface' => 'opt1', 'source' => '', 'scope' => 'direct', 'target' => ''],
+    ['enabled' => '0', 'interface' => 'lan', 'source' => '', 'scope' => 'all', 'target' => 'PROXY-US'],
+    ['enabled' => '1', 'interface' => 'opt3', 'source' => '', 'scope' => 'all', 'target' => ''],
+];
+$rendered = Config::renderPolicyRules($rows, ['lan' => '192.168.1.0/24', 'opt1' => '192.168.2.0/24', 'opt2' => '192.168.10.0/24']);
+check('foreign 生成 2 条 AND 规则', in_array('AND,((SRC-IP-CIDR,192.168.1.0/24),(GEOSITE,geolocation-!cn)),PROXY-US', $rendered, true)
+    && in_array('AND,((SRC-IP-CIDR,192.168.1.0/24),(GEOSITE,gfw)),PROXY-US', $rendered, true));
+check('all 生成 1 条 SRC-IP-CIDR', in_array('SRC-IP-CIDR,10.0.0.0/8,PROXY-JP', $rendered, true));
+check('direct 生成 DIRECT', in_array('SRC-IP-CIDR,192.168.2.0/24,DIRECT', $rendered, true));
+check('未启用的行不生成', count(array_filter($rendered, fn($r) => str_contains($r, 'PROXY-US'))) === 2, (string)count($rendered));
+check('无源/无出口的行被跳过', count($rendered) === 4, (string)count($rendered));
+check('接口网段能自动补齐', in_array('SRC-IP-CIDR,192.168.2.0/24,DIRECT', $rendered, true));
+
+echo "\n=== 11. 路由策略：真配置 + mihomo -t ===\n";
+/* 用真实存在的出口（DIRECT）做校验，避免测试数据里的假组名让 mihomo -t 拒绝 —— 那属于正确行为 */
+$validRules = [
+    'AND,((SRC-IP-CIDR,192.168.1.0/24),(GEOSITE,geolocation-!cn)),DIRECT',
+    'SRC-IP-CIDR,192.168.2.0/24,DIRECT',
+];
+$patched = Config::applyPolicyBlock($original, $validRules);
+$tmp = writeTemp($patched);
+if (!is_file('/usr/local/bin/mihomo')) {
+    echo "  SKIP  mihomo 内核尚未安装\n";
+} else {
+    $out = [];
+    $rc = 0;
+    exec('/usr/local/bin/mihomo -t -d /usr/local/etc/mihomo -f ' . escapeshellarg($tmp) . ' 2>&1', $out, $rc);
+    check('mihomo -t 接受带策略区块的配置', $rc === 0, implode(' | ', array_slice(array_filter($out, fn($l) => stripos($l, 'test is successful') === false), 0, 4)));
+}
+/* 引用了不存在的代理组时，mihomo -t 必须拒绝（这正是 apply 的安全网） */
+$badRules = ['AND,((SRC-IP-CIDR,192.168.1.0/24),(GEOSITE,geolocation-!cn)),NO-SUCH-GROUP-XYZ'];
+$tmpBad = writeTemp(Config::applyPolicyBlock($original, $badRules));
+if (is_file('/usr/local/bin/mihomo')) {
+    $out2 = [];
+    $rc2 = 0;
+    exec('/usr/local/bin/mihomo -t -d /usr/local/etc/mihomo -f ' . escapeshellarg($tmpBad) . ' 2>&1', $out2, $rc2);
+    check('引用不存在的组会被 mihomo -t 拒绝', $rc2 !== 0, 'rc=' . $rc2);
+}
+$snippet = Config::applyPolicyBlock("rules:\n  - MATCH,DIRECT\n", ['SRC-IP-CIDR,192.168.1.0/24,DIRECT']);
+check('无 rules: 键时新建区块', str_contains(Config::applyPolicyBlock("mode: rule\n", ['SRC-IP-CIDR,1.0.0.0/8,DIRECT']), "rules:\n"));
+@unlink($tmp);
+@unlink($tmpBad);
+
+echo "\n=== 12. 代理组名解析（块风格 + flow 风格）===\n";
+$blockStyle = "proxy-groups:\n  - name: 块风格组\n    type: select\n  - name: 第二组\n    type: url-test\nrules:\n  - MATCH,DIRECT\n";
+$flowStyle = "proxy-groups:\n  - { name: '🇺🇸 United States', type: select, proxies: ['a'] }\n  - { name: 🇯🇵 Japan, type: url-test, url: 'http://x' }\nrules:\n  - MATCH,DIRECT\n";
+$tmpB = writeTemp($blockStyle);
+$tmpF = writeTemp($flowStyle);
+check('块风格分组名', Config::policyTargets($tmpB) === ['块风格组', '第二组'], implode(',', Config::policyTargets($tmpB)));
+check('flow 风格分组名', Config::policyTargets($tmpF) === ['🇺🇸 United States', '🇯🇵 Japan'], implode(',', Config::policyTargets($tmpF)));
+check('只扫 proxy-groups 段', !in_array('MATCH,DIRECT', Config::policyTargets($tmpF), true));
+@unlink($tmpB);
+@unlink($tmpF);
 
 echo "\n=== 汇总: {$failures} 个失败 ===\n";
 exit($failures === 0 ? 0 : 1);

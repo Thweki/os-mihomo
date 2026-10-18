@@ -18,6 +18,8 @@
 | P9 | 修复：表单布尔控件、Apply 落盘链路、补丁器最小化 | [x] |
 | P10 | 项目定位与分发格式：标准 OPNsense 插件包 + 插件管理器可管理 + README 重写 | [x] |
 | P11 | 上手试用：安全启动（TUN 关闭）+ 修复服务控制缺陷 | [x] |
+| P12-1 | 路由策略页（原生表格 + 受管区块 + 预览/应用/状态）+ 真实节点实测 | [x] |
+| P12-2 | 路由策略网络侧同步（接口/网关/策略路由/DNS + 弹窗确认 + 回滚） | [ ] |
 
 ## 交付结果（2026-10-18）
 
@@ -59,6 +61,27 @@
 - [x] 截图：`docs/screenshots/10-trial-live-dashboard.png`
 - [ ] **待用户确认**：要跑透明代理还需加 `tun_mihomo` 接口 + 防火墙放行（可选 Unbound 转发 1053）——属网络配置变更，需明确同意
 
+## P12-1 路由策略（已完成）
+
+- [x] 模型 `policyRouting.rule`（ArrayField）+ 对话框表单 + 页面控制器 + API 控制器（核心 CRUD 约定）
+- [x] 视图：`base_bootgrid_table` + `base_dialog` + 底部应用按钮 + 只读"当前生效状态"表（全中文）
+- [x] `policy_apply.php`（configd/root）：受管区块写入 `config.yaml` **与订阅模板**，`mihomo -t` 校验 + 时间戳备份 + 原子替换 + 幂等
+- [x] 预览/应用前弹窗列出将写入的规则与目标文件；应用后返回 diff
+- [x] 回归测试：受管区块（幂等/替换/移除/缩进/插入位置）、规则渲染（仅国外/全部/直连/跳过）、
+      分组名解析（块风格 + **flow 风格**）、`mihomo -t` 接受合法块并拒绝不存在的分组 —— **0 失败**
+- [x] 真实节点实测（lan 侧）：日志显示 `match AND(((SrcIPCIDR,192.168.1.0/24) && (GeoSite,geolocation-!cn))) using 🇺🇸 United States[01]`，
+      出口 IP 从 `188.253.115.13`（环回/HK）变为 `5.34.216.210`（LAN 源/美国组），国内目标 DIRECT
+- [x] LanDirect 零影响：config.yaml 无该网段、无监听、无策略路由；pf/NAT/路由/Unbound 指纹与基线逐字节一致
+- [x] 截图：`docs/screenshots/11-routing-policy.png`
+
+## P12-2 路由策略 · 网络侧同步（待用户确认后做）
+
+- [ ] 实测 TUN 在这台机器上的地址形态（`tun.enable` 打开、`auto-route` 关闭，短暂创建接口）
+- [ ] config.xml：`tun_mihomo` 接口 + `MIHOMO_TUN` 网关（关闭监控）+ 选中接口上的策略路由规则
+- [ ] 可选：被选中接口的 DNS 重定向（53 → 127.0.0.1:1053）
+- [ ] 弹窗逐条确认 → 备份 config.xml → 应用 → 展示 diff → 一键回滚；`filter reload`
+- [ ] 端到端验证：lan 内主机 `curl ifconfig.me` 得到代理出口 IP；LanDirect 内主机得到本地公网 IP
+
 ## 后续可选（不在本轮范围）
 
 - [ ] 把 146 条词条提交到 OPNsense 官方翻译平台（translate.opnsense.org），
@@ -87,3 +110,6 @@
 | R14 | `make package` 两次构建哈希不同 | tar 记录 mtime，构建不可复现；文档标注以最后一次产物为准 |
 | R15 | 关掉"开机自启"后，界面无法启停服务 | `/etc/rc.subr` 在 `rcvar=NO` 时拒绝 `start`，而 configd 动作正是 `start`（且被拒后仍以 0 退出，界面无任何报错）→ 动作改 `onestart/onestop/onerestart`；"当前启停"与"开机自启"彻底解耦 |
 | R16 | 服务未启用时页面右上角没有启停按钮 | 基类 `statusAction()` 返回 `disabled`，核心 JS 只认 `running`/`stopped` → 覆盖归一为 `stopped`，自启状态由 `boot_enabled` 字段与安全横幅表达 |
+| R17 | 路由策略表格的 `rule` 节点未声明 `ArrayField` | `addBase/searchBase` 直接 500（`ContainerField::Add()`）；声明为 `<rule type="ArrayField">` 即可（核心 `Route.xml` 同写法） |
+| R18 | 用户配置里的代理组是 flow 风格 `- { name: 'X', ... }` | 分组扫描器要同时认块风格与 flow 风格，否则下拉为空并误报"分组不存在" |
+| R19 | 回归测试拿线上配置当夹具 | 用户换配置后大量误报 → 固定用仓库随包配置作夹具（`/tmp/mihomo-test/fixture-config.yaml`），测试与线上数据解耦 |
