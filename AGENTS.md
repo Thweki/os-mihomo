@@ -31,7 +31,10 @@
 - ❌ **禁止**执行上游 `packaging/freebsd/+POST_INSTALL`（它会改 `config.xml`、加 TUN 接口、加防火墙放行规则、改 Unbound 转发）。
 - ❌ **禁止**执行 `service mihomo start`（默认配置 `tun.auto-route: true` 会劫持全局路由）。
 - ❌ **禁止** `configctl filter reload` / `unbound restart` / `pfctl` 写操作。
-- ❌ **禁止**改 `/conf/config.xml`（只读阅读允许）。
+- ⚠️ **受控例外**：通过 OPNsense 原生模型机制写入**仅限本插件自己的** `<OPNsense><mihomo>` 设置节点
+  （由 `/ui/mihomo/settings` 的「Apply」触发，这是 OPNsense 插件持久化设置的标准方式，且不参与网络行为）。
+  执行前必须：(1) 备份 `/conf/config.xml`；(2) 写后 diff 证明除该节点外无任何变化；(3) 记录到 `logs/`。
+  **除该节点外的任何 config.xml 修改仍然严格禁止**（防火墙/NAT/接口/路由/DNS/DHCP 一律只读）。
 - ✅ 允许：写 `/usr/local/opnsense/mvc/**`、`/usr/local/www/mihomo*.php`、`/usr/local/etc/mihomo/**`、
   `/usr/local/etc/rc.d/mihomo`、`/usr/local/opnsense/scripts/mihomo/**`、`/usr/local/opnsense/service/conf/actions.d/actions_mihomo.conf`、
   `/var/lib/php/tmp/*cache*`（菜单/ACL 缓存）、重启 `webgui`/`configd`。

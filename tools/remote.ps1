@@ -10,7 +10,8 @@ param(
     [string]$Push,
     [string]$PushTo,
     [string]$Pull,
-    [string]$PullTo
+    [string]$PullTo,
+    [string]$Args
 )
 
 $ErrorActionPreference = 'Continue'
@@ -31,7 +32,7 @@ if ($Script) {
     $content = $content -replace "`r`n", "`n"   # normalize to LF
     [System.IO.File]::WriteAllText($tmp, $content, (New-Object System.Text.UTF8Encoding($false)))
     & scp @SCP_OPTS $tmp "${TARGET}:/tmp/__remote.sh" 2>&1 | Out-Null
-    & ssh @SSH_OPTS $TARGET "exec sh /tmp/__remote.sh" 2>&1
+    & ssh @SSH_OPTS $TARGET "exec sh /tmp/__remote.sh $Args" 2>&1
     $rc = $LASTEXITCODE
     Remove-Item -Force $tmp -ErrorAction SilentlyContinue
     exit $rc
