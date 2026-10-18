@@ -217,8 +217,9 @@ class RoutingController extends ApiMutableModelControllerBase
         $ruleExists = false;
         try {
             $cfg = CoreConfig::getInstance()->object();
-            if (isset($cfg->gateways)) {
-                foreach ($cfg->gateways->children() as $item) {
+            /* 网关：模型挂载点是 //OPNsense/Gateways */
+            if (isset($cfg->OPNsense->Gateways)) {
+                foreach ($cfg->OPNsense->Gateways->gateway_item as $item) {
                     if ((string)$item->name === 'MIHOMO_TUN') {
                         $gatewayExists = true;
                     }
@@ -226,7 +227,10 @@ class RoutingController extends ApiMutableModelControllerBase
             }
             if (isset($cfg->filter->rule)) {
                 foreach ($cfg->filter->rule as $rule) {
-                    if ((string)$rule->gateway === 'MIHOMO_TUN') {
+                    if (
+                        (string)$rule->gateway === 'MIHOMO_TUN'
+                        && stripos((string)$rule->descr, 'Mihomo policy routing') !== false
+                    ) {
                         $ruleExists = true;
                     }
                 }
@@ -263,6 +267,113 @@ class RoutingController extends ApiMutableModelControllerBase
             'gateway' => $gatewayExists,
             'firewall_rule' => $ruleExists,
             'rows' => $rows,
+        ];
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 网络侧（OPNsense）：接口 / 网关 / 策略路由规则
+     *
+     * 只对「已启用 + 策略路由=自动」的行生效；未列出的接口一条规则都不加。
+     * 实际写入由 configd(root) 的 policy_net.php 完成：只增不改 + config.xml 备份 + 可回滚。
+     * ------------------------------------------------------------------ */
+
+    /** 网络侧现状（只读） */
+    public function netstatusAction()
+    {
+        return $this->configdJson('policy-net-check');
+    }
+
+    /** 网络侧变更计划（只读，供弹窗展示） */
+    public function netplanAction()
+    {
+        $staging = null;
+        try {
+            $staging = $this->writeStaging($this->netPayload());
+            return $this->configdJson('policy-net-plan', [$staging]);
+        } catch (\Throwable $e) {
+            return ['status' => 'failed', 'message' => $e->getMessage()];
+        } finally {
+            if ($staging !== null) {
+                @unlink($staging);
+            }
+        }
+    }
+
+    /** 应用网络侧变更（写 config.xml + filter reload） */
+    public function netapplyAction()
+    {
+        $result = ['status' => 'failed', 'messages' => []];
+        if (!$this->request->isPost()) {
+            $result['message'] = gettext('POST required.');
+            return $result;
+        }
+        $this->throwReadOnly();
+
+        $payload = $this->netPayload();
+        if ($payload['interfaces'] === []) {
+            $result['message'] = gettext(
+                'No row requests automatic policy routing: enable a row and set its policy routing to "Automatic".'
+            );
+            return $result;
+        }
+
+        $staging = null;
+        try {
+            $staging = $this->writeStaging($payload);
+            return $this->configdJson('policy-net-apply', [$staging]);
+        } catch (\Throwable $e) {
+            $result['message'] = $e->getMessage();
+            return $result;
+        } finally {
+            if ($staging !== null) {
+                @unlink($staging);
+            }
+        }
+    }
+
+    /** 回滚最近一次网络侧改动 */
+    public function netrollbackAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['status' => 'failed', 'message' => gettext('POST required.')];
+        }
+        $this->throwReadOnly();
+        return $this->configdJson('policy-net-rollback');
+    }
+
+    /** 需要自动策略路由的接口列表 */
+    private function netPayload(): array
+    {
+        $interfaces = [];
+        foreach ($this->collectRows(true) as $row) {
+            if ($row['enabled'] === '0' || $row['firewall'] !== 'auto') {
+                continue;
+            }
+            $interfaces[$row['interface']] = true;
+        }
+        /* 网关地址留空 -> 由 policy_net.php 从 ifconfig 推断 */
+        return ['interfaces' => array_keys($interfaces), 'gateway' => ''];
+    }
+
+    private function writeStaging(array $payload): string
+    {
+        return Config::createStagingFile(json_encode(
+            $payload,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        ));
+    }
+
+    private function configdJson(string $action, array $args = []): array
+    {
+        $backend = new Backend();
+        $output = trim((string)$backend->configdpRun('mihomo ' . $action, $args));
+        $decoded = json_decode($output, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+        return [
+            'status' => 'failed',
+            'message' => $output === '' ? gettext('(no output)') : $output,
         ];
     }
 

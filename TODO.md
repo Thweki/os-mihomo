@@ -19,7 +19,8 @@
 | P10 | 项目定位与分发格式：标准 OPNsense 插件包 + 插件管理器可管理 + README 重写 | [x] |
 | P11 | 上手试用：安全启动（TUN 关闭）+ 修复服务控制缺陷 | [x] |
 | P12-1 | 路由策略页（原生表格 + 受管区块 + 预览/应用/状态）+ 真实节点实测 | [x] |
-| P12-2 | 路由策略网络侧同步（接口/网关/策略路由/DNS + 弹窗确认 + 回滚） | [ ] |
+| P12-2 | 路由策略网络侧同步（接口/网关/策略路由 + 弹窗确认 + 回滚） | [x] |
+| P12-3 | 可选：DNS 交给 mihomo（NAT 53→1053）、IPv6、按端口/目标细分 | [ ] |
 
 ## 交付结果（2026-10-18）
 
@@ -74,13 +75,24 @@
 - [x] LanDirect 零影响：config.yaml 无该网段、无监听、无策略路由；pf/NAT/路由/Unbound 指纹与基线逐字节一致
 - [x] 截图：`docs/screenshots/11-routing-policy.png`
 
-## P12-2 路由策略 · 网络侧同步（待用户确认后做）
+## P12-2 路由策略 · 网络侧同步（已完成）
 
-- [ ] 实测 TUN 在这台机器上的地址形态（`tun.enable` 打开、`auto-route` 关闭，短暂创建接口）
-- [ ] config.xml：`tun_mihomo` 接口 + `MIHOMO_TUN` 网关（关闭监控）+ 选中接口上的策略路由规则
-- [ ] 可选：被选中接口的 DNS 重定向（53 → 127.0.0.1:1053）
-- [ ] 弹窗逐条确认 → 备份 config.xml → 应用 → 展示 diff → 一键回滚；`filter reload`
-- [ ] 端到端验证：lan 内主机 `curl ifconfig.me` 得到代理出口 IP；LanDirect 内主机得到本地公网 IP
+- [x] 实测 TUN 地址形态：`198.18.0.1/30`（auto-route 关闭，只多一条 /30 直连路由）→ 网关用对端 `198.18.0.2`
+- [x] `policy_net.php`（configd/root）：`check` / `plan` / `apply` / `rollback [备份文件]`
+      —— 只增不改 + config.xml 时间戳备份 + 文本级插入 + XML 自检 + **写后安全自检（无 route-to … tun_mihomo 就自动回滚）**
+- [x] config.xml：`opt3 -> tun_mihomo` 接口 + `MIHOMO_TUN` 网关（monitor_disable=1）+ `lan` 上的 `pass + gateway=MIHOMO_TUN` 规则
+- [x] 页面：OPNsense 网络侧状态表 + 「同步 / 预览变更 / 回滚」+ 弹窗确认（列出全部变更与备份说明）
+- [x] 实测：pf 生成 `pass in quick on igb0 route-to (tun_mihomo 198.18.0.2)`；经 TUN 的出口 IP = 188.253.115.13（代理）；幂等（二次同步 nothing changed）
+- [x] LanDirect 零影响：igb4 上 0 条 route-to、10 条既有 pass 规则未变、opt1 仍是 igb4/LanDirect、默认路由与 Unbound 指纹未变、本机出网 200
+- [x] 体检横幅新增告警：策略路由生效的接口，在 mihomo 停止期间会断网
+- [x] 事故与修复：①接口块误插到 WebGUI 的 `<interfaces>`（已回滚 + 改为识别根接口段 + 加自动回滚安全网）②脚本内 `service configd restart` 自杀（已移除）③规则去重正则脆弱（改为按 rule 块解析）
+- [x] 截图：`docs/screenshots/12-routing-opnsense-side.png`
+
+## P12-3 可选（待确认）
+
+- [ ] DNS 交给 mihomo：被策略路由接口的 NAT 重定向（53 → 127.0.0.1:1053）——写错会影响整段解析，需单独确认
+- [ ] IPv6 的对应处理（TUN v6 + 独立规则）
+- [ ] 按端口/目标的更细粒度分流；把策略路由导出成可审计的 pf 片段
 
 ## 后续可选（不在本轮范围）
 
@@ -113,3 +125,6 @@
 | R17 | 路由策略表格的 `rule` 节点未声明 `ArrayField` | `addBase/searchBase` 直接 500（`ContainerField::Add()`）；声明为 `<rule type="ArrayField">` 即可（核心 `Route.xml` 同写法） |
 | R18 | 用户配置里的代理组是 flow 风格 `- { name: 'X', ... }` | 分组扫描器要同时认块风格与 flow 风格，否则下拉为空并误报"分组不存在" |
 | R19 | 回归测试拿线上配置当夹具 | 用户换配置后大量误报 → 固定用仓库随包配置作夹具（`/tmp/mihomo-test/fixture-config.yaml`），测试与线上数据解耦 |
+| R20 | config.xml 里有多个同名 `<interfaces>`（WebGUI 段也有） | 插入接口块必须**按"内部含 `<if>` 设备赋值"识别根接口段**，否则会写进 WebGUI 设置；写完自检，且无 `route-to … tun_mihomo` 时自动回滚 |
+| R21 | configd 拉起的脚本里不能 `service configd restart` | 等于自杀（输出丢失、后续步骤不执行）→ 移除该调用；`filter reload` 本身会重读 config.xml |
+| R22 | 策略路由生效后 mihomo 停止会断网 | 属预期行为；已写入体检横幅与文档；临时绕过 = 把该行改「手动」/禁用，或在 OPNsense 里禁用该规则 |

@@ -49,6 +49,9 @@ msgstr "允许局域网"
 msgid "Allow clients from the local network to use the SOCKS/HTTP proxy ports directly."
 msgstr "允许局域网客户端直接使用 SOCKS/HTTP 代理端口。"
 
+msgid "Apply and reload the firewall"
+msgstr "应用并重新加载防火墙"
+
 msgid "Apply failed"
 msgstr "应用失败"
 
@@ -199,6 +202,9 @@ msgstr "从配置文件导入"
 msgid "Interface \"%s\" has no IPv4 network; set a source explicitly."
 msgstr "接口 \"%s\" 没有 IPv4 网段，请显式填写源。"
 
+msgid "Interface assignment"
+msgstr "接口分配"
+
 msgid "Interface name is limited to 15 characters (letters, digits, underscore)."
 msgstr "接口名最多 15 个字符（字母、数字、下划线）。"
 
@@ -256,11 +262,20 @@ msgstr "还没有策略行。没有规则的接口永远不会进入 mihomo。"
 msgid "No proxy groups are defined in the configuration."
 msgstr "配置中未定义代理分组。"
 
+msgid "No row requests automatic policy routing: enable a row and set its policy routing to \"Automatic\"."
+msgstr "没有任何一行要求自动策略路由：请启用某行并把它的「策略路由」设为「自动」。"
+
 msgid "No rule would be generated: every row is disabled, has no source, or has no outbound selected."
 msgstr "不会生成任何规则：所有行要么未启用、要么没有源、要么没有选出站。"
 
 msgid "Notes"
 msgstr "说明"
+
+msgid "OPNsense side (interface, gateway, firewall)"
+msgstr "OPNsense 网络侧（接口 / 网关 / 防火墙）"
+
+msgid "OPNsense side synchronized"
+msgstr "OPNsense 网络侧已同步"
 
 msgid "On the next reboot mihomo will take over routing as soon as it starts. Verify the configuration before you reboot."
 msgstr "下次重启后 mihomo 一启动就会接管路由。重启前请先确认配置无误。"
@@ -286,6 +301,9 @@ msgstr "请选择接口，例如 lan 或 opt2。"
 msgid "Placeholder proxy nodes detected"
 msgstr "检测到占位节点"
 
+msgid "Planned OPNsense changes"
+msgstr "计划的 OPNsense 变更"
+
 msgid "Please review before starting the service"
 msgstr "启动服务前请先确认以下风险"
 
@@ -298,14 +316,23 @@ msgstr "策略路由防火墙规则"
 msgid "Policy routing gateway"
 msgstr "策略路由网关"
 
+msgid "Policy routing is active"
+msgstr "策略路由已启用"
+
 msgid "Policy routing is in place."
 msgstr "策略路由已就位。"
+
+msgid "Policy routing rules"
+msgstr "策略路由规则"
 
 msgid "Port of the RESTful controller."
 msgstr "RESTful 控制器的端口。"
 
 msgid "Preview"
 msgstr "预览"
+
+msgid "Preview changes"
+msgstr "预览变更"
 
 msgid "Proxy Groups"
 msgstr "代理分组"
@@ -336,6 +363,18 @@ msgstr "重启服务？"
 
 msgid "Restart the service after applying"
 msgstr "应用后重启服务"
+
+msgid "Restore the most recent config.xml backup created by this plugin and reload the firewall?"
+msgstr "要还原本插件最近一次创建的 config.xml 备份并重新加载防火墙吗？"
+
+msgid "Roll back"
+msgstr "回滚"
+
+msgid "Roll back the OPNsense side"
+msgstr "回滚 OPNsense 网络侧"
+
+msgid "Rolled back"
+msgstr "已回滚"
 
 msgid "Routing policy applied"
 msgstr "路由策略已应用"
@@ -430,11 +469,17 @@ msgstr "订阅更新已开始"
 msgid "Switched \"%s\" to \"%s\"."
 msgstr "已将 \"%s\" 切换到 \"%s\"。"
 
+msgid "Synchronize OPNsense side"
+msgstr "同步 OPNsense 网络侧"
+
 msgid "TUN Device"
 msgstr "TUN 设备"
 
 msgid "TUN Mode"
 msgstr "TUN 模式"
+
+msgid "TUN device"
+msgstr "TUN 设备"
 
 msgid "TUN is currently disabled, so these rules are stored but no traffic reaches mihomo yet."
 msgstr "TUN 当前关闭：规则会被写入并通过校验，但暂时没有流量会进入 mihomo。"
@@ -447,6 +492,9 @@ msgstr "TUN 已关闭：流量不会进入 mihomo。"
 
 msgid "TUN mode is enabled (automatic route takeover off)"
 msgstr "已启用 TUN 模式（未自动接管路由）"
+
+msgid "TUN peer address used as gateway"
+msgstr "用作网关的 TUN 对端地址"
 
 msgid "TUN with automatic route takeover is enabled"
 msgstr "已启用 TUN 且自动接管路由"
@@ -468,6 +516,9 @@ msgstr "配置里仍是随包分发的占位服务器 88.88.88.88。请在启动
 
 msgid "The controller is not reachable. Start the service to see proxy groups."
 msgstr "控制器不可达；启动服务后可查看代理分组。"
+
+msgid "The following OPNsense changes will be made:"
+msgstr "将进行以下 OPNsense 变更："
 
 msgid "The following mihomo rules will be written:"
 msgstr "将写入以下 mihomo 规则："
@@ -493,11 +544,20 @@ msgstr "更新后会立即重启服务，这会重建 TUN 设备及其路由。�
 msgid "The subscription script is not installed; subscription updates are unavailable."
 msgstr "未安装订阅脚本，无法执行订阅更新。"
 
+msgid "This modifies /conf/config.xml (interface, gateway, firewall rule) and reloads the firewall. Interfaces without a row are not touched. A backup of config.xml is created automatically and can be rolled back from this page."
+msgstr "这会修改 /conf/config.xml（接口、网关、防火墙规则）并重新加载防火墙。表里没有的接口不会被改动。config.xml 会自动备份，可在本页一键回滚。"
+
 msgid "Total Downloaded / Uploaded"
 msgstr "累计下载 / 上传"
 
+msgid "Traffic from these interfaces is routed into the mihomo TUN device: %s. While the service is stopped or fails to start, clients on these interfaces lose Internet access."
+msgstr "这些接口的流量会被策略路由进 mihomo 的 TUN 设备：%s。在服务停止或启动失败期间，这些接口上的客户端会断网。"
+
 msgid "Traffic only enters the TUN device when firewall or policy routing sends it there."
 msgstr "仅当防火墙或策略路由把流量送入 TUN 设备时才会走代理。"
+
+msgid "Traffic only reaches mihomo when the firewall policy routes the interface into the TUN device. Only interfaces whose policy routing is set to \"Automatic\" are touched; all other interfaces keep their normal routing."
+msgstr "只有当防火墙把接口策略路由进 TUN 设备后，流量才会到达 mihomo。只有「策略路由=自动」的接口会被处理，其它接口保持原本的路由方式。"
 
 msgid "Unable to create a staging file in /tmp."
 msgstr "无法在 /tmp 创建临时文件。"
@@ -541,8 +601,14 @@ msgstr "不存在"
 msgid "bytes"
 msgstr "字节"
 
+msgid "config.xml backups"
+msgstr "config.xml 备份"
+
 msgid "config.yaml snippet (managed block):"
 msgstr "config.yaml 片段（受管区块）："
+
+msgid "down"
+msgstr "未就绪"
 
 msgid "external-controller is bound to %s. Anyone who can reach that address and knows the secret can reconfigure the proxy. Bind it to 127.0.0.1 — this WebGUI talks to the controller over the loopback interface only."
 msgstr "external-controller 绑定在 %s。任何能访问该地址并知道密钥的人都能改代理配置。建议改为 127.0.0.1 —— 本 WebGUI 只通过回环接口与控制器通信。"
@@ -571,6 +637,9 @@ msgstr "未经过 mihomo"
 msgid "not running"
 msgstr "未运行"
 
+msgid "nothing to do"
+msgstr "无需改动"
+
 msgid "on"
 msgstr "开"
 
@@ -579,6 +648,9 @@ msgstr "已存在"
 
 msgid "rule: follow the routing rules (normal operation) global: send everything through the selected proxy direct: bypass every proxy"
 msgstr "rule：按分流规则处理（常规用法）；global：全部走所选节点；direct：全部直连。"
+
+msgid "up"
+msgstr "已启用"
 
 msgid "waiting for the OPNsense side"
 msgstr "待同步网络侧"

@@ -279,6 +279,37 @@ TRANSLATIONS: dict[str, str] = {
         '代理组名字，例如 🇺🇸United States；规则范围为“直连”时忽略。',
     'Auto: the plugin also creates the OPNsense side (interface, gateway, firewall rule) after you confirm a dialog. Manual: only the mihomo rules are written, you route the traffic yourself.':
         '自动：确认弹窗后，插件还会创建 OPNsense 侧配置（接口、网关、防火墙规则）。手动：只写 mihomo 规则，路由由你自己处理。',
+
+    # ---- 路由策略网络侧（P12-2）----
+    'Policy routing is active': '策略路由已启用',
+    'Traffic from these interfaces is routed into the mihomo TUN device: %s. While the service is stopped or fails to start, clients on these interfaces lose Internet access.':
+        '这些接口的流量会被策略路由进 mihomo 的 TUN 设备：%s。在服务停止或启动失败期间，这些接口上的客户端会断网。',
+    'OPNsense side (interface, gateway, firewall)': 'OPNsense 网络侧（接口 / 网关 / 防火墙）',
+    'Traffic only reaches mihomo when the firewall policy routes the interface into the TUN device. Only interfaces whose policy routing is set to "Automatic" are touched; all other interfaces keep their normal routing.':
+        '只有当防火墙把接口策略路由进 TUN 设备后，流量才会到达 mihomo。只有「策略路由=自动」的接口会被处理，其它接口保持原本的路由方式。',
+    'Synchronize OPNsense side': '同步 OPNsense 网络侧',
+    'Preview changes': '预览变更',
+    'Roll back the OPNsense side': '回滚 OPNsense 网络侧',
+    'OPNsense side synchronized': 'OPNsense 网络侧已同步',
+    'Planned OPNsense changes': '计划的 OPNsense 变更',
+    'The following OPNsense changes will be made:': '将进行以下 OPNsense 变更：',
+    'This modifies /conf/config.xml (interface, gateway, firewall rule) and reloads the firewall. Interfaces without a row are not touched. A backup of config.xml is created automatically and can be rolled back from this page.':
+        '这会修改 /conf/config.xml（接口、网关、防火墙规则）并重新加载防火墙。表里没有的接口不会被改动。config.xml 会自动备份，可在本页一键回滚。',
+    'Apply and reload the firewall': '应用并重新加载防火墙',
+    'Restore the most recent config.xml backup created by this plugin and reload the firewall?':
+        '要还原本插件最近一次创建的 config.xml 备份并重新加载防火墙吗？',
+    'Roll back': '回滚',
+    'Rolled back': '已回滚',
+    'TUN device': 'TUN 设备',
+    'Interface assignment': '接口分配',
+    'Policy routing rules': '策略路由规则',
+    'config.xml backups': 'config.xml 备份',
+    'TUN peer address used as gateway': '用作网关的 TUN 对端地址',
+    'up': '已启用',
+    'down': '未就绪',
+    'nothing to do': '无需改动',
+    'No row requests automatic policy routing: enable a row and set its policy routing to "Automatic".':
+        '没有任何一行要求自动策略路由：请启用某行并把它的「策略路由」设为「自动」。',
 }
 
 

@@ -141,7 +141,39 @@ class Safety
             ];
         }
 
-        /* --- 7. 配置语法校验（可选，较慢） --- */
+        /* --- 7. 策略路由：服务停止时被路由的接口会断网 --- */
+        try {
+            $cfg = \OPNsense\Core\Config::getInstance()->object();
+            $routed = [];
+            if (isset($cfg->filter->rule)) {
+                foreach ($cfg->filter->rule as $rule) {
+                    if (
+                        (string)$rule->gateway === 'MIHOMO_TUN'
+                        && stripos((string)$rule->descr, 'Mihomo policy routing') !== false
+                    ) {
+                        $iface = (string)$rule->interface;
+                        $descr = (string)($cfg->interfaces->$iface->descr ?? '');
+                        $routed[] = $descr !== '' ? sprintf('%s (%s)', $descr, $iface) : $iface;
+                    }
+                }
+            }
+            if ($routed !== []) {
+                $items[] = [
+                    'level' => self::LEVEL_WARNING,
+                    'title' => gettext('Policy routing is active'),
+                    'detail' => sprintf(
+                        gettext(
+                            'Traffic from these interfaces is routed into the mihomo TUN device: %s. While the service is stopped or fails to start, clients on these interfaces lose Internet access.'
+                        ),
+                        implode(', ', array_unique($routed))
+                    ),
+                ];
+            }
+        } catch (\Throwable $e) {
+            /* 只读判断失败不影响体检 */
+        }
+
+        /* --- 8. 配置语法校验（可选，较慢） --- */
         if ($validateConfig) {
             $output = trim((string)$backend->configdRun('mihomo config-current'));
             $valid = !str_contains($output, 'invalid') && !str_contains($output, 'error');

@@ -16,8 +16,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = [ROOT / 'src/usr/local/opnsense']
 
-PATTERN = re.compile(r"' \.\s*\n\s*'")
+PATTERN = re.compile(r"'[ \t]*(?:\.[ \t]*)?\r?\n[ \t]*(?:\.[ \t]*)?'")
 REPLACEMENT = ''          # 去掉「收尾引号 + ' .' + 换行 + 起始引号」，把两个字面量并成一个
+                          # 兼容两种写法：
+                          #   'part one ' .\n   'part two'      （点在前一行末尾）
+                          #   'part one '\n     . 'part two'      （点在下一行开头）
 
 
 def main() -> int:

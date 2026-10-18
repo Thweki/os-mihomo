@@ -195,7 +195,132 @@
 
         $('#refreshPolicyAct').click(loadPolicyStatus);
 
+        /* ------------------------------------------------------------------ *
+         * 网络侧（OPNsense）：接口 / 网关 / 策略路由规则
+         * ------------------------------------------------------------------ */
+        function loadNetState() {
+            ajaxGet('/api/mihomo/routing/netstatus', {}, function (data, status) {
+                if (status !== 'success') {
+                    return;
+                }
+                const rows = [
+                    ['{{ lang._('TUN device') }}', data.device + (data.device_up
+                        ? ' (' + '{{ lang._('up') }}' + ')' : ' (' + '{{ lang._('down') }}' + ')')],
+                    ['{{ lang._('Interface assignment') }}', data.interface || '{{ lang._('absent') }}'],
+                    ['{{ lang._('Gateway') }}', (data.gateway_name || '') + ' ' + (data.gateway_present
+                        ? '(' + (data.gateway_ip_configured || '?') + ')' : '{{ lang._('absent') }}')],
+                    ['{{ lang._('Policy routing rules') }}', (data.rules || []).length
+                        ? data.rules.map(function (r) { return r.interface; }).join(', ')
+                        : '{{ lang._('none') }}'],
+                    ['{{ lang._('config.xml backups') }}', (data.backups || []).length
+                        ? (data.backups || []).map(function (b) { return b.split('/').pop(); }).join(', ')
+                        : '{{ lang._('none') }}']
+                ];
+                const $body = $('#netStateBody').empty();
+                rows.forEach(function (row) {
+                    $body.append($('<tr>')
+                        .append($('<td>').css('width', '30%').addClass('text-muted').text(row[0]))
+                        .append($('<td>').text(row[1])));
+                });
+                $('#netStateSummary').text(
+                    '{{ lang._('TUN peer address used as gateway') }}: ' + ((data.gateway_ip || '') || '{{ lang._('unknown') }}')
+                );
+            });
+        }
+
+        function applyNet() {
+            ajaxCall('/api/mihomo/routing/netapply', {}, function (data) {
+                if (data['status'] === 'ok') {
+                    let body = (data['messages'] || []).join('\n');
+                    if (data['diff']) {
+                        body += '\n\n{{ lang._('Changes') }}\n' + data['diff'];
+                    }
+                    showMessage('{{ lang._('OPNsense side synchronized') }}', body, BootstrapDialog.TYPE_SUCCESS);
+                } else {
+                    showMessage('{{ lang._('Apply failed') }}', data['message'] || '', BootstrapDialog.TYPE_DANGER);
+                }
+                loadNetState();
+                loadPolicyStatus();
+            });
+        }
+
+        $('#netPlanAct').click(function () {
+            ajaxGet('/api/mihomo/routing/netplan', {}, function (data, status) {
+                if (status !== 'success') {
+                    return;
+                }
+                const changes = data.changes || [];
+                BootstrapDialog.show({
+                    'type': BootstrapDialog.TYPE_INFO,
+                    'title': '{{ lang._('Planned OPNsense changes') }}',
+                    'message': $('<pre>').text(
+                        (changes.length ? changes.join('\n') : '{{ lang._('nothing to do') }}')
+                        + '\n\n' + '{{ lang._('TUN peer address used as gateway') }}: '
+                        + (((data.state || {}).gateway_ip || '') || '{{ lang._('unknown') }}')
+                    )
+                });
+            });
+        });
+
+        $('#netApplyAct').click(function () {
+            ajaxGet('/api/mihomo/routing/netplan', {}, function (data, status) {
+                if (status !== 'success') {
+                    return;
+                }
+                const changes = data.changes || [];
+                let message = $('<div>');
+                message.append($('<p>').text('{{ lang._('The following OPNsense changes will be made:') }}'));
+                message.append($('<pre>').text(changes.join('\n')));
+                message.append($('<p>').addClass('text-warning').text(
+                    '{{ lang._('This modifies /conf/config.xml (interface, gateway, firewall rule) and reloads the firewall. Interfaces without a row are not touched. A backup of config.xml is created automatically and can be rolled back from this page.') }}'
+                ));
+                BootstrapDialog.show({
+                    'type': BootstrapDialog.TYPE_WARNING,
+                    'title': '{{ lang._('Synchronize OPNsense side') }}',
+                    'message': message,
+                    'buttons': [
+                        { 'label': '{{ lang._('Cancel') }}', 'action': function (d) { d.close(); } },
+                        {
+                            'label': '{{ lang._('Apply and reload the firewall') }}',
+                            'cssClass': 'btn-primary',
+                            'action': function (d) { d.close(); applyNet(); }
+                        }
+                    ]
+                });
+            });
+        });
+
+        $('#netRollbackAct').click(function () {
+            BootstrapDialog.show({
+                'type': BootstrapDialog.TYPE_DANGER,
+                'title': '{{ lang._('Roll back the OPNsense side') }}',
+                'message': '{{ lang._('Restore the most recent config.xml backup created by this plugin and reload the firewall?') }}',
+                'buttons': [
+                    { 'label': '{{ lang._('Cancel') }}', 'action': function (d) { d.close(); } },
+                    {
+                        'label': '{{ lang._('Roll back') }}',
+                        'cssClass': 'btn-danger',
+                        'action': function (d) {
+                            d.close();
+                            ajaxCall('/api/mihomo/routing/netrollback', {}, function (data) {
+                                if (data['status'] === 'ok') {
+                                    showMessage('{{ lang._('Rolled back') }}',
+                                        (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_SUCCESS);
+                                } else {
+                                    showMessage('{{ lang._('Apply failed') }}',
+                                        data['message'] || '', BootstrapDialog.TYPE_DANGER);
+                                }
+                                loadNetState();
+                                loadPolicyStatus();
+                            });
+                        }
+                    }
+                ]
+            });
+        });
+
         loadPolicyStatus();
+        loadNetState();
     });
 </script>
 
@@ -241,6 +366,27 @@
         <button class="btn btn-primary __mr" id="applyPolicyAct" type="button">{{ lang._('Apply') }}</button>
         <button class="btn btn-default __mr" id="previewPolicyAct" type="button">{{ lang._('Preview') }}</button>
         <button class="btn btn-default" id="refreshPolicyAct" type="button">{{ lang._('Refresh') }}</button>
+    </div>
+</section>
+
+<div class="content-box __mb">
+    <header class="content-box-header">
+        <h3>{{ lang._('OPNsense side (interface, gateway, firewall)') }}</h3>
+    </header>
+    <p class="text-muted">
+        {{ lang._('Traffic only reaches mihomo when the firewall policy routes the interface into the TUN device. Only interfaces whose policy routing is set to "Automatic" are touched; all other interfaces keep their normal routing.') }}
+    </p>
+    <table class="table table-condensed">
+        <tbody id="netStateBody"></tbody>
+    </table>
+    <span id="netStateSummary" class="text-muted"></span>
+</div>
+
+<section class="grid-bottom-reserve __mt">
+    <div class="alert content-box" style="display: flex; align-items: center; margin-bottom: 0;">
+        <button class="btn btn-primary __mr" id="netApplyAct" type="button">{{ lang._('Synchronize OPNsense side') }}</button>
+        <button class="btn btn-default __mr" id="netPlanAct" type="button">{{ lang._('Preview changes') }}</button>
+        <button class="btn btn-default" id="netRollbackAct" type="button">{{ lang._('Roll back the OPNsense side') }}</button>
     </div>
 </section>
 

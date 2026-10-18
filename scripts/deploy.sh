@@ -1,4 +1,4 @@
-﻿#!/bin/sh
+#!/bin/sh
 # os-mihomo —— 安全部署脚本（在目标机以 root 运行）
 #
 # 前提：源码已由 tools/deploy.ps1 通过 scp 暂存到 /tmp/mihomo-stage/src
@@ -122,7 +122,7 @@ for rel in \
     usr/local/opnsense/scripts/mihomo/service_enable.php \
     usr/local/opnsense/scripts/mihomo/setup_unbound.php \
     usr/local/opnsense/scripts/mihomo/subscription_run.sh \
-    usr/local/opnsense/scripts/mihomo/policy_apply.php \
+    usr/local/opnsense/scripts/mihomo/policy_net.php usr/local/opnsense/scripts/mihomo/policy_apply.php \
     usr/local/etc/rc.d/mihomo \
     usr/bin/mihomo_sub \
     usr/local/etc/mihomo/sub/sub.sh ; do
@@ -207,7 +207,7 @@ if command -v configctl >/dev/null 2>&1; then
     log "  configd restarted (to register new actions)"
 fi
 skip_count=$(configctl configd actions 2>/dev/null | grep -c '^mihomo ' || true)
-log "  registered mihomo actions: $skip_count (expected 15)"
+log "  registered mihomo actions: $skip_count (expected 19)"
 
 log "== installed file inventory =="
 find /usr/local/opnsense/mvc/app/models/OPNsense/Mihomo \

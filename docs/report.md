@@ -791,7 +791,100 @@ pf 规则里没有该网段的策略路由；pf / NAT / 路由 / Unbound 指纹�
 
 ---
 
-## 16. 附录：命令速查
+## 16. 路由策略网络侧（P12-2）：把流量真正送进 mihomo
+
+> 用户确认后执行。**只对「策略路由=自动」的接口生效**；表里没有的接口（含 LanDirect）一条规则都不加。
+
+### 16.1 实测得到的 TUN 地址形态
+
+先只打开 TUN、关掉 `auto-route` / `strict-route`（不碰路由），读出的形态决定了网关该填什么：
+
+```
+tun_mihomo: flags=... mtu 1500
+    inet 198.18.0.1 netmask 0xfffffffc broadcast 198.18.0.1     ← /30：本地 .1、对端 .2
+198.18.0.0/30  link#14  U  tun_mihomo                            ← 只多这一条直连路由
+默认路由: 60.216.23.1 pppoe1（未变）  pf 未变
+```
+
+→ **网关 = `198.18.0.2`**（TUN 对端），接口 = `tun_mihomo`。
+
+### 16.2 交付物
+
+| 文件 | 作用 |
+|---|---|
+| `scripts/mihomo/policy_net.php` + 4 个 configd 动作 | root：只读 `check` / 计划 `plan` / 写入 `apply` / 回滚 `rollback`（可指定备份文件） |
+| `Api/RoutingController` 新增 | `netstatus` / `netplan` / `netapply` / `netrollback` |
+| `routing.volt` 新增区块 | 「OPNsense 网络侧（接口 / 网关 / 防火墙）」状态表 + 同步/预览/回滚按钮 + 弹窗确认 |
+| `Safety.php` 新增告警 | 策略路由一旦生效，体检横幅提示"服务停止时这些接口的客户端会断网" |
+
+写入内容（`config.xml`，全程**只增不改**，其余逐字节保留）：
+
+```xml
+<interfaces> ... <opt3><if>tun_mihomo</if><descr>TUN</descr><enable>1</enable></opt3> ...
+<OPNsense><Gateways><gateway_item>
+    <interface>opt3</interface><gateway>198.18.0.2</gateway><name>MIHOMO_TUN</name>
+    <ipprotocol>inet</ipprotocol><monitor_disable>1</monitor_disable><descr>Mihomo TUN gateway</descr>
+</gateway_item></Gateways></OPNsense>
+<filter><rule uuid="...">
+    <type>pass</type><interface>lan</interface><ipprotocol>inet</ipprotocol>
+    <source><network>lan</network></source><destination><any/></destination>
+    <gateway>MIHOMO_TUN</gateway><descr>Mihomo policy routing (lan)</descr>
+</rule></filter>
+```
+
+### 16.3 验证结果
+
+```
+# 生成的 pf 规则（关键：route-to 指向 tun 设备）
+pass in quick on igb0 route-to (tun_mihomo 198.18.0.2) inet from (igb0:network) to any flags S/SA keep state
+
+# 接口与网关（OPNsense 自己认到的）
+接口: opt3 -> tun_mihomo (TUN)
+网关: MIHOMO_TUN -> 198.18.0.2 via opt3 (monitor_disable=1)    状态 Online
+
+# 端到端：把流量送进 TUN（临时主机路由，测完即删）
+[TCP] 198.18.0.1:34299(curl) --> 104.26.13.205:443 match Match using SSRDOG[🇭🇰 Hong Kong 01]
+经 TUN 取到的出口 IP: 188.253.115.13
+
+# 页面状态
+行: lan 192.168.1.0/24 -> 🇺🇸 United States | active | 策略路由已就位。
+```
+
+**LanDirect 侧安全性（重点）**：
+
+| 检查 | 结果 |
+|---|---|
+| igb4 上的 route-to 规则 | **0** |
+| LanDirect 上的 pass 规则数 | 10（与改动前一致） |
+| `opt1` 是否仍是 `igb4/LanDirect` | 是 |
+| 默认路由 / Unbound 指纹 | 未变（`60.216.23.1 pppoe1` / `1d1849c3…`） |
+| 测试期间本机（挂在 LanDirect）出网 | 200（全程未受影响） |
+
+幂等性：连续两次「同步」第二次输出 `already present / nothing changed`，文件字节不变。
+
+### 16.4 这一轮踩的两个坑（都已修 + 已加防护）
+
+| # | 事故 | 根因 | 处理 |
+|---|---|---|---|
+| 1 | 接口块被写进了 **WebGUI 的** `<interfaces>lan</interfaces>`（config.xml 里有多个同名 `<interfaces>`），网关因此指向 `opt1/igb4`，pf 生成 `route-to (igb4 198.18.0.2)` | 插入点用的是"文件里第一个 `</interfaces>`" | 立刻用自动备份回滚（webgui 设置恢复、无残留）；改为**按"内部含 `<if>` 设备赋值"识别根接口段**，只在段内找 `</lo0>` 插入，写完再自检"新接口确实在根段里"；并新增**硬安全网**：filter reload 后若没有 `route-to … tun_mihomo`，自动回滚并报错 |
+| 2 | 「同步」返回"（无输出）"，config.xml 改了但 filter 没重载 | 脚本里执行了 `service configd restart`，而**脚本本身就是 configd 拉起的** —— 等于自杀 | 移除该调用（不需要它：`filter reload` 直接重读 config.xml）；代码注释写明原因 |
+| 3 | 规则被重复添加（2 条相同规则） | 去重用的正则太脆弱（跨行匹配） | 改为**按 `<rule>…</rule>` 块解析**，同时校验 `<gateway>` 与标记；实测第二次同步不再重复添加 |
+
+> 事故 1 是我这次操作里最危险的一步：如果没立刻发现，LAN 上的流量会被 `route-to` 送到 LanDirect 的网段找 198.18.0.2。因为设备上没有真实客户端（Console 网段 ARP 为空），实际未造成影响；现在这个场景已被"写后自检 + 自动回滚"覆盖。
+
+### 16.5 使用与注意事项
+
+* 页面：`VPN → Proxy Suite → 路由策略`
+  * 表格里 `策略路由 = 自动` 的行 → 「同步 OPNsense 网络侧」（弹窗列出全部变更 → 确认 → 执行 → 展示 diff）
+  * 想撤销网络侧改动 → 「回滚 OPNsense 网络侧」（还原最近一次 `config.xml` 备份并重载防火墙）
+* **运维要点**：策略路由生效的接口，其流量被送进 TUN；**mihomo 停止或启动失败期间，这些接口的客户端会断网**（体检横幅已提示）。要临时绕过，把该行的「策略路由」改成 `手动`/禁用该行并重新同步，或直接在 OPNsense 里禁用那条规则。
+* **DNS**：本阶段**未**自动改 DNS。被策略路由的接口，其客户端若仍用 Unbound 解析，域名规则会退化为按 IP 匹配（可用 mihomo 的 `sniffer` 缓解）。若要彻底交给 mihomo，需要再加一条 NAT 重定向（53 → 127.0.0.1:1053）——留待确认后单独做，因为写错会直接影响整个网段的解析。
+
+截图：`docs/screenshots/12-routing-opnsense-side.png`
+
+---
+
+## 17. 附录：命令速查
 
 ```sh
 # ---- 本机 ----
