@@ -122,6 +122,17 @@ class Safety
             }
         }
 
+        /* --- 4b. IPv6：TUN 设备只有 IPv4 地址，v6 流量会绕过代理 --- */
+        if ($tunEnabled && Inspector::ipv6Allowed(Config::rawText())) {
+            $items[] = [
+                'level' => self::LEVEL_WARNING,
+                'title' => gettext('IPv6 traffic bypasses the proxy'),
+                'detail' => gettext(
+                    'The TUN device only carries IPv4, so IPv6 traffic leaves this firewall without going through mihomo. Set ipv6: false in the configuration to stop that, or add IPv6 handling separately.'
+                ),
+            ];
+        }
+
         /* --- 5. DNS 劫持 --- */
         if ($tunEnabled && Config::rawText() !== '' && preg_match('/dns-hijack:/', Config::rawText()) === 1) {
             $items[] = [

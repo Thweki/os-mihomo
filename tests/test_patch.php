@@ -13,8 +13,15 @@ foreach ([__DIR__ . '/Config.php', '/usr/local/opnsense/mvc/app/models/OPNsense/
         break;
     }
 }
+foreach ([__DIR__ . '/Inspector.php', '/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php'] as $candidate) {
+    if (is_file($candidate)) {
+        require_once $candidate;
+        break;
+    }
+}
 
 use OPNsense\Mihomo\Config;
+use OPNsense\Mihomo\Inspector;
 
 $file = $argv[1] ?? '/tmp/mihomo-test/config.yaml';
 if (!is_file($file)) {
@@ -263,6 +270,79 @@ if (is_file('/usr/local/bin/mihomo')) {
 /* 幂等：已存在完整块时再次应用不应改变字节 */
 $again2 = Config::patchKeys($patchedSn, Config::snifferKeys(true));
 check('sniffer 应用幂等', $again2 === $patchedSn);
+
+echo "\n=== 14. Inspector（配置对照，只读纯函数） ===\n";
+check('normalize 布尔/数字/引号', Inspector::normalize(true) === 'true'
+    && Inspector::normalize('0') === 'false'
+    && Inspector::normalize('"Yes"') === 'true'
+    && Inspector::normalize(' Info ') === 'info'
+    && Inspector::normalize(null) === null);
+
+$inspYaml = <<<YAML
+log-level: info
+mode: rule
+allow-lan: false
+external-controller: 127.0.0.1:9090
+secret: "abc123"
+tun:
+  enable: true
+  device: tun_mihomo     # 一行注释
+  auto-route: false
+  mtu: 1500
+dns:
+  enable: true
+  listen: 127.0.0.1:1053
+sniffer:
+  enable: true
+ipv6: false
+YAML;
+
+check('yamlValue 顶层', Inspector::yamlValue($inspYaml, 'log-level') === 'info', (string)Inspector::yamlValue($inspYaml, 'log-level'));
+check('yamlValue 嵌套 + 去注释', Inspector::yamlValue($inspYaml, 'tun.device') === 'tun_mihomo', (string)Inspector::yamlValue($inspYaml, 'tun.device'));
+check('yamlValue 带引号的值原样返回', Inspector::yamlValue($inspYaml, 'secret') === '"abc123"', (string)Inspector::yamlValue($inspYaml, 'secret'));
+check('yamlValue 不存在的键返回 null', Inspector::yamlValue($inspYaml, 'tun.nope') === null);
+check('yamlValue 不走错层级', Inspector::yamlValue("tun:\n  enable: true\ndns:\n  enable: false\n", 'dns.enable') === 'false', (string)Inspector::yamlValue("tun:\n  enable: true\ndns:\n  enable: false\n", 'dns.enable'));
+
+check('handwritten 判定：模板配置为假', Inspector::looksHandwritten("proxy-groups:\n  - name: 🌍选择节点\nrules: []\n") === false);
+check('handwritten 判定：手写配置为真', Inspector::looksHandwritten("proxies:\n  - { name: A, server: 1.2.3.4 }\nproxy-groups:\n  - name: US-EXIT\n") === true);
+check('handwritten 判定：空文件为假', Inspector::looksHandwritten('') === false);
+check('受管区块检测', Inspector::hasManagedBlock("rules:\n  " . Config::POLICY_MARK_BEGIN . "\n") === true
+    && Inspector::hasManagedBlock("rules:\n  - MATCH,DIRECT\n") === false);
+check('IPv6 判定（未写=允许）', Inspector::ipv6Allowed("log-level: info\n") === true);
+check('IPv6 判定（false=不允许）', Inspector::ipv6Allowed($inspYaml) === false);
+
+/* 对照表：模型值故意与文件制造 3 种状态 */
+$model = [
+    'log-level' => 'info',            // 一致
+    'mode' => 'global',               // 不一致
+    'allow-lan' => 'false',           // 一致（写法不同）
+    'external-controller' => '127.0.0.1:9090',
+    'secret' => 'abc123',
+    'tun.enable' => 'true',
+    'tun.device' => 'tun_mihomo',
+    'tun.stack' => 'gvisor',          // 文件里没写 → missing
+    'tun.auto-route' => 'false',
+    'tun.strict-route' => 'false',
+    'tun.mtu' => '1500',
+    'dns.enable' => 'true',
+    'dns.listen' => '127.0.0.1:1053',
+    'dns.enhanced-mode' => 'redir-host',
+    'sniffer.enable' => 'true',
+];
+$runtimeStub = ['log-level' => 'info', 'mode' => 'rule', 'tun' => ['enable' => true, 'auto-route' => false, 'mtu' => 1500]];
+$rows = Inspector::compare($inspYaml, $model, $runtimeStub);
+$byKey = [];
+foreach ($rows as $row) {
+    $byKey[$row['key']] = $row;
+}
+check('对照：一致项', ($byKey['log-level']['state'] ?? '') === Inspector::STATE_MATCH, (string)($byKey['log-level']['state'] ?? '?'));
+check('对照：不一致项', ($byKey['mode']['state'] ?? '') === Inspector::STATE_DIFFERS, (string)($byKey['mode']['state'] ?? '?'));
+check('对照：文件未写项', ($byKey['tun.stack']['state'] ?? '') === Inspector::STATE_MISSING, (string)($byKey['tun.stack']['state'] ?? '?'));
+check('对照：运行值取自 /configs', ($byKey['mode']['runtime'] ?? '') === 'rule', (string)($byKey['mode']['runtime'] ?? '?'));
+check('对照：tun 子对象运行值', ($byKey['tun.enable']['runtime'] ?? '') === 'true', (string)($byKey['tun.enable']['runtime'] ?? '?'));
+check('对照：密钥不外泄', ($byKey['secret']['file'] ?? '') !== '"abc123"'
+    && ($byKey['secret']['model'] ?? '') !== 'abc123', (string)($byKey['secret']['file'] ?? '?'));
+check('对照：密钥被识别为已设置', ($byKey['secret']['state'] ?? '') === Inspector::STATE_MATCH);
 
 echo "\n=== 汇总: {$failures} 个失败 ===\n";
 exit($failures === 0 ? 0 : 1);

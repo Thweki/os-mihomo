@@ -64,6 +64,57 @@
         /* ---------------------------------------------------------------- *
          * 「配置文件」标签页
          * ---------------------------------------------------------------- */
+        /* ------------------------------------------------------------------ *
+         * 配置对照：页面值 / 文件值 / 运行值（只读）
+         * ------------------------------------------------------------------ */
+        function escapeHtml(text) {
+            return $('<div>').text(text === undefined || text === null ? '' : String(text)).html();
+        }
+
+        function renderCompare(data) {
+            const $notes = $('#compare-notes').empty();
+            const $body = $('#compare-body').empty();
+
+            (data['notes'] || []).forEach(function (note) {
+                const warn = note['level'] === 'warning';
+                $('<div>')
+                    .addClass('alert ' + (warn ? 'alert-warning' : 'alert-info'))
+                    .css({ 'margin-bottom': '8px' })
+                    .html('<i class="fa ' + (warn ? 'fa-exclamation-triangle' : 'fa-info-circle') + ' fa-fw"></i> '
+                        + escapeHtml(note['text']))
+                    .appendTo($notes);
+            });
+
+            (data['rows'] || []).forEach(function (row) {
+                let badge;
+                if (row['runtime_only']) {
+                    badge = '<span class="label label-default">{{ lang._('running only') }}</span>';
+                } else if (row['state'] === 'differs') {
+                    badge = '<span class="label label-warning">{{ lang._('different') }}</span>';
+                } else if (row['state'] === 'missing') {
+                    badge = '<span class="label label-default">{{ lang._('not in file') }}</span>';
+                } else {
+                    badge = '<span class="label label-success">{{ lang._('consistent') }}</span>';
+                }
+                $('<tr>')
+                    .append($('<td>').html('<b>' + escapeHtml(row['label']) + '</b> ' + badge))
+                    .append($('<td>').text(row['model'] || '—'))
+                    .append($('<td>').text(row['file'] || '—'))
+                    .append($('<td>').text(row['runtime'] || '—'))
+                    .appendTo($body);
+            });
+        }
+
+        function loadCompare() {
+            ajaxGet('/api/mihomo/settings/inspect', {}, renderCompare);
+        }
+
+        $('#compare-refresh').click(loadCompare);
+        $('#compareTab').on('shown.bs.tab', loadCompare);
+
+        /* ------------------------------------------------------------------ *
+         * 原始配置编辑器
+         * ------------------------------------------------------------------ */
         function loadRawConfig() {
             ajaxGet('/api/mihomo/settings/config_get', {}, function (data) {
                 if (data['status'] === 'ok') {
@@ -116,6 +167,7 @@
 <ul class="nav nav-tabs" role="tablist" id="maintabs">
     <li class="active"><a data-toggle="tab" href="#settings">{{ lang._('Settings') }}</a></li>
     <li><a data-toggle="tab" href="#config">{{ lang._('Configuration File') }}</a></li>
+    <li><a data-toggle="tab" href="#compare" id="compareTab">{{ lang._('Configuration comparison') }}</a></li>
 </ul>
 <div class="tab-content content-box">
     <div id="settings" class="tab-pane fade in active">
@@ -134,6 +186,30 @@
                 <button type="button" class="btn btn-default" id="config-test"><i class="fa fa-check-circle fa-fw"></i> {{ lang._('Test Active Configuration') }}</button>
                 <button type="button" class="btn btn-default" id="config-validate"><i class="fa fa-flask fa-fw"></i> {{ lang._('Validate') }}</button>
                 <button type="button" class="btn btn-primary" id="config-save"><i class="fa fa-save fa-fw"></i> {{ lang._('Save') }}</button>
+            </div>
+        </div>
+    </div>
+    <div id="compare" class="tab-pane fade in">
+        <div style="padding: 12px 14px;">
+            <p class="text-muted" style="margin-bottom: 10px;">
+                {{ lang._('The same setting can live in three places. This table shows all three: what the WebGUI remembers, what the file says, and what the running core actually uses.') }}
+            </p>
+            <div id="compare-notes"></div>
+            <table class="table table-condensed table-hover" id="compare-table">
+                <thead>
+                <tr>
+                    <th style="width: 22%;">{{ lang._('Item') }}</th>
+                    <th style="width: 26%;">{{ lang._('WebGUI') }}</th>
+                    <th style="width: 26%;">{{ lang._('File (config.yaml)') }}</th>
+                    <th style="width: 26%;">{{ lang._('Running (memory)') }}</th>
+                </tr>
+                </thead>
+                <tbody id="compare-body"></tbody>
+            </table>
+            <div class="text-right">
+                <button class="btn btn-default btn-sm" id="compare-refresh" type="button">
+                    <i class="fa fa-refresh fa-fw"></i> {{ lang._('Refresh') }}
+                </button>
             </div>
         </div>
     </div>

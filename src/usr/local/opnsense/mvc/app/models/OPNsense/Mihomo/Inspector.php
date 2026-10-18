@@ -1,0 +1,380 @@
+<?php
+
+/*
+ * os-mihomo 二次开发 —— 「配置对照」（只读）
+ *
+ * 解决的问题：同一个设置可能存在于三个地方，用户很难知道"此刻到底在用什么"。
+ *
+ *   · 页面值（WebUI）  = /conf/config.xml 里 <OPNsense><mihomo> 的模型值（页面的"记忆"）
+ *   · 文件值（File）   = /usr/local/etc/mihomo/config.yaml 里真正写着的那一行
+ *   · 运行值（Running）= mihomo 进程内存里正在用的值（外部控制器 /configs）
+ *
+ * 三类不一致各自的含义（写进界面提示）：
+ *   页面 ≠ 文件 → 改了页面没点「应用」，或手工改了文件而页面记忆过期
+ *   文件 ≠ 运行 → 改了文件没重启服务，内核还在用启动那一刻读进去的配置
+ *
+ * 本类**只读**，不修改任何文件或系统状态。
+ * 纯函数（normalize / yamlValue / looksHandwritten / managedBlock / compare）不依赖框架，
+ * 便于在 CLI 回归测试里直接调用。
+ *
+ * Copyright (C) 2026  os-mihomo contributors
+ * All rights reserved.
+ * 详见 Config.php 头部的 BSD 许可条款。
+ */
+
+namespace OPNsense\Mihomo;
+
+class Inspector
+{
+    /** 页面列 / 文件列一致 */
+    public const STATE_MATCH = 'match';
+    /** 两列都有但值不同 */
+    public const STATE_DIFFERS = 'differs';
+    /** 文件里没有这个键（内核用内置默认值） */
+    public const STATE_MISSING = 'missing';
+    /** 不适用（例如只在运行态出现的端口/IPv6 开关，页面管不到） */
+    public const STATE_NA = 'na';
+
+    /** 订阅模板的特征分组名：一个都找不到就认为这份配置是手写的 */
+    private const TEMPLATE_MARKERS = [
+        '🌍选择节点',
+        '🐟漏网之鱼',
+        'load-balance',
+        'external-ui-url',
+    ];
+
+    /**
+     * 对照项定义。
+     *
+     * key   = YAML 里的路径（点号分层）
+     * label = 界面上的名字（与设置页表单标签保持一致，直接复用已有译文）
+     * secret= 该行是敏感值，只显示"已设置/空"
+     * run   = 运行值在 /configs 里的取法：'flat' 取顶层键，'tun' 取 tun 子对象
+     */
+    private static function items(): array
+    {
+        return [
+            ['key' => 'log-level', 'label' => gettext('Log Level'), 'run' => ['flat', 'log-level']],
+            ['key' => 'mode', 'label' => gettext('Mode'), 'run' => ['flat', 'mode']],
+            ['key' => 'allow-lan', 'label' => gettext('Allow LAN'), 'run' => ['flat', 'allow-lan']],
+            ['key' => 'external-controller', 'label' => gettext('External Controller')],
+            ['key' => 'secret', 'label' => gettext('Secret'), 'secret' => true],
+            ['key' => 'tun.enable', 'label' => gettext('TUN Mode'), 'run' => ['tun', 'enable']],
+            ['key' => 'tun.device', 'label' => gettext('Device Name'), 'run' => ['tun', 'device']],
+            ['key' => 'tun.stack', 'label' => gettext('Stack')],
+            ['key' => 'tun.auto-route', 'label' => gettext('Automatic Route'), 'run' => ['tun', 'auto-route']],
+            ['key' => 'tun.strict-route', 'label' => gettext('Strict Route')],
+            ['key' => 'tun.mtu', 'label' => gettext('MTU'), 'run' => ['tun', 'mtu']],
+            ['key' => 'dns.enable', 'label' => gettext('DNS Module')],
+            ['key' => 'dns.listen', 'label' => gettext('Listen Address')],
+            ['key' => 'dns.enhanced-mode', 'label' => gettext('Enhanced Mode')],
+            ['key' => 'sniffer.enable', 'label' => gettext('Domain sniffing')],
+        ];
+    }
+
+    /** 只看运行值的附加项（文件里不一定写，内核有默认） */
+    private static function runtimeOnlyItems(): array
+    {
+        return [
+            ['key' => 'mixed-port', 'label' => gettext('Mixed port'), 'run' => ['flat', 'mixed-port']],
+            ['key' => 'socks-port', 'label' => gettext('SOCKS port'), 'run' => ['flat', 'socks-port']],
+            ['key' => 'ipv6', 'label' => gettext('IPv6'), 'run' => ['flat', 'ipv6']],
+        ];
+    }
+
+    /* =====================================================================
+     * 纯函数（可在 CLI 测试里直接调用）
+     * ===================================================================== */
+
+    /**
+     * 把各种写法归一化，便于比较：true/1/yes/on → 'true'，false/0/no/off → 'false'，
+     * 其余去掉首尾引号与空白后返回小写。
+     */
+    public static function normalize(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+        $text = trim((string)$value);
+        $text = trim($text, "\"'");
+        $lower = strtolower($text);
+        if (in_array($lower, ['true', 'yes', 'on', '1'], true)) {
+            return 'true';
+        }
+        if (in_array($lower, ['false', 'no', 'off', '0'], true)) {
+            return 'false';
+        }
+        return $lower;
+    }
+
+    /**
+     * 取 YAML 文本里某个路径的值（按缩进找，只看第一个匹配；行尾注释去掉）。
+     * 找不到返回 null。不做完整 YAML 解析 —— 我们只需要"那一行长什么样"。
+     */
+    public static function yamlValue(string $yaml, string $path): ?string
+    {
+        $lines = preg_split("/\r\n|\n|\r/", $yaml) ?: [];
+        $segments = explode('.', $path);
+        $indent = 0;
+        $start = 0;
+
+        foreach ($segments as $index => $key) {
+            $pattern = '/^' . str_repeat(' ', $indent) . preg_quote($key, '/') . ':[ \t]*(.*)$/';
+            $found = null;
+            for ($i = $start; $i < count($lines); $i++) {
+                if (preg_match($pattern, $lines[$i], $m)) {
+                    $found = [$i, $m[1]];
+                    break;
+                }
+            }
+            if ($found === null) {
+                return null;
+            }
+            [$start, $raw] = $found;
+
+            $value = trim($raw);
+            $last = $index === count($segments) - 1;
+            if ($last) {
+                return self::stripComment($value);
+            }
+            if ($value === '') {
+                $indent += 2;
+                $start++;
+                continue;
+            }
+            /* 形如 tun: {enable: true} 的流式写法：简化处理，不深挖 */
+            return null;
+        }
+        return null;
+    }
+
+    /** 去掉行尾注释（引号内的 # 不算注释） */
+    private static function stripComment(string $value): string
+    {
+        if ($value === '') {
+            return '';
+        }
+        if ($value[0] === '"' || $value[0] === "'") {
+            $quote = $value[0];
+            $end = strpos($value, $quote, 1);
+            return $end === false ? $value : substr($value, 0, $end + 1);
+        }
+        $pos = strpos($value, ' #');
+        if ($pos === false) {
+            $pos = strpos($value, "\t#");
+        }
+        return $pos === false ? $value : rtrim(substr($value, 0, $pos));
+    }
+
+    /** 这份配置看起来是"手写的"还是"订阅模板生成的" */
+    public static function looksHandwritten(string $yaml): bool
+    {
+        if (trim($yaml) === '') {
+            return false;
+        }
+        foreach (self::TEMPLATE_MARKERS as $marker) {
+            if (str_contains($yaml, $marker)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** 受管区块（路由策略写进 rules 的那段）是否存在 */
+    public static function hasManagedBlock(string $yaml): bool
+    {
+        return str_contains($yaml, Config::POLICY_MARK_BEGIN);
+    }
+
+    /** 配置是否允许 IPv6（没写或写 true 就是允许；允许则 IPv6 会绕过 mihomo） */
+    public static function ipv6Allowed(string $yaml): bool
+    {
+        $value = self::normalize(self::yamlValue($yaml, 'ipv6') ?? 'true');
+        return $value !== 'false';
+    }
+
+    /**
+     * 生成对照表。
+     *
+     * @param string     $yaml    config.yaml 全文
+     * @param array      $model   ['<yaml 路径>' => 页面里的值]
+     * @param array|null $runtime mihomo /configs 的解码结果；null = 服务没跑/读不到
+     * @return array<int, array{key: string, label: string, model: string, file: string, runtime: string, state: string, secret: bool}>
+     */
+    public static function compare(string $yaml, array $model, ?array $runtime): array
+    {
+        $rows = [];
+        foreach (self::items() as $item) {
+            $rows[] = self::buildRow($item, $yaml, $model, $runtime);
+        }
+        foreach (self::runtimeOnlyItems() as $item) {
+            $row = self::buildRow($item, $yaml, $model, $runtime, true);
+            $rows[] = $row;
+        }
+        return $rows;
+    }
+
+    /** 单行对照 */
+    private static function buildRow(array $item, string $yaml, array $model, ?array $runtime, bool $runtimeOnly = false): array
+    {
+        $key = $item['key'];
+        $secret = (bool)($item['secret'] ?? false);
+
+        /* 只在运行态出现的键（mixed-port / ipv6…）：页面管不到，不参与"页面 vs 文件"判定 */
+        $modelValue = array_key_exists($key, $model) ? (string)$model[$key] : null;
+        $fileValue = self::yamlValue($yaml, $key);
+        $runtimeValue = null;
+        if ($runtime !== null && isset($item['run'])) {
+            [$where, $name] = $item['run'];
+            $source = $where === 'tun' ? ($runtime['tun'] ?? null) : $runtime;
+            if (is_array($source) && array_key_exists($name, $source)) {
+                $runtimeValue = is_bool($source[$name])
+                    ? ($source[$name] ? 'true' : 'false')
+                    : (string)$source[$name];
+            }
+        }
+
+        $state = self::STATE_MATCH;
+        if ($runtimeOnly) {
+            $state = self::STATE_NA;
+        } elseif ($fileValue === null) {
+            $state = self::STATE_MISSING;
+        } elseif (self::normalize($fileValue) !== self::normalize($modelValue)) {
+            $state = self::STATE_DIFFERS;
+        }
+
+        if ($secret) {
+            $modelValue = $modelValue === null || $modelValue === ''
+                ? gettext('(empty)') : gettext('(set, hidden)');
+            $fileValue = $fileValue === null
+                ? gettext('(not set in the file)') : (trim($fileValue, "\"'") === '' ? gettext('(empty)') : gettext('(set, hidden)'));
+            $state = ($fileValue === gettext('(empty)') && $modelValue === gettext('(empty)')) || ($fileValue === gettext('(set, hidden)') && $modelValue === gettext('(set, hidden)'))
+                ? self::STATE_MATCH : self::STATE_DIFFERS;
+        }
+
+        return [
+            'key' => $key,
+            'label' => $item['label'],
+            'model' => $modelValue === null ? '' : (string)$modelValue,
+            'file' => $fileValue === null ? gettext('(not set in the file)') : (string)$fileValue,
+            'runtime' => $runtimeValue === null ? '' : (string)$runtimeValue,
+            'state' => $state,
+            'secret' => $secret,
+            'runtime_only' => $runtimeOnly,
+        ];
+    }
+
+    /* =====================================================================
+     * 组装报告（依赖框架：模型 + 控制器）
+     * ===================================================================== */
+
+    /**
+     * @return array{status: string, rows: array, notes: array, differs: int, missing: int, runtime: bool}
+     */
+    public static function report(): array
+    {
+        $yaml = Config::rawText();
+        $runtimeValues = self::runtimeValues();
+        $rows = self::compare($yaml, self::modelValues(), $runtimeValues);
+        $runtime = $runtimeValues !== null;
+
+        $differs = 0;
+        $missing = 0;
+        foreach ($rows as $row) {
+            if ($row['state'] === self::STATE_DIFFERS) {
+                $differs++;
+            } elseif ($row['state'] === self::STATE_MISSING) {
+                $missing++;
+            }
+        }
+
+        $notes = [];
+        if (!$runtime) {
+            $notes[] = [
+                'level' => 'info',
+                'text' => gettext('The running service cannot be reached, so only the WebUI and the file are compared. Start the service to see the values that are actually in use.'),
+            ];
+        } else {
+            $notes[] = [
+                'level' => 'info',
+                'text' => gettext('Runtime values come from the mihomo external controller, i.e. the configuration currently held in memory.'),
+            ];
+        }
+        if ($differs > 0) {
+            $notes[] = [
+                'level' => 'warning',
+                'text' => gettext('Some values differ between the WebUI and the file. Press Apply on this page to write the WebUI values into the file, or press Import to load the file values into the WebUI.'),
+            ];
+        }
+        if (self::looksHandwritten($yaml)) {
+            $notes[] = [
+                'level' => 'warning',
+                'text' => gettext('The configuration file looks hand-written. A subscription update would replace it completely; edit the file by hand instead (or back it up first).'),
+            ];
+        }
+        $notes[] = self::hasManagedBlock($yaml) ? [
+            'level' => 'info',
+            'text' => gettext('A managed policy-routing block is present: the routing policy page replaces this block as a whole and leaves everything else untouched.'),
+        ] : [
+            'level' => 'info',
+            'text' => gettext('No managed policy-routing block in the file (no interface is bound).'),
+        ];
+        if (self::ipv6Allowed($yaml)) {
+            $notes[] = [
+                'level' => 'warning',
+                'text' => gettext('IPv6 is enabled, but the TUN device only carries IPv4: IPv6 traffic bypasses mihomo. Set ipv6: false to turn IPv6 off on the proxy side, or add IPv6 handling separately.'),
+            ];
+        }
+
+        return [
+            'status' => 'ok',
+            'rows' => $rows,
+            'notes' => $notes,
+            'differs' => $differs,
+            'missing' => $missing,
+            'runtime' => $runtime,
+        ];
+    }
+
+    /** 页面里的值（与 SettingsController::modelPatch() 的键一一对应） */
+    private static function modelValues(): array
+    {
+        $mdl = new Mihomo();
+        $flag = fn ($node) => ((string)$node === '1');
+
+        return [
+            'log-level' => (string)$mdl->general->logLevel,
+            'mode' => (string)$mdl->general->mode,
+            'allow-lan' => $flag($mdl->general->allowLan) ? 'true' : 'false',
+            'external-controller' => sprintf(
+                '%s:%s',
+                (string)$mdl->general->controllerBind,
+                (string)$mdl->general->controllerPort
+            ),
+            'secret' => (string)$mdl->general->secret,
+            'tun.enable' => $flag($mdl->tun->enabled) ? 'true' : 'false',
+            'tun.device' => (string)$mdl->tun->device,
+            'tun.stack' => (string)$mdl->tun->stack,
+            'tun.auto-route' => $flag($mdl->tun->autoRoute) ? 'true' : 'false',
+            'tun.strict-route' => $flag($mdl->tun->strictRoute) ? 'true' : 'false',
+            'tun.mtu' => (string)(int)(string)$mdl->tun->mtu,
+            'dns.enable' => $flag($mdl->dns->enabled) ? 'true' : 'false',
+            'dns.listen' => (string)$mdl->dns->listen,
+            'dns.enhanced-mode' => (string)$mdl->dns->enhancedMode,
+            'sniffer.enable' => $flag($mdl->general->sniffer) ? 'true' : 'false',
+        ];
+    }
+
+    /** 运行值：读不到（服务没跑/密钥不对）返回 null */
+    private static function runtimeValues(): ?array
+    {
+        $response = Controller::request('GET', '/configs', null, 3.0);
+        if (!$response['ok'] || !is_array($response['data'])) {
+            return null;
+        }
+        return $response['data'];
+    }
+}

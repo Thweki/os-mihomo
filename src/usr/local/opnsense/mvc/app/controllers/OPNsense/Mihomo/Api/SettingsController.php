@@ -24,6 +24,7 @@ namespace OPNsense\Mihomo\Api;
 use OPNsense\Base\ApiMutableModelControllerBase;
 use OPNsense\Core\Backend;
 use OPNsense\Mihomo\Config;
+use OPNsense\Mihomo\Inspector;
 use OPNsense\Mihomo\RequestParamsTrait;
 use OPNsense\Mihomo\Safety;
 
@@ -210,6 +211,14 @@ class SettingsController extends ApiMutableModelControllerBase
         return $enabled
             ? sprintf(gettext('Scheduled task enabled: subscription update (%s).'), $hours)
             : gettext('Scheduled task removed: subscription update.');
+    }
+
+    /**
+     * 「配置对照」：页面值 / 文件值 / 运行值 三方对照（只读）。
+     */
+    public function inspectAction()
+    {
+        return Inspector::report();
     }
 
     /**

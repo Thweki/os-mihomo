@@ -181,6 +181,40 @@ TRANSLATIONS: dict[str, str] = {
         '控制器只监听 127.0.0.1，网络侧访问不到；只有把它绑到网络地址时才需要密钥。',
     'Updating the subscription rebuilds config.yaml from the subscription template, so manual edits are replaced. The current file is backed up as config.yaml.bak.sub_* first.':
         '更新订阅会用订阅模板整份重写 config.yaml，手工改过的内容会被替换；更新前会自动备份成 config.yaml.bak.sub_*。',
+    # ---- 配置对照（P16）----
+    'Configuration comparison': '配置对照',
+    'Item': '项目',
+    'File (config.yaml)': '文件（config.yaml）',
+    'Running (memory)': '运行中（内存）',
+    'WebGUI': '页面（设置）',
+    'consistent': '一致',
+    'different': '不一致',
+    'not in file': '文件未写',
+    'running only': '仅运行值',
+    'Mixed port': '混合端口',
+    'SOCKS port': 'SOCKS 端口',
+    '(set, hidden)': '（已设置）',
+    '(empty)': '（空）',
+    '(not set in the file)': '（文件里没有）',
+    'The same setting can live in three places. This table shows all three: what the WebGUI remembers, what the file says, and what the running core actually uses.':
+        '同一个设置可能同时存在于三个地方。下表把它们列在一起：页面的记忆、文件里写的、内核此刻真正在用的。',
+    'Runtime values come from the mihomo external controller, i.e. the configuration currently held in memory.':
+        '运行值来自 mihomo 的外部控制器，也就是进程内存里正在用的那份配置。',
+    'The running service cannot be reached, so only the WebUI and the file are compared. Start the service to see the values that are actually in use.':
+        '读不到正在运行的服务，因此只对照页面与文件。启动服务后才能看到真正在用的值。',
+    'Some values differ between the WebUI and the file. Press Apply on this page to write the WebUI values into the file, or press Import to load the file values into the WebGUI.':
+        '页面与文件有不一致的值：点本页「应用」会把页面里的值写进文件；点「从配置导入」则是反过来，用文件里的值更新页面。',
+    'The configuration file looks hand-written. A subscription update would replace it completely; edit the file by hand instead (or back it up first).':
+        '这份 config.yaml 看起来是手写的：点「更新订阅」会用订阅模板整份重写它。要继续手写就别点更新订阅（或先备份）。',
+    'A managed policy-routing block is present: the routing policy page replaces this block as a whole and leaves everything else untouched.':
+        '文件里有策略路由的受管区块：路由策略页只会整块替换这一段，其余内容不动。',
+    'No managed policy-routing block in the file (no interface is bound).':
+        '文件里没有受管区块（当前没有任何接口被绑定）。',
+    'IPv6 is enabled, but the TUN device only carries IPv4: IPv6 traffic bypasses mihomo. Set ipv6: false to turn IPv6 off on the proxy side, or add IPv6 handling separately.':
+        'IPv6 是开着的，而 TUN 设备只有 IPv4 地址：IPv6 流量会绕过 mihomo。可在配置里设 ipv6: false 关掉它，或单独为 v6 做分流。',
+    'IPv6 traffic bypasses the proxy': 'IPv6 流量不经过代理',
+    'The TUN device only carries IPv4, so IPv6 traffic leaves this firewall without going through mihomo. Set ipv6: false in the configuration to stop that, or add IPv6 handling separately.':
+        'TUN 设备只有 IPv4 地址，IPv6 流量会不经过 mihomo 直接出去。可在配置里设 ipv6: false 阻止它，或单独处理 v6。',
     'External controller is exposed without a secret': '外部控制器对外暴露且没有密钥',
     'The controller is reachable from the network and has no secret, so anyone who can reach it may reconfigure the proxy. Set a secret or bind it to 127.0.0.1.':
         '控制器对网络开放且未设密钥，任何能访问它的人都能改代理配置。请设置密钥，或改为只监听 127.0.0.1。',

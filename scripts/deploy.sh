@@ -74,6 +74,7 @@ for rel in \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Mihomo.xml \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Config.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Controller.php \
+    usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Logs.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/RequestParamsTrait.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Safety.php \
