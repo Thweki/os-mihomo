@@ -68,6 +68,9 @@ VPN > Proxy Suite > Mihomo（概览 / 设置 / 订阅 / 日志）
 
 旧地址 `/mihomo.php`、`/mihomo_sub.php` 等会 302 跳转到新页面。
 
+> 二次开发的完整交付报告（含真实截图、安全证明、验证矩阵、回滚步骤）见
+> **[`docs/report.md`](docs/report.md)**；设计说明见 [`docs/design.md`](docs/design.md)。
+
 ## 安装命令
 
 将安装包上传到 OPNsense 后执行：
