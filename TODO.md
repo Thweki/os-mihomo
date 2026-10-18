@@ -25,14 +25,23 @@
 - 截图：`docs/screenshots/` 11 张（含核心页面对照）
 - 提交：`8bfe014`（基线）→ `b21013a`（MVC 重写）→ `fa63bbb`（UI 精修）
 
-## P8 收尾（剩余）
+## P8 收尾（已完成）
 
 - [x] README 重写（指向新 UI，移除"浏览器连 :9090"的旧姿势）
 - [x] 版本号提升到 1.1.0（`Makefile` / `version/mihomo`）
 - [x] 部署/回滚/体检/取证脚本齐备（`scripts/`、`tools/`）
-- [ ] `make package` 实机跑一次（需要一台 FreeBSD/OPNsense 构建机；当前设备侧禁止 `pkg add` 以免触发上游 post-install）
-- [ ] 回滚演练（在设备上实跑一次 `cp -a` 恢复；目前备份集齐全但未实跑）
-- [ ] 补 `.pot` / `zh_CN` 翻译，消除中英混杂
+- [x] `make package` 实机跑通：`os-mihomo-1.1.0.pkg`（26.9 MB，sha256 `01221aa2…`），
+      并修掉 `subscription_run.sh` 在包里权限是 0644 的打包缺陷
+- [x] 回滚演练实跑：41 文件回滚 → 与备份逐字节一致 → 重新部署 → 与回滚前 100% 一致，**0 failures**
+- [x] 补 `zh_CN` 翻译：146 条词条，四页全中文，覆盖核心译文 0 条（见报告 §13.3）
+
+## 后续可选（不在本轮范围）
+
+- [ ] 把 146 条词条提交到 OPNsense 官方翻译平台（translate.opnsense.org），
+      以便随基础系统分发、避免每次系统升级后重打 `.mo`
+- [ ] 仪表盘历史曲线（RRD 或环形缓冲）
+- [ ] 把 demo 实例改造成正式的"单机自测模式"（写进 README）
+- [ ] 上游 `+POST_INSTALL` 改为显式 opt-in（当前与上游行为一致，已在 README/报告显著警示）
 
 ## 风险与决策记录
 

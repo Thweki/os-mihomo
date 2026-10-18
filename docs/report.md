@@ -24,7 +24,8 @@
 9. [部署 / 回滚 / 日常运维](#9-部署--回滚--日常运维)
 10. [事故记录](#10-事故记录)
 11. [已知限制与后续建议](#11-已知限制与后续建议)
-12. [附录：命令速查](#12-附录命令速查)
+13. [P8 收尾：打包 / 回滚演练 / 中文化](#13-p8-收尾打包--回滚演练--中文化)
+14. [附录：命令速查](#14-附录命令速查)
 
 ---
 
@@ -43,6 +44,8 @@
 | 安全体检 | 启动前显式列出 TUN 接管、占位节点、控制器暴露、DNS 劫持等风险 |
 | 服务控件 | 页面标题栏原生 start/stop/restart 按钮（`updateServiceControlUI`） |
 | 内核资产 | 沿用上游 mihomo 内核（1.19.31-vincent）、rc.d、订阅脚本、configd 动作 |
+| 安装包 | `os-mihomo-1.1.0.pkg`（25.7 MiB，sha256 `01221aa2…`）已在目标机实机构建并回传 `dist/` |
+| 中文化 | 146 条 zh_CN 词条，四个页面 + 表单标签 + 帮助 + 风险详情全中文 |
 
 ---
 
@@ -437,6 +440,15 @@ sockstat -4 -l | egrep ':9090|:1053|:7891'   # 端口
 
 **永久加固**：`tools/remote.ps1` 增加护栏 —— 待执行脚本内容只要出现 `__remote.sh` 就**拒绝执行**（exit 3）。
 
+### 第二次小事故：误启了一个 lighttpd 实例（已复原）
+
+排查 i18n 生效问题时，我先用了 `service lighttpd onerestart` —— 它管理的是
+`/usr/local/etc/lighttpd/lighttpd.conf` 那个实例，**不是 WebGUI 所用的**
+`/usr/local/etc/lighttpd_webgui/lighttpd.conf`（由 `/usr/local/etc/rc.restart_webgui` 管理）。
+结果多起了一个监听 `*:80` 的 lighttpd 进程。发现后立即 `kill` 该 PID，
+并确认 WebGUI 实例（51761）仍独占 443/80，WebGUI 返回 200。
+正确做法已写入 `tools/i18n.ps1` 与报告 §13.3。
+
 > 诚实记录在此，原因有二：一是这条约束对后续维护者有价值；
 > 二是它恰好说明为什么本任务把「可探测、可回滚、每一步留指纹」当成硬要求。
 
@@ -446,7 +458,7 @@ sockstat -4 -l | egrep ':9090|:1053|:7891'   # 端口
 
 | # | 事项 | 建议 |
 |---|---|---|
-| 1 | 界面文案中英混杂（`Settings` 显示为「设置」而 `Access Secret` 仍是英文） | 为插件补 `.pot` 与 `zh_CN` 翻译，纳入 `src/os-lang` 体系 |
+| 1 | 界面文案中英混杂（`Settings` 显示为「设置」而 `Access Secret` 仍是英文） | **已解决**：146 条 zh_CN 词条（`locales/zh_CN.po`），四页 + 表单标签 + 帮助文本 + 风险详情全中文；见 §13.3。注意词条合并进的是基础系统 `OPNsense.mo`，系统升级可能覆盖，重跑 `tools/i18n.ps1` 即可 |
 | 2 | 上游 `+POST_INSTALL` 会自动改 `config.xml` / 加防火墙规则 / 改 Unbound 转发 | 本仓库保留上游行为（`pkg` 安装与上游等价），但**强烈建议**改为显式 opt-in；本次实机安装走的是安全路径，从未执行它 |
 | 3 | 默认 `config.yaml` 是占位节点 + TUN 自动接管 | 已在 UI 做红色体检提示；可考虑首次进入时强制走"导入/编辑"向导 |
 | 4 | 控制器默认 `external-controller: 0.0.0.0:9090` | 已把回环绑定写进模型默认值：本次 Apply 后实际已改为 `127.0.0.1:9090`（见 §7.2）；如需还原见同处说明 |
@@ -455,12 +467,141 @@ sockstat -4 -l | egrep ':9090|:1053|:7891'   # 端口
 
 ---
 
-## 12. 附录：命令速查
+## 13. P8 收尾：打包 / 回滚演练 / 中文化
+
+### 13.1 实机构建安装包
+
+在目标机上（FreeBSD 15.1 + pkg 2.8.4）实跑 `make package`：
+
+```
+==> Staging files
+==> Using local asset .../clash-meta-freebsd-amd64.xz     ← SHA256 与 build.sh 里记录的一致
+==> Generating plist / metadata
+==> Creating package for FreeBSD:*:amd64
+==> Package: .../dist/os-mihomo.pkg
+==> Verified package metadata
+SHA256 (os-mihomo.pkg) = 01221aa2853962652a3d0df47d5811f458f6c6aa0bee09dc4ae88eb8e881d032
+```
+
+| 项 | 值 |
+|---|---|
+| 文件名 | `os-mihomo-1.1.0.pkg`（`dist/os-mihomo.pkg`，已回传本地 `dist/`） |
+| 大小 | 26,933,860 字节（25.7 MiB） |
+| SHA256 | `01221aa2…81d032`（本地与设备一致） |
+| 文件数 | 49 |
+| Flat size | 76.8 MiB |
+| 元数据 | `pkg info -F` 校验通过（name/version/origin/ABI/deps） |
+
+**发现并修掉一个打包缺陷**：`build.sh` 只给上游那批文件设了执行位，
+本次新增的 `subscription_run.sh` 在包里是 `0644` —— 而 configd 会**直接执行**它，
+安装后会动作失败。已在 `build.sh` 中补齐 chmod，并加了权限审计脚本：
+
+```
+=== 包内所有非 0644 的条目 ===
+-rwxr-xr-x /usr/bin/mihomo_sub
+-rwxr-xr-x /usr/local/bin/mihomo
+-rw------- /usr/local/etc/mihomo/sub/env                      ← 敏感文件 0600
+-rwxr-xr-x /usr/local/etc/mihomo/sub/sub.sh
+-rw------- /usr/local/etc/mihomo/sub/template_config.yaml     ← 敏感文件 0600
+-rwxr-xr-x /usr/local/etc/rc.d/mihomo
+-rwxr-xr-x /usr/local/opnsense/scripts/mihomo/*.{php,sh}      ← 7 个可执行脚本
+```
+
+> ⚠️ 安装这个包会执行上游的 `+POST_INSTALL`（改 config.xml / 加防火墙规则 / 改 Unbound 转发），
+> 与上游行为一致；不想动网络配置请用 `scripts/deploy.sh` 的安全路径。
+
+### 13.2 回滚演练（实跑，0 failures）
+
+演练内容：从旧备份集回滚 41 个受管文件 → 校验 → 重新部署 → 校验 → 恢复配置数据。
+
+```
+########## 1. 快照当前状态（LATEST）##########
+  受管文件数: 41      缺失: 0
+########## 2. 暂存 config.yaml 与 rc.conf.d（配置数据不参与回滚）##########
+########## 3. 从备份集回滚代码文件：_bak/os-mihomo/20261018_102822 ##########
+  恢复 41 个文件
+########## 4. 校验回滚结果 ##########
+  与 LATEST 不同的文件（期望 > 0）：
+    - .../controllers/OPNsense/Mihomo/forms/settings.xml
+    - .../models/OPNsense/Mihomo/Config.php
+    - .../models/OPNsense/Mihomo/Menu/Menu.xml
+    - .../models/OPNsense/Mihomo/Safety.php
+    - .../views/OPNsense/Mihomo/index.volt   (等 11 个)
+  差异文件数: 11
+  与备份集逐字节比对（期望 0 处不一致）：    一致 41 / 不一致 0
+  回滚后页面可用性（未登录 302 = 正常响应）：
+    /ui/mihomo 302   /ui/mihomo/settings 302   /ui/mihomo/subscription 302
+    /ui/mihomo/log 302   /mihomo.php 302
+  版本标记（期望呈现旧版特征）：
+    valuesEqual（新）: no -> 已回滚到旧版
+    checkbox（新）   : no -> 已回滚到旧版
+########## 中间：重新部署最新版 ##########
+  php files with syntax errors: 0
+  registered mihomo actions: 14 (expected 14)
+########## 6. 与回滚前（LATEST）比对 ##########
+  PASS：重新部署后与回滚前逐字节一致
+  版本标记：valuesEqual YES / Safety.shorten YES / checkbox YES / fail()写stdout YES
+########## ROLLBACK DRILL RESULT: 0 failures ##########
+```
+
+结论：**回滚可用、可探测、可复原**——回滚后与备份逐字节一致，重新部署后与回滚前逐字节一致，
+配置数据（`config.yaml` / `rc.conf.d`）在整个过程中被单独保护、不参与回滚。
+
+### 13.3 中文化（消除中英混杂）
+
+**难点**：OPNsense 用**单一 gettext 域**（`defaultDomain = OPNsense`，
+目录 `/usr/local/share/locale/<locale>/LC_MESSAGES/OPNsense.mo`），
+插件字符串要显示中文只能合并进这个系统文件；而 FreeBSD 上没有 `msgfmt`/`msgunfmt`。
+
+**做法**（可回滚、只增不改）：
+
+1. `tools/extract_strings.py` 提取全部会进 gettext 的字符串 —— 包括
+   **表单/模型 XML 的 label / help / hint / ValidationMessage**
+   （它们由 `ControllerBase::parseFormNode()` 统一 `gettext()`，最容易被漏掉）；
+2. `tools/i18n_translate.py` 生成标准 `locales/zh_CN.po`，并**双向严格校验**：
+   每条 msgid 必须真实存在于源码中，且**不得覆盖核心已有译文**；
+3. `tools/mo_editor.py` 用纯 Python 读写 `.mo`（无 gettext 工具链也能合并），
+   合并后校验 + `diff-core` 确认「只增不改」；
+4. `tools/i18n.ps1` / `scripts/i18n_apply.sh`：备份 → 合并 → 校验 → 重启 WebGUI，支持 `-Rollback`。
+
+**同时修掉一个真问题**：`Safety.php` 里 7 处跨行字符串拼接（`'长句 A ' .\n '长句 B'`）
+让 `gettext()` 无法提取整句 → 页面上的风险详情一直是英文。
+已把它们并为单字面量（`tools/join_php_strings.py`，带 dry-run 与引号计数自检）。
+
+**结果**：
+
+| 指标 | 值 |
+|---|---|
+| 插件字符串 | 174 |
+| 核心已有译文（复用，不重复维护） | 28 |
+| 本次补充词条 | **146** |
+| 覆盖核心译文 | **0** |
+| .mo 词条总数 | 13010 → **13156** |
+| 生效范围 | 概览 / 设置 / 订阅 / 日志 四页 + 表单标签 + 帮助文本 + 风险详情 |
+
+> 生效需要**重启 WebGUI**：php-cgi 会在进程内缓存 gettext 词库；
+> 且 WebGUI 用的是 `/usr/local/etc/lighttpd_webgui/lighttpd.conf` 那个实例，
+> 必须用 `/usr/local/etc/rc.restart_webgui`（`service lighttpd` 管的是另一个实例）。
+>
+> 注意：`OPNsense.mo` 属于基础系统，**系统升级可能覆盖它**；
+> 届时重新执行 `tools/i18n.ps1` 即可（备份在 `/usr/local/opnsense/_bak/os-mihomo-i18n/`）。
+
+中文界面截图：
+
+![设置页（中文）](screenshots/08-settings-zh_CN.png)
+
+![概览（中文）](screenshots/09-overview-zh_CN.png)
+
+---
+
+## 14. 附录：命令速查
 
 ```sh
 # ---- 本机 ----
-.\tools\deploy.ps1 [-WithBinary]          # 安全部署
+.\tools\deploy.ps1 [-WithBinary]          # 安全部署（不动网络配置）
 .\tools\webtest.ps1 [-Post]               # 端到端验证
+.\tools\rollback_drill.ps1                # 回滚演练（两阶段）
+.\tools\i18n.ps1 [-Rollback|-Status]      # 应用/回滚中文词条
 .\tools\remote.ps1 -Cmd "<命令>"           # 远端执行
 .\tools\remote.ps1 -Script .\scripts\xxx.sh [-ScriptArgs "参数"]
 .\tools\remote.ps1 -Pull /var/log/mihomo.log -PullTo .\refs\
@@ -469,7 +610,9 @@ python tools\sanitize.py --write          # 去 BOM / 统一 LF
 # ---- 设备 ----
 sh /usr/local/opnsense/scripts/mihomo/snapshot_state.sh   # 状态指纹
 configctl mihomo status|config-current|env-get|log-tail|log-clear|set-enabled
-ls -1 /usr/local/opnsense/_bak/os-mihomo/                 # 备份集
+ls -1 /usr/local/opnsense/_bak/os-mihomo/                 # 部署备份集
+ls -1 /usr/local/opnsense/_bak/os-mihomo-i18n/            # 词库备份
+/usr/local/etc/rc.restart_webgui                          # 重启 WebGUI（改词库/改视图后）
 ```
 
 ---
