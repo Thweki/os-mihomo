@@ -11,10 +11,14 @@
 | 手写 CSRF | `$_SESSION['mihomo_service_csrf_token']` | 与框架 `csrfToken` 机制并存，重复造轮子 |
 | 手写 i18n | 自建 `proxy_t()` + 解析 `/conf/config.xml` 语言 | 忽略 OPNsense 的 `lang._()` 与 gettext 体系 |
 | 手写状态轮询 | `fetch('/mihomo.php?ajax=status')` + `setInterval(2000)` | 不走 `updateServiceControlUI` 标准服务控件 |
-| **配置保存实际失效** | `saveConfig()` 要求 `is_writable('/usr/local/etc/mihomo')`，但该目录是 `root:wheel 0755`，而 php-fpm 以 **`www`** 运行 | 「保存配置」永远返回“目标目录不可写” |
-| 日志读取越权 | `mihomo_logs.php` 直接 `fopen('/var/log/mihomo.log')`；该文件 `0640 root:wheel` | www 读不到日志，页面长期空白 |
-| 控制面板靠外挂 | README 让用户访问 `http://LAN_IP:9090/ui`（mihomo 自带 zashboard） | 需要浏览器直连 :9090，等于另起 HTTP 服务展示 WebUI |
-| 控制器暴露 | `external-controller: 0.0.0.0:9090` | 面板/API 暴露给全网段 |
+| **WebUI 依赖另起 HTTP 服务** | README 让用户访问 `http://LAN_IP:9090/ui`（mihomo 自带 zashboard）；`config.yaml` 的 `external-ui-url` 还会运行时从 GitHub 拉取第三方面板 | 需要浏览器直连 :9090，等于另起 HTTP 服务展示 WebUI |
+| 控制器暴露 | `external-controller: 0.0.0.0:9090` + 占位 `secret` | 面板/API 暴露给全网段 |
+| 启动无提示 | 默认 `tun.auto-route: true` + 占位节点 | 未配置就启动 → 全网断网 |
+| 订阅更新无条件重启服务 | `sub.sh` 结尾 `MIHOMO_SERVICE_CMD="service mihomo restart"` | 新配置有问题也可能触发重启 |
+
+> **实测更正**：本机 WebGUI 的 PHP 实际以 **root** 运行（lighttpd + `mod_fastcgi` + root 起的 `php-cgi`），
+> 因此上游用 `exec()` / `fopen()` 的写法**是可用的**，不存在"保存失败/日志空白"的问题。
+> 本次仍统一把特权写入改走 **configd**，理由是：可审计（进 syslog）、避免在 PHP 里拼 shell 命令、以及可脱离 Web 环境做回归测试。
 
 ## 2. 目标架构
 
@@ -68,7 +72,9 @@ php-fpm (www) ── 只读直读 config.yaml (0644) / 只读 GET
 
 ## 4. 权限与安全模型
 
-- **读写分离**：`www` 只读（config.yaml 0644、loopback GET），写操作一律经 configd（root）。
+- **读写分离**：`config.yaml`（0644）由 Web 进程只读；特权写入（配置/env/rc.conf.d/日志）统一经 **configd（root）**。
+  实测本机 WebGUI 的 PHP 本身就是 root（lighttpd + `mod_fastcgi` + `php-cgi`），
+  走 configd 不是权限所迫，而是为了**可审计（syslog）、避免在 PHP 里拼接 shell、以及可脱离 Web 做回归测试**。
 - **写配置的原子性**：随机名临时文件（0600, www）→ configd 校验（`mihomo -t`）→ 备份（`config.yaml.bak.YYYYmmdd_HHMMSS`）→
   `install -m 0644 -o root -g wheel` 落盘。校验不过一律不落盘。
 - **参数注入防护**：所有 configd 调用使用 `escapeshellarg()`；临时文件路径白名单前缀 `/tmp/mihomo-`。

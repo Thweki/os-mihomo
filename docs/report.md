@@ -49,20 +49,29 @@
 ## 2. 上游 WebUI 的问题（附证据）
 
 上游 1.0.4 的 WebUI 是 4 个过程式页面（`/usr/local/www/mihomo*.php`），实测存在以下问题。
-下表右列都是本次在设备上**实测**得到的结论，不是推测：
+下表右列均为本次在设备上**实测/读源码**得到的结论。
 
-| # | 问题 | 设备上的证据 |
+| # | 问题 | 证据 |
 |---|---|---|
-| 1 | 不属于 MVC，无控制器/视图/模型 | 上游源码只有 `www/*.php`，无 `controllers|views` 目录 |
-| 2 | **「保存配置」按钮实际必然失败** | php-fpm 以 `www` 运行（`ps`/`php-fpm.d/www.conf` 确认），而 `/usr/local/etc/mihomo` 是 `root:wheel 0755`；`saveConfig()` 要求 `is_writable($dir)` |
-| 3 | **日志页长期空白** | `/var/log/mihomo.log` 是 `0640 root:wheel`，`www` 无法 `fopen` |
-| 4 | 自建 CSRF token，与框架并存 | 每个页面各自维护 `$_SESSION[..._csrf_token]` |
-| 5 | 自实现 i18n，且靠解析 `/conf/config.xml` 猜语言 | `proxy_lang()` 正则读 config.xml |
-| 6 | 控制面板要浏览器直连 `:9090` | 上游 README：「默认配置会开启 Clash API，可通过 `http://LAN_IP:9090/ui` 访问仪表盘」——等于另起 HTTP 服务展示 WebUI |
-| 7 | 控制器暴露全网段 | 默认 `external-controller: 0.0.0.0:9090` |
+| 1 | 不属于 MVC，无控制器/视图/模型 | 上游源码只有 `www/*.php`，无 `controllers` / `views`；菜单直接指 `/mihomo.php` |
+| 2 | 不用框架的服务控件 | 页面用 `fetch('/mihomo.php?ajax=status')` + `setInterval(2000)` 自建轮询，而不是 `updateServiceControlUI()` |
+| 3 | 自建 CSRF，与框架机制并存 | 每个页面各自维护 `$_SESSION[..._csrf_token]` |
+| 4 | 自实现 i18n，靠正则解析 `/conf/config.xml` 猜语言 | `proxy_lang()` 正则读 config.xml，忽略 `lang._()` / gettext |
+| 5 | **「WebUI」实际依赖另起 HTTP 服务** | 上游 README：「默认配置会开启 Clash API，可通过 `http://LAN_IP:9090/ui` 访问仪表盘」；`config.yaml` 里的 `external-ui-url` 还会在运行时从 GitHub 拉取第三方面板 zashboard |
+| 6 | 控制器对外暴露 | `external-controller: 0.0.0.0:9090`，且 `secret` 是随包占位值 `CHANGE_ME` |
+| 7 | 启动无任何风险提示 | 默认 `tun.auto-route: true` + 占位节点 `88.88.88.88`，启动即接管全局路由，界面不提示 |
+| 8 | 订阅更新会无条件重启服务 | `sub.sh` 结尾 `MIHOMO_SERVICE_CMD="service mihomo restart"`，即使新配置有问题也会触发重启 |
 
-> 第 2、3 条意味着：**上游插件的两个核心功能（改配置、看日志）在实际部署下是不可用的**。
-> 这正是本次二次开发要用 configd（root 后端）修正的地方。
+> **一处重要更正（记录在案）**：本次实现过程中实测发现，**本机 WebGUI 的 PHP 其实是以 root 运行的**
+> —— lighttpd（root）通过 `mod_fastcgi` 拉起 `php-cgi`（`ps` 显示 10 个 `php-cgi` 全部是 root；
+> `php-fpm.d/www.conf` 里的 `user = www` 并不服务于 WebGUI）。
+> 因此上游页面里那些 `exec()` / `fopen()` / `is_writable()` 判断**是可行的**，
+> 上游并不存在"保存配置必然失败/日志必然空白"的问题（这一点在初稿中判断有误，已更正）。
+>
+> 既然如此，为什么本次仍把特权写入统一改走 **configd**？三个理由：
+> 1. **可审计**：每个动作都会进 syslog，谁在什么时候改了配置一查便知；
+> 2. **少一处 RCE 面**：PHP 里不再拼接执行 shell 命令，也不在 Web 进程里做文件属主判断；
+> 3. **可测试**：这些脚本能脱离 Web 环境单独以 root 运行并做回归（本次就是这么做的）。
 
 ---
 
@@ -147,17 +156,29 @@ src/usr/local/opnsense/service/conf/actions.d/actions_mihomo.conf   新增 9 个
 
 ### 4.3 config.yaml 的「外科手术式」修改
 
-设置页的 Apply 不是"整文件覆盖"，而是：
+设置页的 Apply 不是"整文件覆盖"，而是严格的最小改动流程：
 
 1. 读入现有 `config.yaml`；
-2. 用**嵌套键补丁器**只改动受管键（`log-level`、`mode`、`allow-lan`、`external-controller`、`secret`、`tun.*`、`dns.*`），
-   保留 `proxies` / `proxy-groups` / `rules` / 注释 / 缩进风格；
-3. 写入 `/tmp/mihomo-XXXXXX`（0600，www 属主，名字随机）；
-4. `configd` 以 root 运行 `mihomo -t` 校验 → **不通过就一个字都不写**；
-5. 通过后备份 `config.yaml.bak.YYYYmmdd_HHMMSS`（保留最近 20 份），再 `install -o root -g wheel` 原子替换。
+2. **逐键比较**：目标值与文件现有值等价的键 **一个字节都不动**（保留原有注释、引号风格、缩进）；
+3. 需要改动的键，只替换该行的值，并**保留该行的行尾注释**；
+4. 只触及受管键（`log-level`、`mode`、`allow-lan`、`external-controller`、`secret`、`tun.*`、`dns.*`），
+   `proxies` / `proxy-groups` / `rules` / 其它注释完全不动；
+5. 写入 `/tmp/mihomo-XXXXXX`（0600，随机名）；
+6. `configd` 以 root 运行 `mihomo -t` 校验 → **不通过就一个字都不写**；
+7. 通过后备份 `config.yaml.bak.YYYYmmdd_HHMMSS`（保留最近 20 份），再 `install -o root -g wheel` 原子替换。
 
-补丁器有 **30 项回归测试**（`tests/test_patch.php`，含幂等性、CRLF、特殊值、注释保留、proxies/rules 完整性），
-在目标机上对真实 `config.yaml` 跑通 0 失败。
+实测效果（Apply 后的完整 diff，配置里原本有大量中文注释与代理规则）：
+
+```diff
+-external-controller: 0.0.0.0:9090
++external-controller: 127.0.0.1:9090
+```
+
+就这一行。其余 233 行（含 `log-level: info #在调试结果后…`、`secret: "CHANGE_ME"`、4 个代理节点、19 条规则）**逐字节未变**。
+
+补丁器有 **35 项回归测试**（`tests/test_patch.php`），在目标机上对真实 `config.yaml` 跑通 **0 失败**，
+覆盖：幂等性、值相同零改动、行尾注释保留、CRLF、特殊值引号、嵌套块新增、proxies/rules 完整性、
+以及"补丁结果必须能通过 `mihomo -t`"。
 
 ---
 
@@ -229,8 +250,8 @@ src/usr/local/opnsense/service/conf/actions.d/actions_mihomo.conf   新增 9 个
 
 ![订阅日志](screenshots/05-log-subscription.png)
 
-> 这两处日志文件属主是 root（`0640`），页面能读是因为经 configd 取回，
-> **没有**给 Web 进程放宽任何权限。
+> 这两处日志文件属主是 root（`0640`），页面能读是因为统一经 configd 取回，
+> 与核心插件（Monit / Unbound 的日志页）走的是同一条可审计路径。
 
 ### 5.6 服务控件（临时演示）
 
@@ -293,16 +314,34 @@ config.xml 的差异只有两类，且都是预期的：
 ~ <revision><description>/<time>              ← OPNsense 框架每次保存配置都会追加的审计记录
 ```
 
+`config.yaml` 在 Apply 后的差异（**完整 diff**）：
+
+```diff
+-external-controller: 0.0.0.0:9090
++external-controller: 127.0.0.1:9090
+```
+
+这一行是**有意的加固**：把控制器从"全网段可访问"改成"仅本机回环"，
+与本插件"浏览器永不直连 :9090"的设计一致。
+
+> 想恢复成上游的 `0.0.0.0:9090` 只需在「设置 → External Controller → Bind Address」填 `0.0.0.0` 再 Apply；
+> 或直接编辑 `config.yaml` 后 `service mihomo restart`。
+> 备份文件在 `/usr/local/etc/mihomo/config.yaml.bak.*`（保留最近 20 份）。
+
 ### 7.3 权限模型
 
 | 操作 | 执行者 | 说明 |
 |---|---|---|
-| 读 `config.yaml` | www | 文件是 0644 |
-| 读 `/var/log/mihomo*.log` | configd (root) | 文件是 0640，**不为 Web 放宽** |
-| 写 `config.yaml` | configd (root) | 参数经 `escapeshellarg`，临时文件 0600 + 非 root 属主 + 随机名 |
+| 读 `config.yaml` | Web PHP | 文件是 0644 |
+| 读 `/var/log/mihomo*.log` | configd (root) | 统一经 configd，保持与核心插件一致的可审计路径 |
+| 写 `config.yaml` | configd (root) | 参数经 `escapeshellarg`，临时文件 0600 + 随机名 + 非符号链接 + 内容必须通过 `mihomo -t` |
 | 写 `sub/env` | configd (root) | 0600，原子 rename |
 | 写 `/etc/rc.conf.d/mihomo` | configd (root) | 仅 yes/no |
-| 调用 mihomo API | www → 127.0.0.1 | Bearer secret，2~5 秒超时，服务未运行优雅降级 |
+| 调用 mihomo API | Web PHP → 127.0.0.1 | Bearer secret，2~5 秒超时，服务未运行优雅降级 |
+
+> 关于权限的一处实测更正：本机 WebGUI 的 PHP 是以 **root** 运行的（`php-cgi`，见 §2 末尾说明）。
+> 因此"经 configd"并不是权限所迫，而是出于**可审计、少一处 shell 拼接、可独立测试**的工程选择；
+> 所有特权脚本也都可以脱离 Web 环境单独以 root 运行做回归。
 
 ---
 
@@ -321,7 +360,9 @@ config.xml 的差异只有两类，且都是预期的：
 | 语法 | 全部 PHP `php -l`、全部 shell `sh -n` | ✅ 0 错误 |
 | 后端 | configd 注册 `mihomo` 动作 14 个 | ✅ |
 | 后端 | `configctl mihomo status / config-current / env-get / log-tail / set-enabled / log-clear` | ✅ |
-| 安全 | 真实 config.yaml 上的补丁器回归（30 断言） | ✅ 0 失败 |
+| 安全 | 真实 config.yaml 上的补丁器回归（35 断言） | ✅ 0 失败 |
+| 写入 | 设置页 Apply 往返（模型 → config.yaml，含备份） | ✅ 成功，diff 仅 1 行（见 §4.3/§7.2） |
+| 写入 | 值相同时的零改动保证 | ✅ 字节完全一致 |
 
 ---
 
@@ -408,7 +449,7 @@ sockstat -4 -l | egrep ':9090|:1053|:7891'   # 端口
 | 1 | 界面文案中英混杂（`Settings` 显示为「设置」而 `Access Secret` 仍是英文） | 为插件补 `.pot` 与 `zh_CN` 翻译，纳入 `src/os-lang` 体系 |
 | 2 | 上游 `+POST_INSTALL` 会自动改 `config.xml` / 加防火墙规则 / 改 Unbound 转发 | 本仓库保留上游行为（`pkg` 安装与上游等价），但**强烈建议**改为显式 opt-in；本次实机安装走的是安全路径，从未执行它 |
 | 3 | 默认 `config.yaml` 是占位节点 + TUN 自动接管 | 已在 UI 做红色体检提示；可考虑首次进入时强制走"导入/编辑"向导 |
-| 4 | 控制器默认 `external-controller: 0.0.0.0:9090` | 新 UI 全程走 loopback；设置页可一键改成 `127.0.0.1`（`Import` 会把现状读出来，`Apply` 会写成回环绑定） |
+| 4 | 控制器默认 `external-controller: 0.0.0.0:9090` | 已把回环绑定写进模型默认值：本次 Apply 后实际已改为 `127.0.0.1:9090`（见 §7.2）；如需还原见同处说明 |
 | 5 | 仪表盘不做历史留存（刷新即丢） | 可加"最近 N 分钟"环形缓冲或写 RRD（OPNsense 有现成 rrd 基础设施） |
 | 6 | 没有单元测试框架 | 已有 `tests/test_patch.php`；可扩展成 `phpunit` 套件并接入 CI |
 

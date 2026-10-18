@@ -7,7 +7,7 @@
     <field>
         <id>mihomo.general.enabled</id>
         <label>Enable mihomo</label>
-        <type>boolean</type>
+        <type>checkbox</type>
         <help>Start the mihomo service at boot time. It is deliberately disabled by default: with TUN automatic route takeover enabled, starting an unconfigured proxy takes the whole network offline.</help>
     </field>
     <field>
@@ -29,7 +29,7 @@
     <field>
         <id>mihomo.general.allowLan</id>
         <label>Allow LAN</label>
-        <type>boolean</type>
+        <type>checkbox</type>
         <help>Allow clients from the local network to use the SOCKS/HTTP proxy ports directly.</help>
     </field>
 
@@ -63,7 +63,7 @@
     <field>
         <id>mihomo.tun.enabled</id>
         <label>TUN Mode</label>
-        <type>boolean</type>
+        <type>checkbox</type>
         <help>Create a virtual network device so that traffic can be routed into mihomo without touching client configuration.</help>
     </field>
     <field>
@@ -81,13 +81,13 @@
     <field>
         <id>mihomo.tun.autoRoute</id>
         <label>Automatic Route</label>
-        <type>boolean</type>
+        <type>checkbox</type>
         <help>Automatically insert routes for all traffic into the TUN device. This is what makes mihomo a transparent gateway — and what turns an unconfigured proxy into an outage.</help>
     </field>
     <field>
         <id>mihomo.tun.strictRoute</id>
         <label>Strict Route</label>
-        <type>boolean</type>
+        <type>checkbox</type>
         <help>Make sure the TUN device wins over other default routes while the service is running.</help>
     </field>
     <field>
@@ -104,7 +104,7 @@
     <field>
         <id>mihomo.dns.enabled</id>
         <label>DNS Module</label>
-        <type>boolean</type>
+        <type>checkbox</type>
         <help>Let mihomo answer DNS queries itself (needed for fake-ip mode and rule based resolution).</help>
     </field>
     <field>
@@ -139,7 +139,7 @@
     <field>
         <id>mihomo.subscription.restartAfterUpdate</id>
         <label>Restart After Update</label>
-        <type>boolean</type>
+        <type>checkbox</type>
         <help>Restart mihomo automatically once a subscription update finished successfully. Keep this off until you have verified the new nodes.</help>
     </field>
 </form>

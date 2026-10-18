@@ -50,8 +50,10 @@
 | 设备 | OPNsense 26.7.7 (amd64)，FreeBSD 15.1-RELEASE-p4，PHP 8.5.11 |
 | 地址 | `root@192.168.1.1` / `https://192.168.1.1`（密码见对话，不入库、不写进文件） |
 | SSH | 已配置密钥 `~/.ssh/opn_ed25519`（本机）→ `/root/.ssh/authorized_keys`（设备） |
-| 现状 | **os-mihomo 未安装**；已装 `os-ddns-go`、`os-ttyd`（同作者、纯 legacy `.php` 页面） |
-| 菜单锚点 | `VPN → Proxy Suite → Mihomo`（与上游 README 一致） |
+| 现状 | **os-mihomo 已安装**（本次交付）；已装 `os-ddns-go`、`os-ttyd`（同作者、纯 legacy `.php` 页面） |
+| 菜单锚点 | `VPN → Proxy Suite → Mihomo（概览 / 设置 / 订阅 / 日志）` |
+| Web 进程 | lighttpd(root) + `mod_fastcgi` → `php-cgi` **以 root 运行**（`php-fpm.d/www.conf` 的 `user = www` 不服务 WebGUI） |
+| configd | 以 root 运行；动作文件 `actions_*.conf`，**必须 `service configd restart` 才重载** |
 
 ## 4. 目录约定
 

@@ -73,6 +73,21 @@ check(
 );
 @unlink($tmp);
 
+echo "\n=== 1b. 值相同时零改动 / 行尾注释保留 ===\n";
+$noop = Config::patchKeys($original, [
+    'mode' => 'rule',
+    'allow-lan' => false,
+    'tun.enable' => true,
+    'log-level' => 'info',
+]);
+check('全部键都是原值时字节完全不变', $noop === $original);
+$fixture = "# header comment\nlog-level: info #行尾注释要保留\nmode: rule\ntun:\n  enable: true #keep-tun\n";
+$out = Config::patchKeys($fixture, ['log-level' => 'debug', 'tun.enable' => false]);
+check('改值后保留行尾中文注释', str_contains($out, 'log-level: debug #行尾注释要保留'), $out);
+check('嵌套改值后保留行尾注释', str_contains($out, 'enable: false #keep-tun'), $out);
+check('未受管行原样保留', str_contains($out, 'mode: rule') && str_contains($out, '# header comment'));
+check('幂等：再次应用无变化', Config::patchKeys($out, ['log-level' => 'debug', 'tun.enable' => false]) === $out);
+
 echo "\n=== 2. 嵌套替换（已存在的键） ===\n";
 $tmp = writeTemp(Config::patchKeys($original, [
     'tun.enable' => false,

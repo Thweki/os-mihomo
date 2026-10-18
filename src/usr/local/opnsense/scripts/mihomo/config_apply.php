@@ -25,6 +25,9 @@ $BACKUP_KEEP = 20;
 
 function fail(string $message, int $code): void
 {
+    /* configd 只把 stdout 回传给调用方（stderr 只进 syslog），
+       因此错误必须同时打到 stdout，否则 WebUI 只会看到“(no output)”。 */
+    echo 'ERROR: ' . $message . "\n";
     fwrite(STDERR, $message . "\n");
     exit($code);
 }
@@ -81,10 +84,8 @@ switch ($action) {
         if ($stat === false || $stat['size'] === 0) {
             fail('staging file is empty', 2);
         }
-        if ($stat['uid'] === 0) {
-            /* 由 root 预置的文件一律拒绝，必须来自 web 进程 */
-            fail('staging file must not be owned by root', 2);
-        }
+        /* 说明：本机 WebGUI 的 php-cgi 以 root 运行，因此属主就是 root，
+           不能据此判断来源；真正的护栏是「随机文件名 + 0600 + 非符号链接 + 内容校验」。 */
         if (((int)$stat['mode'] & 0777) !== 0600) {
             fail('staging file has unexpected permissions', 2);
         }

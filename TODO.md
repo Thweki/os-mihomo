@@ -15,6 +15,7 @@
 | P6 | 视觉验收（agent-browser 截图、与核心页面对照） | [x] |
 | P7 | 报告：docs/report.md（含真实截图） | [x] |
 | P8 | 收尾：打包脚本、README、回滚演练 | [~] |
+| P9 | 修复：表单布尔控件、Apply 落盘链路、补丁器最小化 | [x] |
 
 ## 交付结果（2026-10-18）
 
@@ -46,3 +47,6 @@
 | R7 | 侧边栏只支持 3 层菜单 | 菜单结构改为 `VPN → Proxy Suite → 4 项` |
 | R8 | PowerShell 5.1 的 ANSI 默认编码损坏 UTF-8 脚本 | `tools/sanitize.py` + `fix_ps1_bom.py` + 传输后 sha256 校验 |
 | R9 | 脚本自我调用导致进程风暴（已发生，见报告 §10） | `tools/remote.ps1` 增加"含 `__remote.sh` 即拒跑"护栏 |
+| R10 | 表单布尔字段用 `<type>boolean</type>`，`base_form` 不渲染 | 改为 `<type>checkbox</type>`（核心对 base_form 都这么写）；已实测 7 个开关全部正常 |
+| R11 | 误判"上游保存配置/日志必然失效" | **已更正**：WebGUI 的 PHP 以 root 运行，上游那些写法可用；文档与日志均已修正 |
+| R12 | Apply 会重写受管行从而丢掉行尾注释 | 补丁器改为"值相同不动 + 改动时保留行尾注释"，Apply 实测只产生 1 行 diff |

@@ -70,10 +70,17 @@ class Config
         if (!is_file($file) || !is_readable($file)) {
             return [];
         }
+        return self::scanText((string)file_get_contents($file));
+    }
 
+    /**
+     * 扫描一段 YAML 文本（供内存中的内容使用，避免重复读盘）。
+     */
+    public static function scanText(string $content): array
+    {
         $result = [];
         $stack = [];
-        $lines = preg_split("/\r\n|\n|\r/", (string)file_get_contents($file)) ?: [];
+        $lines = preg_split("/\r\n|\n|\r/", $content) ?: [];
         foreach ($lines as $line) {
             if (trim($line) === '' || preg_match('/^\s*#/', $line)) {
                 continue;
@@ -262,9 +269,15 @@ class Config
         $lineNo = self::findKeyLine($lines, $from, $to, $indent, $key);
 
         if ($segments === []) {
-            /* 叶子：替换或追加 */
+            /* 叶子：替换或追加（改动时保留行尾注释） */
             if ($lineNo !== null) {
-                $lines[$lineNo] = $indentStr . $key . ': ' . $rendered;
+                $existing = $lines[$lineNo];
+                $comment = '';
+                $hashPos = strpos($existing, ' #');
+                if ($hashPos !== false) {
+                    $comment = substr($existing, $hashPos);
+                }
+                $lines[$lineNo] = $indentStr . $key . ': ' . $rendered . $comment;
             } else {
                 array_splice($lines, $to, 0, [$indentStr . $key . ': ' . $rendered]);
             }
@@ -304,19 +317,40 @@ class Config
     /**
      * 修改任意层级的标量键，path 形如 "log-level" / "tun.enable" / "dns.listen"。
      *
-     * 只做「已存在则替换，不存在则按块尾追加」的最小外科手术：
-     * 不重排、不删除、不解析列表，从而最大限度保留用户手写的其余内容。
+     * 两重「最小改动」保证：
+     *   1) 目标值已与文件一致 → 该键**一个字节都不动**（保留原有的注释、引号风格与缩进）；
+     *   2) 需要改动时，只替换该行的值，并保留行尾注释。
+     * 不重排、不删除、不解析列表，最大限度保留用户手写内容。
      * 结果仍会交给 `mihomo -t` 校验，校验不过就不会落盘。
      */
     public static function patchKeys(string $content, array $values): string
     {
         $eol = str_contains($content, "\r\n") ? "\r\n" : "\n";
         $lines = preg_split("/\r\n|\n|\r/", $content) ?: [];
+        $current = self::scanText($content);
         foreach ($values as $path => $value) {
+            if (self::valuesEqual($current[$path] ?? null, $value)) {
+                continue;
+            }
             $segments = explode('.', (string)$path);
             $lines = self::setPathInRange($lines, $segments, self::renderValue($value), 0, count($lines), 0);
         }
         return implode($eol, $lines);
+    }
+
+    /** 目标值与文件中已有值是否等价（忽略引号与布尔写法差异） */
+    public static function valuesEqual(mixed $current, mixed $wanted): bool
+    {
+        if ($current === null) {
+            return false;
+        }
+        $normalize = function (mixed $value): string {
+            if (is_bool($value)) {
+                return $value ? 'true' : 'false';
+            }
+            return strtolower(trim((string)$value, " \t\"'"));
+        };
+        return $normalize($current) === $normalize($wanted);
     }
 
     /**
