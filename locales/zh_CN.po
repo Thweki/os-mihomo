@@ -103,8 +103,14 @@ msgstr "控制器返回 HTTP 状态码 %s。"
 msgid "Core log"
 msgstr "内核日志"
 
+msgid "Create"
+msgstr "创建"
+
 msgid "Create a virtual network device so that traffic can be routed into mihomo without touching client configuration."
 msgstr "创建虚拟网络设备，无需改动客户端配置即可把流量导入 mihomo。"
+
+msgid "Create: the plugin creates the interface, gateway and firewall rule for this interface. Keep: you route the traffic yourself."
+msgstr "创建：由插件创建该接口对应的接口、网关与防火墙规则；不创建：路由由你自己处理。"
 
 msgid "DNS Module"
 msgstr "DNS 模块"
@@ -117,6 +123,9 @@ msgstr "服务运行期间，53 端口的 DNS 查询会被重定向到 mihomo。
 
 msgid "Direct"
 msgstr "直连"
+
+msgid "Do not create"
+msgstr "不创建"
 
 msgid "Download / Upload"
 msgstr "下载 / 上传"
@@ -163,10 +172,13 @@ msgstr "外部控制器可从网络访问"
 msgid "Failed to save the subscription settings."
 msgstr "保存订阅设置失败。"
 
+msgid "Firewall rule"
+msgstr "防火墙规则"
+
 msgid "Foreign only"
 msgstr "仅国外"
 
-msgid "Foreign: domestic traffic stays direct. All: everything through the outbound."
+msgid "Foreign: domestic traffic stays direct. All: everything through the proxy group."
 msgstr "仅国外：国内直连，国外走所选出口；全部：所有流量都走所选出口。"
 
 msgid "Group and member are required."
@@ -192,9 +204,6 @@ msgstr "TUN 设备的接口名。必须与防火墙规则引用的接口一致�
 
 msgid "Interface whose traffic goes through mihomo."
 msgstr "流量进入 mihomo 的物理接口。"
-
-msgid "Interface: the plugin also creates the interface, gateway and firewall rule on the OPNsense side."
-msgstr "自动：同时创建 OPNsense 侧的接口、网关与防火墙规则。"
 
 msgid "Invalid log level."
 msgstr "无效的日志层级。"
@@ -235,9 +244,6 @@ msgstr "Mihomo"
 msgid "Mode switched to %s."
 msgstr "已切换到 %s 模式。"
 
-msgid "Network side"
-msgstr "网络侧"
-
 msgid "No output from the configuration test."
 msgstr "配置校验没有输出。"
 
@@ -249,9 +255,6 @@ msgstr "不会生成任何规则：所有行要么未启用、要么没有源、
 
 msgid "OPNsense changes"
 msgstr "OPNsense 变更"
-
-msgid "OPNsense side"
-msgstr "网络侧"
 
 msgid "On the next reboot mihomo will take over routing as soon as it starts. Verify the configuration before you reboot."
 msgstr "下次重启后 mihomo 一启动就会接管路由。重启前请先确认配置无误。"
@@ -298,14 +301,14 @@ msgstr "代理分组"
 msgid "Proxy Suite"
 msgstr "Proxy Suite"
 
+msgid "Proxy group"
+msgstr "代理组"
+
 msgid "Proxy group \"%s\" does not exist in the current configuration file."
 msgstr "代理组 \"%s\" 不在当前配置文件里。"
 
 msgid "Proxy group name, e.g. 🇺🇸United States. Ignored when the scope is \"direct\"."
 msgstr "代理组名字，例如 🇺🇸United States；规则范围为“直连”时忽略。"
-
-msgid "Proxy group. Ignored for the direct scope."
-msgstr "代理组；直连范围下忽略。"
 
 msgid "Restart After Update"
 msgstr "更新后重启"
@@ -325,14 +328,8 @@ msgstr "重启服务？"
 msgid "Restart the service after applying"
 msgstr "应用后重启服务"
 
-msgid "Restore the most recent config.xml backup and reload the firewall?"
-msgstr "要还原本插件最近一次创建的 config.xml 备份并重新加载防火墙吗？"
-
-msgid "Roll back"
-msgstr "回滚"
-
-msgid "Roll back the OPNsense side"
-msgstr "回滚 OPNsense 网络侧"
+msgid "Restores the most recent config.xml backup created by this plugin and reloads the firewall."
+msgstr "将还原本插件最近一次创建的 config.xml 备份，并重新加载防火墙。"
 
 msgid "Save failed"
 msgstr "保存失败"
@@ -484,6 +481,9 @@ msgstr "未安装订阅脚本，无法执行订阅更新。"
 msgid "Total Downloaded / Uploaded"
 msgstr "累计下载 / 上传"
 
+msgid "Traffic exits through this group. Ignored for the direct scope."
+msgstr "流量从该代理组出去；范围为「直连」时忽略。"
+
 msgid "Traffic from these interfaces is routed into the mihomo TUN device: %s. While the service is stopped or fails to start, clients on these interfaces lose Internet access."
 msgstr "这些接口的流量会被策略路由进 mihomo 的 TUN 设备：%s。在服务停止或启动失败期间，这些接口上的客户端会断网。"
 
@@ -498,6 +498,12 @@ msgstr "无法连接 mihomo 外部控制器。"
 
 msgid "Unable to write the staging file."
 msgstr "无法写入临时文件。"
+
+msgid "Undo"
+msgstr "撤销"
+
+msgid "Undo network changes"
+msgstr "撤销网络配置"
 
 msgid "Unknown log file."
 msgstr "未知的日志文件。"
@@ -523,11 +529,11 @@ msgstr "mihomo 日志的详细程度。长期运行时建议用 \"error\" 或 \"
 msgid "Waiting for the OPNsense side: interface, gateway and policy routing rule."
 msgstr "等待同步 OPNsense 网络侧：接口、网关与策略路由规则。"
 
-msgid "Writes config.yaml, the subscription template, and (if needed) config.xml. A config.xml backup is created automatically."
-msgstr "将写入 config.yaml、订阅模板，必要时写 config.xml（自动备份）。"
+msgid "Writes the mihomo configuration and, where needed, creates the interface, gateway and firewall rule on OPNsense. config.xml is backed up first."
+msgstr "写入 mihomo 配置；需要时在 OPNsense 上创建接口、网关和防火墙规则（先备份 config.xml）。"
 
-msgid "auto-route on"
-msgstr "自动接管路由已开"
+msgid "apply to take effect"
+msgstr "应用后生效"
 
 msgid "bytes"
 msgstr "字节"
@@ -552,9 +558,6 @@ msgstr "mihomo 规则"
 
 msgid "not running"
 msgstr "未运行"
-
-msgid "not synchronized"
-msgstr "未同步"
 
 msgid "nothing bound"
 msgstr "未绑定任何接口"

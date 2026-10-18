@@ -25,16 +25,16 @@
         <id>mihomo.scope</id>
         <label>Scope</label>
         <type>dropdown</type>
-        <help>Foreign: domestic traffic stays direct. All: everything through the outbound.</help>
+        <help>Foreign: domestic traffic stays direct. All: everything through the proxy group.</help>
         <grid_view>
             <sequence>20</sequence>
         </grid_view>
     </field>
     <field>
         <id>mihomo.target</id>
-        <label>Outbound</label>
+        <label>Proxy group</label>
         <type>dropdown</type>
-        <help>Proxy group. Ignored for the direct scope.</help>
+        <help>Traffic exits through this group. Ignored for the direct scope.</help>
         <grid_view>
             <sequence>30</sequence>
         </grid_view>
@@ -52,9 +52,9 @@
     </field>
     <field>
         <id>mihomo.firewall</id>
-        <label>Network side</label>
+        <label>Firewall rule</label>
         <type>dropdown</type>
-        <help>Interface: the plugin also creates the interface, gateway and firewall rule on the OPNsense side.</help>
+        <help>Create: the plugin creates the interface, gateway and firewall rule for this interface. Keep: you route the traffic yourself.</help>
         <grid_view>
             <sequence>50</sequence>
         </grid_view>

@@ -26,6 +26,20 @@
             return $('<textarea/>').html(String(text == null ? '' : text)).text();
         }
 
+        /* 绑定状态：只说人话 */
+        function stateText(row) {
+            if (row.state === 'active') {
+                return '{{ lang._('in effect') }}';
+            }
+            if (row.state === 'pending') {
+                return '{{ lang._('apply to take effect') }}';
+            }
+            if (row.state === 'inactive') {
+                return '{{ lang._('TUN off') }}';
+            }
+            return '{{ lang._('Manual') }}';
+        }
+
         function fillSelect(el, items, keep) {
             const $el = $(el);
             const previous = keep || $el.val();
@@ -46,38 +60,13 @@
                     return;
                 }
                 const parts = (data.rows || []).map(function (row) {
-                    return row.interface + ' → ' + (row.target || 'DIRECT') + ' · '
-                        + '{{ lang._('in effect') }}';
+                    return row.interface + ' → ' + (row.target || 'DIRECT') + ' · ' + stateText(row);
                 });
-                const notes = [];
-                if (!data.tun_enabled) {
-                    notes.push('{{ lang._('TUN off') }}');
-                }
-                if (data.auto_route) {
-                    notes.push('{{ lang._('auto-route on') }}');
-                }
                 $('#routeState').text(parts.length ? parts.join('　') : '{{ lang._('nothing bound') }}')
                     .toggleClass('text-muted', parts.length === 0);
-                $('#routeNotes').text(notes.length ? '（' + notes.join('，') + '）' : '');
-                $('#routeRules').text((data.rows || []).length);
-            });
-            ajaxGet('/api/mihomo/routing/netstatus', {}, function (data, status) {
-                if (status !== 'success') {
-                    return;
-                }
-                const items = [];
-                if (data.interface) {
-                    items.push(data.interface + ' / ' + data.device);
-                }
-                if (data.gateway_present) {
-                    items.push(data.gateway_name + ' ' + (data.gateway_ip_configured || ''));
-                }
-                const names = (data.rules || []).map(function (r) { return r.interface; });
-                if (names.length) {
-                    items.push('{{ lang._('rule') }} ' + names.join(', '));
-                }
-                $('#netState').text(items.length ? items.join(' · ') : '{{ lang._('not synchronized') }}');
-                $('#netBackups').text((data.backups || []).length);
+                $('#routeNotes').text(
+                    data.tun_enabled ? '' : '（' + '{{ lang._('TUN off') }}' + '）'
+                );
             });
         }
 
@@ -157,7 +146,7 @@
                     'title': '{{ lang._('Apply') }}',
                     'message': $('<pre>').css({
                         'white-space': 'pre-wrap', 'margin': '0', 'border': '0', 'background': 'transparent'
-                    }).text(planText('{{ lang._('Writes config.yaml, the subscription template, and (if needed) config.xml. A config.xml backup is created automatically.') }}')),
+                    }).text(planText('{{ lang._('Writes the mihomo configuration and, where needed, creates the interface, gateway and firewall rule on OPNsense. config.xml is backed up first.') }}')),
                     'buttons': [
                         { 'label': '{{ lang._('Cancel') }}', 'action': function (d) { d.close(); } },
                         {
@@ -195,17 +184,17 @@
         $('#netRollbackAct').click(function () {
             BootstrapDialog.show({
                 'type': BootstrapDialog.TYPE_DANGER,
-                'title': '{{ lang._('Roll back the OPNsense side') }}',
-                'message': '{{ lang._('Restore the most recent config.xml backup and reload the firewall?') }}',
+                'title': '{{ lang._('Undo network changes') }}',
+                'message': '{{ lang._('Restores the most recent config.xml backup created by this plugin and reloads the firewall.') }}',
                 'buttons': [
                     { 'label': '{{ lang._('Cancel') }}', 'action': function (d) { d.close(); } },
                     {
-                        'label': '{{ lang._('Roll back') }}',
+                        'label': '{{ lang._('Undo') }}',
                         'cssClass': 'btn-danger',
                         'action': function (d) {
                             d.close();
                             ajaxCall('/api/mihomo/routing/netrollback', {}, function (data) {
-                                dialog('{{ lang._('Roll back the OPNsense side') }}',
+                                dialog('{{ lang._('Undo network changes') }}',
                                     (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_SUCCESS);
                                 loadState();
                             });
@@ -226,14 +215,13 @@
 
 <p class="text-muted">
     <span id="routeState"></span><span id="routeNotes"></span>
-    &nbsp;·&nbsp; {{ lang._('OPNsense side') }}: <span id="netState"></span>
 </p>
 
 <section class="grid-bottom-reserve __mt">
     <div class="alert content-box" style="display: flex; align-items: center; margin-bottom: 0;">
         <button class="btn btn-primary __mr" id="applyPolicyAct" type="button">{{ lang._('Apply') }}</button>
         <button class="btn btn-default __mr" id="previewPolicyAct" type="button">{{ lang._('Preview') }}</button>
-        <button class="btn btn-default __mr" id="netRollbackAct" type="button">{{ lang._('Roll back the OPNsense side') }}</button>
+        <button class="btn btn-default __mr" id="netRollbackAct" type="button">{{ lang._('Undo network changes') }}</button>
         <button class="btn btn-default" id="refreshPolicyAct" type="button">{{ lang._('Refresh') }}</button>
     </div>
 </section>

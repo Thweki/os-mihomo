@@ -158,8 +158,8 @@
                     <Default>manual</Default>
                     <Required>Y</Required>
                     <OptionValues>
-                        <manual>Manual</manual>
-                        <auto>Automatic</auto>
+                        <manual>Do not create</manual>
+                        <auto>Create</auto>
                     </OptionValues>
                 </firewall>
                 <descr type="DescriptionField">

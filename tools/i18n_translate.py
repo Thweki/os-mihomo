@@ -226,29 +226,33 @@ TRANSLATIONS: dict[str, str] = {
         'TUN 已关闭：规则会写入并通过校验，但暂时没有流量进入 mihomo。',
     'TUN is disabled: traffic does not reach mihomo.': 'TUN 已关闭：流量不会进入 mihomo。',
     'TUN off': 'TUN 未启用',
-    'auto-route on': '自动接管路由已开',
+    'apply to take effect': '应用后生效',
+    'Undo network changes': '撤销网络配置',
+    'Undo': '撤销',
+    'Restores the most recent config.xml backup created by this plugin and reloads the firewall.':
+        '将还原本插件最近一次创建的 config.xml 备份，并重新加载防火墙。',
+    'Writes the mihomo configuration and, where needed, creates the interface, gateway and firewall rule on OPNsense. config.xml is backed up first.':
+        '写入 mihomo 配置；需要时在 OPNsense 上创建接口、网关和防火墙规则（先备份 config.xml）。',
+    'Proxy group': '代理组',
+    'Traffic exits through this group. Ignored for the direct scope.':
+        '流量从该代理组出去；范围为「直连」时忽略。',
+    'Firewall rule': '防火墙规则',
+    'Create: the plugin creates the interface, gateway and firewall rule for this interface. Keep: you route the traffic yourself.':
+        '创建：由插件创建该接口对应的接口、网关与防火墙规则；不创建：路由由你自己处理。',
+    'Create': '创建',
+    'Do not create': '不创建',
     'nothing bound': '未绑定任何接口',
-    'not synchronized': '未同步',
     'mihomo rules': 'mihomo 规则',
     'OPNsense changes': 'OPNsense 变更',
-    'OPNsense side': '网络侧',
-    'Network side': '网络侧',
     'rule': '规则',
     'Foreign only': '仅国外',
     'Direct': '直连',
     'Interface whose traffic goes through mihomo.': '流量进入 mihomo 的物理接口。',
     'Foreign: domestic traffic stays direct. All: everything through the outbound.':
         '仅国外：国内直连，国外走所选出口；全部：所有流量都走所选出口。',
-    'Proxy group. Ignored for the direct scope.': '代理组；直连范围下忽略。',
     'Optional. Empty uses the interface network.': '可留空，默认使用接口网段。',
-    'Interface: the plugin also creates the interface, gateway and firewall rule on the OPNsense side.':
-        '自动：同时创建 OPNsense 侧的接口、网关与防火墙规则。',
     'Mihomo': 'Mihomo',
     'Proxy Suite': 'Proxy Suite',
-    'Restore the most recent config.xml backup and reload the firewall?':
-        '要还原本插件最近一次创建的 config.xml 备份并重新加载防火墙吗？',
-    'Writes config.yaml, the subscription template, and (if needed) config.xml. A config.xml backup is created automatically.':
-        '将写入 config.yaml、订阅模板，必要时写 config.xml（自动备份）。',
     'No rule would be generated: every row is disabled, has no source, or has no outbound selected.':
         '不会生成任何规则：所有行要么未启用、要么没有源、要么没有选出站。',
     'Proxy group "%s" does not exist in the current configuration file.':
@@ -269,8 +273,6 @@ TRANSLATIONS: dict[str, str] = {
     'Policy routing is active': '策略路由已启用',
     'Traffic from these interfaces is routed into the mihomo TUN device: %s. While the service is stopped or fails to start, clients on these interfaces lose Internet access.':
         '这些接口的流量会被策略路由进 mihomo 的 TUN 设备：%s。在服务停止或启动失败期间，这些接口上的客户端会断网。',
-    'Roll back the OPNsense side': '回滚 OPNsense 网络侧',
-    'Roll back': '回滚',
 }
 
 
