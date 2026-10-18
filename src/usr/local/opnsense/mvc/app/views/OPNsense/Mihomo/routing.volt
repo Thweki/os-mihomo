@@ -18,7 +18,7 @@
                 'title': title,
                 'message': $('<pre>').css({
                     'white-space': 'pre-wrap', 'margin': '0', 'border': '0', 'background': 'transparent'
-                }).text(text)
+                }).text(decode(text))
             });
         }
 
@@ -206,6 +206,100 @@
 
         $('#refreshPolicyAct').click(loadState);
         loadState();
+
+        /* ------------------------------------------------------------------ *
+         * 自检：把测试流量真的送进 TUN，看出口 IP 与命中的规则
+         * ------------------------------------------------------------------ */
+        $('#selftestAct').click(function () {
+            const $btn = $(this).prop('disabled', true);
+            ajaxCall('/api/mihomo/routing/selftest', {}, function (data) {
+                $btn.prop('disabled', false);
+                if (data['status'] !== 'ok') {
+                    dialog('{{ lang._('Self test') }}', decode(data['message'] || ''), BootstrapDialog.TYPE_DANGER);
+                    return;
+                }
+                const lines = [];
+                (data.results || []).forEach(function (r) {
+                    lines.push(r.interface + '  (' + r.source + ' → ' + (r.expected_group || 'DIRECT') + ')');
+                    if (r.foreign_ip) {
+                        lines.push('  ' + '{{ lang._('exit IP') }}' + ': ' + r.foreign_ip
+                            + '   ' + '{{ lang._('rule') }}' + ': ' + (r.foreign_rule || '—')
+                            + '   ' + '{{ lang._('Proxy group') }}' + ': ' + (r.foreign_group || '—'));
+                    } else {
+                        lines.push('  ' + (r.note || 'failed'));
+                    }
+                    if (r.domestic_rule) {
+                        lines.push('  ' + '{{ lang._('domestic') }}' + ': ' + r.domestic_rule);
+                    }
+                    lines.push('');
+                });
+                dialog('{{ lang._('Self test') }}', lines.join('\n'), BootstrapDialog.TYPE_INFO);
+            });
+        });
+
+        /* ------------------------------------------------------------------ *
+         * 配置历史
+         * ------------------------------------------------------------------ */
+        function loadHistory() {
+            ajaxGet('/api/mihomo/routing/history', {}, function (data, status) {
+                if (status !== 'success') {
+                    return;
+                }
+                const $body = $('#historyBody').empty();
+                const rows = data.rows || [];
+                if (!rows.length) {
+                    $body.append($('<tr>').append($('<td colspan="3">').addClass('text-muted').text('—')));
+                    return;
+                }
+                rows.slice(0, 5).forEach(function (row) {
+                    const stamp = row.ts.replace(/(\d{8})_(\d{6})/, '$1 $2');
+                    $body.append($('<tr>')
+                        .append($('<td>').text(stamp))
+                        .append($('<td>').text((row.size / 1024).toFixed(1) + ' KiB'))
+                        .append($('<td>')
+                            .append($('<button>').addClass('btn btn-xs btn-default __mr').text('{{ lang._('Diff') }}')
+                                .click(function () { showDiff(row.ts); }))
+                            .append($('<button>').addClass('btn btn-xs btn-default').text('{{ lang._('Restore') }}')
+                                .click(function () { confirmRestore(row.ts); }))));
+                });
+            });
+        }
+
+        function showDiff(ts) {
+            ajaxGet('/api/mihomo/routing/history_show/' + ts, {}, function (data, status) {
+                if (status !== 'success' || data['status'] !== 'ok') {
+                    return;
+                }
+                dialog('{{ lang._('Diff') }} (' + ts + ' → ' + '{{ lang._('current') }}' + ')',
+                    decode(data['diff'] || '') || '—', BootstrapDialog.TYPE_INFO);
+            });
+        }
+
+        function confirmRestore(ts) {
+            BootstrapDialog.show({
+                'type': BootstrapDialog.TYPE_WARNING,
+                'title': '{{ lang._('Restore') }}',
+                'message': decode('{{ lang._('Restore this configuration backup? The current file is backed up first and the result is validated with mihomo -t.') }}'),
+                'buttons': [
+                    { 'label': '{{ lang._('Cancel') }}', 'action': function (d) { d.close(); } },
+                    {
+                        'label': '{{ lang._('Restore') }}',
+                        'cssClass': 'btn-primary',
+                        'action': function (d) {
+                            d.close();
+                            ajaxCall('/api/mihomo/routing/history_restore', { 'ts': ts }, function (data) {
+                                dialog('{{ lang._('Restore') }}', (data['messages'] || []).join('\n'),
+                                    data['status'] === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER);
+                                loadHistory();
+                            });
+                        }
+                    }
+                ]
+            });
+        }
+
+        $('#historyRefreshAct').click(loadHistory);
+        loadHistory();
     });
 </script>
 
@@ -217,10 +311,30 @@
     <span id="routeState"></span><span id="routeNotes"></span>
 </p>
 
+<div class="content-box __mb">
+    <header class="content-box-header">
+        <h3>{{ lang._('Configuration history') }}</h3>
+    </header>
+    <table class="table table-condensed table-hover">
+        <thead>
+        <tr>
+            <th style="width: 30%;">{{ lang._('Time') }}</th>
+            <th style="width: 20%;">{{ lang._('Size') }}</th>
+            <th>{{ lang._('Action') }}</th>
+        </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+    </table>
+    <div class="text-right">
+        <button class="btn btn-xs btn-default" id="historyRefreshAct" type="button">{{ lang._('Refresh') }}</button>
+    </div>
+</div>
+
 <section class="grid-bottom-reserve __mt">
     <div class="alert content-box" style="display: flex; align-items: center; margin-bottom: 0;">
         <button class="btn btn-primary __mr" id="applyPolicyAct" type="button">{{ lang._('Apply') }}</button>
         <button class="btn btn-default __mr" id="previewPolicyAct" type="button">{{ lang._('Preview') }}</button>
+        <button class="btn btn-default __mr" id="selftestAct" type="button">{{ lang._('Self test') }}</button>
         <button class="btn btn-default __mr" id="netRollbackAct" type="button">{{ lang._('Undo network changes') }}</button>
         <button class="btn btn-default" id="refreshPolicyAct" type="button">{{ lang._('Refresh') }}</button>
     </div>

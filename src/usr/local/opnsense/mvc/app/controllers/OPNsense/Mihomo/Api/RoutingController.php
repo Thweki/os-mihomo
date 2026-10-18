@@ -371,6 +371,143 @@ class RoutingController extends ApiMutableModelControllerBase
     }
 
     /* ------------------------------------------------------------------ *
+     * 绑定自检 / 配置历史
+     * ------------------------------------------------------------------ */
+
+    /** 绑定自检：把测试流量真的送进 TUN，回报出口 IP 与命中的规则 */
+    public function selftestAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['status' => 'failed', 'message' => gettext('POST required.')];
+        }
+        $subnets = Config::interfaceSubnets();
+        $tests = [];
+        foreach ($this->collectRows(true) as $row) {
+            if ($row['enabled'] === '0' || $row['firewall'] !== 'auto') {
+                continue;
+            }
+            $srcIp = Config::interfaceIp($row['interface']);
+            if ($srcIp === '') {
+                continue;
+            }
+            $tests[] = [
+                'interface' => $row['interface'],
+                'source' => $row['source'] !== '' ? $row['source'] : ($subnets[$row['interface']] ?? ''),
+                'src_ip' => $srcIp,
+                'target' => $row['target'],
+            ];
+        }
+        if ($tests === []) {
+            return [
+                'status' => 'failed',
+                'message' => gettext('Nothing to test: no enabled row requests a firewall rule.'),
+            ];
+        }
+
+        $staging = null;
+        try {
+            $staging = $this->writeStaging(['tests' => $tests]);
+            return $this->configdJson('selftest', [$staging]);
+        } catch (\Throwable $e) {
+            return ['status' => 'failed', 'message' => $e->getMessage()];
+        } finally {
+            if ($staging !== null) {
+                @unlink($staging);
+            }
+        }
+    }
+
+    /** 配置历史：列出时间戳备份 */
+    public function historyAction()
+    {
+        $files = glob(Config::FILE . '.bak.*') ?: [];
+        rsort($files);
+        $rows = [];
+        $current = is_file(Config::FILE) ? filesize(Config::FILE) : 0;
+        foreach (array_slice($files, 0, 20) as $file) {
+            $rows[] = [
+                'ts' => str_replace(Config::FILE . '.bak.', '', $file),
+                'size' => filesize($file),
+                'current_size' => $current,
+            ];
+        }
+        return ['status' => 'ok', 'rows' => $rows, 'current_ts' => date('Ymd_His')];
+    }
+
+    /** 配置历史：某个备份的内容与差异 */
+    public function historyShowAction($ts = '')
+    {
+        $file = $this->backupPath($ts);
+        if ($file === null) {
+            return ['status' => 'failed', 'message' => gettext('Backup not found.')];
+        }
+        $old = (string)file_get_contents($file);
+        $new = is_file(Config::FILE) ? (string)file_get_contents(Config::FILE) : '';
+        return [
+            'status' => 'ok',
+            'ts' => $ts,
+            'content' => $old,
+            'diff' => $this->lineDiff($old, $new),
+        ];
+    }
+
+    /** 配置历史：从备份还原（校验后落盘，当前文件自动备份） */
+    public function historyRestoreAction()
+    {
+        $result = ['status' => 'failed', 'messages' => []];
+        if (!$this->request->isPost()) {
+            $result['message'] = gettext('POST required.');
+            return $result;
+        }
+        $this->throwReadOnly();
+        $ts = (string)$this->request->getPost('ts', 'string', '');
+        $file = $this->backupPath($ts);
+        if ($file === null) {
+            $result['message'] = gettext('Backup not found.');
+            return $result;
+        }
+        $backend = new Backend();
+        $output = trim((string)$backend->configdpRun('mihomo config-restore', [$file]));
+        $result['status'] = stripos($output, 'Restored from') !== false ? 'ok' : 'failed';
+        $result['messages'][] = $output === '' ? gettext('(no output)') : $output;
+        return $result;
+    }
+
+    private function backupPath(string $ts): ?string
+    {
+        if (!preg_match('/^[0-9_]{8,20}$/', $ts)) {
+            return null;
+        }
+        $file = Config::FILE . '.bak.' . $ts;
+        return is_file($file) ? $file : null;
+    }
+
+    /** 极简逐行差异（给界面看，不追求 patch 精度） */
+    private function lineDiff(string $old, string $new): string
+    {
+        $a = preg_split("/\r\n|\n|\r/", $old) ?: [];
+        $b = preg_split("/\r\n|\n|\r/", $new) ?: [];
+        $lines = [];
+        $shown = 0;
+        $max = max(count($a), count($b));
+        for ($i = 0; $i < $max && $shown < 60; $i++) {
+            $left = $a[$i] ?? null;
+            $right = $b[$i] ?? null;
+            if ($left === $right) {
+                continue;
+            }
+            if ($left !== null && !in_array($left, $b, true)) {
+                $lines[] = sprintf('%-4d - %s', $i + 1, $left);
+            }
+            if ($right !== null && !in_array($right, $a, true)) {
+                $lines[] = sprintf('%-4d + %s', $i + 1, $right);
+            }
+            $shown++;
+        }
+        return implode("\n", $lines);
+    }
+
+    /* ------------------------------------------------------------------ *
      * 内部：从模型收集策略行
      * ------------------------------------------------------------------ */
 

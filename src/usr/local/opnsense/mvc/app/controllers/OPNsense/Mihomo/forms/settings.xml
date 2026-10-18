@@ -28,6 +28,12 @@
         <type>checkbox</type>
         <help>Let local clients use the proxy ports directly.</help>
     </field>
+    <field>
+        <id>mihomo.general.sniffer</id>
+        <label>Domain sniffing</label>
+        <type>checkbox</type>
+        <help>Recover domains from TLS SNI. Required for domain based rules on routed traffic.</help>
+    </field>
 
     <field>
         <type>header</type>

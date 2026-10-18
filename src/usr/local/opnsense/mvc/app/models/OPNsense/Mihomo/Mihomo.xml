@@ -48,6 +48,11 @@
                 <Default>0</Default>
                 <Required>Y</Required>
             </allowLan>
+            <sniffer type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Recover domains from TLS SNI, required for domain based rules on routed traffic.</ValidationMessage>
+            </sniffer>
         </general>
         <tun>
             <enabled type="BooleanField">

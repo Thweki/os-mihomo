@@ -172,12 +172,26 @@ TRANSLATIONS: dict[str, str] = {
         'TUN 已关闭：规则会写入并通过校验，但暂时没有流量进入 mihomo。',
     'TUN is disabled: traffic does not reach mihomo.': 'TUN 已关闭：流量不会进入 mihomo。',
     'TUN off': 'TUN 未启用',
+    'Nothing to test: no enabled row requests a firewall rule.': '无可自检项：没有启用且要求创建防火墙规则的行。',
+    'Backup not found.': '备份不存在。',
+    'Restore this configuration backup? The current file is backed up first and the result is validated with mihomo -t.':
+        '要用这份备份覆盖当前配置吗？当前文件会先自动备份，结果会用 mihomo -t 校验。',
+    'Configuration history': '配置历史',
+    'exit IP': '出口 IP',
+    'domestic': '国内',
+    'Diff': '差异',
+    'current': '当前',
     # ---- 表单短句（设置页 / 模型校验）----
     'Start the service at boot.': '开机时启动服务。',
     'Log verbosity. Use error or silent for long term operation.': '日志级别；长期运行建议 error 或 silent。',
     'rule: follow the routing rules. global: everything through the selected proxy. direct: no proxy.':
         'rule：按规则分流；global：全部走所选节点；direct：全部直连。',
     'Let local clients use the proxy ports directly.': '允许局域网客户端直接使用代理端口。',
+    'Domain sniffing': '域名嗅探',
+    'Recover domains from TLS SNI. Required for domain based rules on routed traffic.':
+        '从 TLS SNI 还原域名；被路由的流量要用域名规则时必须开启。',
+    'Recover domains from TLS SNI, required for domain based rules on routed traffic.':
+        '从 TLS SNI 还原域名；被路由的流量要用域名规则时必须开启。',
     'Controller listen address. Keep 127.0.0.1 unless you really need remote access.':
         '控制器监听地址，一般保持 127.0.0.1。',
     'Controller port.': '控制器端口。',

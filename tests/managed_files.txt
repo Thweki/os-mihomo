@@ -3,6 +3,7 @@
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/RoutingController.php
 /usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt
 /usr/local/opnsense/scripts/mihomo/policy_apply.php
+/usr/local/opnsense/scripts/mihomo/selftest.php
 usr/bin/mihomo_sub
 usr/local/etc/inc/plugins.inc.d/mihomo.inc
 usr/local/etc/newsyslog.conf.d/mihomo.conf

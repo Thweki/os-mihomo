@@ -43,6 +43,9 @@ msgstr "应用失败"
 msgid "Automatic Route"
 msgstr "自动路由"
 
+msgid "Backup not found."
+msgstr "备份不存在。"
+
 msgid "Bind Address"
 msgstr "绑定地址"
 
@@ -75,6 +78,9 @@ msgstr "未找到配置文件。"
 
 msgid "Configuration file updated and validated."
 msgstr "配置文件已更新并通过校验。"
+
+msgid "Configuration history"
+msgstr "配置历史"
 
 msgid "Configuration saved"
 msgstr "配置已保存"
@@ -127,11 +133,17 @@ msgstr "设备 MTU。"
 msgid "Device name, must match the firewall rules (default tun_mihomo)."
 msgstr "设备名，需与防火墙规则一致（默认 tun_mihomo）。"
 
+msgid "Diff"
+msgstr "差异"
+
 msgid "Direct"
 msgstr "直连"
 
 msgid "Do not create"
 msgstr "不创建"
+
+msgid "Domain sniffing"
+msgstr "域名嗅探"
 
 msgid "Download / Upload"
 msgstr "下载 / 上传"
@@ -247,6 +259,9 @@ msgstr "配置中未定义代理分组。"
 msgid "No rule would be generated: every row is disabled, has no source, or has no outbound selected."
 msgstr "不会生成任何规则：所有行要么未启用、要么没有源、要么没有选出站。"
 
+msgid "Nothing to test: no enabled row requests a firewall rule."
+msgstr "无可自检项：没有启用且要求创建防火墙规则的行。"
+
 msgid "OPNsense changes"
 msgstr "OPNsense 变更"
 
@@ -298,6 +313,12 @@ msgstr "代理组 \"%s\" 不在当前配置文件里。"
 msgid "Proxy group name."
 msgstr "代理组名。"
 
+msgid "Recover domains from TLS SNI, required for domain based rules on routed traffic."
+msgstr "从 TLS SNI 还原域名；被路由的流量要用域名规则时必须开启。"
+
+msgid "Recover domains from TLS SNI. Required for domain based rules on routed traffic."
+msgstr "从 TLS SNI 还原域名；被路由的流量要用域名规则时必须开启。"
+
 msgid "Restart After Update"
 msgstr "更新后重启"
 
@@ -312,6 +333,9 @@ msgstr "更新成功后重启服务。"
 
 msgid "Restart the service after applying"
 msgstr "应用后重启服务"
+
+msgid "Restore this configuration backup? The current file is backed up first and the result is validated with mihomo -t."
+msgstr "要用这份备份覆盖当前配置吗？当前文件会先自动备份，结果会用 mihomo -t 校验。"
 
 msgid "Restores the most recent config.xml backup created by this plugin and reloads the firewall."
 msgstr "将还原本插件最近一次创建的 config.xml 备份，并重新加载防火墙。"
@@ -528,6 +552,15 @@ msgstr "应用后生效"
 
 msgid "bytes"
 msgstr "字节"
+
+msgid "current"
+msgstr "当前"
+
+msgid "domestic"
+msgstr "国内"
+
+msgid "exit IP"
+msgstr "出口 IP"
 
 msgid "external-controller is bound to %s. Anyone who can reach that address and knows the secret can reconfigure the proxy. Bind it to 127.0.0.1 — this WebGUI talks to the controller over the loopback interface only."
 msgstr "external-controller 绑定在 %s。任何能访问该地址并知道密钥的人都能改代理配置。建议改为 127.0.0.1 —— 本 WebGUI 只通过回环接口与控制器通信。"

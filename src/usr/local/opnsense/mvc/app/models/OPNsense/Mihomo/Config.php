@@ -195,11 +195,36 @@ class Config
             return (string)$value;
         }
         $value = (string)$value;
+        /* 已经是 YAML 流式集合（如 [443, 8443]）：原样输出，不能再加引号 */
+        if (str_starts_with($value, '[') && str_ends_with($value, ']')) {
+            return $value;
+        }
         /* 需要引号的情形：空串 / 以特殊字符开头 / 含 ": " 或 " #" / 首尾空白 */
         if ($value === '' || preg_match('/^[\s#\[\]{}&*!|>\'"%@`]/', $value) || preg_match('/:\s|#\s|^\s|\s$/', $value)) {
             return '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $value) . '"';
         }
         return $value;
+    }
+
+    /**
+     * 域名嗅探（sniffer）对应的配置键。
+     * 仅写 `enable: true` 不够 —— 嗅探端口表必须显式给出，否则域名类规则对路由流量不生效。
+     */
+    public static function snifferKeys(bool $enabled): array
+    {
+        if (!$enabled) {
+            return ['sniffer.enable' => false];
+        }
+        return [
+            'sniffer.enable' => true,
+            'sniffer.parse-pure-ip' => true,
+            'sniffer.force-dns-mapping' => true,
+            'sniffer.override-destination' => true,
+            'sniffer.sniff.HTTP.ports' => '[80, 8080-8880]',
+            'sniffer.sniff.HTTP.override-destination' => true,
+            'sniffer.sniff.TLS.ports' => '[443, 8443]',
+            'sniffer.sniff.QUIC.ports' => '[443, 8443]',
+        ];
     }
 
     /**
@@ -567,6 +592,23 @@ class Config
         $path = $file ?? self::file();
         $text = @file_get_contents($path);
         return $text === false ? '' : $text;
+    }
+
+    /**
+     * 某个接口的 IPv4 地址（自检时用它作为源地址，让流量命中该网段的规则）
+     */
+    public static function interfaceIp(string $ifname): string
+    {
+        try {
+            $config = \OPNsense\Core\Config::getInstance()->object();
+            if (isset($config->interfaces->$ifname)) {
+                $ip = trim((string)$config->interfaces->$ifname->ipaddr);
+                return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? $ip : '';
+            }
+        } catch (\Throwable $e) {
+            /* 取不到就当没有 */
+        }
+        return '';
     }
 
     /**

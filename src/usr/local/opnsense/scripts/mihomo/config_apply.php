@@ -71,6 +71,49 @@ switch ($action) {
         echo $out === '' ? ($ok ? "Configuration is valid.\n" : "Configuration is invalid.\n") : $out . "\n";
         exit($ok ? 0 : 1);
 
+    case 'restore':
+        /* 从时间戳备份还原：先校验备份，再备份当前文件，最后原子安装 */
+        if (!preg_match('@^' . preg_quote($CONFIG_DIR, '@') . '/config\.yaml\.bak\.[0-9_]+$@', $target)) {
+            fail('invalid backup path', 2);
+        }
+        if (!is_file($target) || is_link($target)) {
+            fail('backup file is not a regular file', 2);
+        }
+        $tmp = tempnam('/tmp', 'mihomo-');
+        if ($tmp === false || !@copy($target, $tmp)) {
+            fail('unable to stage the backup for validation', 3);
+        }
+        chmod($tmp, 0600);
+        [$ok, $out] = validate_config($tmp, $CONFIG_DIR);
+        if (!$ok) {
+            @unlink($tmp);
+            echo "Backup validation failed:\n" . $out . "\n";
+            exit(1);
+        }
+        $backup = $CONFIG_FILE . '.bak.' . date('Ymd_His');
+        if (is_file($CONFIG_FILE) && !@copy($CONFIG_FILE, $backup)) {
+            @unlink($tmp);
+            fail('unable to create a backup of the current configuration', 3);
+        }
+        chmod($backup, 0644);
+        [$rc, $out2] = run_command(sprintf(
+            '/usr/bin/install -m 0644 -o root -g wheel %s %s',
+            escapeshellarg($tmp),
+            escapeshellarg($CONFIG_FILE)
+        ));
+        @unlink($tmp);
+        if ($rc !== 0) {
+            echo "Failed to install the configuration file:\n" . $out2 . "\n";
+            exit(3);
+        }
+        echo sprintf(
+            "Restored from %s.\nPrevious file kept as %s.\n%s\n",
+            basename($target),
+            basename($backup),
+            $out
+        );
+        exit(0);
+
     case 'check':
     case 'install':
         /* ---- 输入校验：必须是 www 在 /tmp 下生成的临时文件 ---- */

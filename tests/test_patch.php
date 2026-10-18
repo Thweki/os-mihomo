@@ -240,5 +240,29 @@ check('只扫 proxy-groups 段', !in_array('MATCH,DIRECT', Config::policyTargets
 @unlink($tmpB);
 @unlink($tmpF);
 
+echo "\n=== 13. 流式列表与 sniffer 键 ===\n";
+check('流式列表原样输出', Config::renderValue('[443, 8443]') === '[443, 8443]', Config::renderValue('[443, 8443]'));
+$sniff = Config::snifferKeys(true);
+check(
+    'sniffer 键齐全（含嗅探端口）',
+    count($sniff) === 8 && $sniff['sniffer.enable'] === true && $sniff['sniffer.sniff.TLS.ports'] === '[443, 8443]',
+    (string)count($sniff)
+);
+check('关闭时只写 enable', Config::snifferKeys(false) === ['sniffer.enable' => false]);
+$plain = "log-level: info\ndns:\n  enable: true\n";
+$patchedSn = Config::patchKeys($plain, Config::snifferKeys(true));
+check('能从零建出嵌套 sniffer 结构', str_contains($patchedSn, 'sniffer:') && str_contains($patchedSn, 'ports: [443, 8443]'), $patchedSn);
+$tmpSn = writeTemp($patchedSn);
+if (is_file('/usr/local/bin/mihomo')) {
+    $o = [];
+    $r = 0;
+    exec('/usr/local/bin/mihomo -t -d /usr/local/etc/mihomo -f ' . escapeshellarg($tmpSn) . ' 2>&1', $o, $r);
+    check('mihomo -t 接受生成的 sniffer 块', $r === 0, implode(' | ', array_slice($o, -2)));
+}
+@unlink($tmpSn);
+/* 幂等：已存在完整块时再次应用不应改变字节 */
+$again2 = Config::patchKeys($patchedSn, Config::snifferKeys(true));
+check('sniffer 应用幂等', $again2 === $patchedSn);
+
 echo "\n=== 汇总: {$failures} 个失败 ===\n";
 exit($failures === 0 ? 0 : 1);

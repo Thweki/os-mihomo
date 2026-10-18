@@ -64,7 +64,7 @@ class SettingsController extends ApiMutableModelControllerBase
             'dns.enable' => $flag($mdl->dns->enabled),
             'dns.listen' => (string)$mdl->dns->listen,
             'dns.enhanced-mode' => (string)$mdl->dns->enhancedMode,
-        ];
+        ] + Config::snifferKeys($flag($mdl->general->sniffer));
     }
 
     /**
