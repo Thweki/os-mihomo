@@ -89,6 +89,10 @@ def collect() -> dict[str, list[str]]:
                             add(re.sub(r'\s+', ' ', label).strip(), rel)
                         continue
                     add(value, rel)
+                # 菜单标签（由核心渲染并翻译）
+                if path.name == 'Menu.xml':
+                    for label in re.findall(r'VisibleName="([^"]+)"', text):
+                        add(label, rel)
 
     return found
 

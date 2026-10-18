@@ -144,9 +144,9 @@
                     <Default>foreign</Default>
                     <Required>Y</Required>
                     <OptionValues>
-                        <foreign>Only foreign traffic</foreign>
-                        <all>All traffic</all>
-                        <direct>Direct, no proxy</direct>
+                        <foreign>Foreign only</foreign>
+                        <all>All</all>
+                        <direct>Direct</direct>
                     </OptionValues>
                 </scope>
                 <target type="TextField">

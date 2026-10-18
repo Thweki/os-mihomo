@@ -16,49 +16,47 @@
         <id>mihomo.interface</id>
         <label>Interface</label>
         <type>dropdown</type>
-        <help>Interface whose clients should be routed into mihomo. Interfaces without a rule here never reach mihomo at all.</help>
+        <help>Interface whose traffic goes through mihomo.</help>
         <grid_view>
             <sequence>10</sequence>
-        </grid_view>
-    </field>
-    <field>
-        <id>mihomo.source</id>
-        <label>Source</label>
-        <type>text</type>
-        <help>Leave empty to use the interface network. A CIDR (192.168.1.0/24) or an alias name is also accepted.</help>
-        <advanced>true</advanced>
-        <grid_view>
-            <sequence>20</sequence>
-            <visible>false</visible>
         </grid_view>
     </field>
     <field>
         <id>mihomo.scope</id>
         <label>Scope</label>
         <type>dropdown</type>
-        <help>Which traffic of this source should use the selected outbound.</help>
+        <help>Foreign: domestic traffic stays direct. All: everything through the outbound.</help>
         <grid_view>
-            <sequence>25</sequence>
+            <sequence>20</sequence>
         </grid_view>
     </field>
     <field>
         <id>mihomo.target</id>
         <label>Outbound</label>
         <type>dropdown</type>
-        <help>Proxy group the traffic should egress through. Ignored when the scope is "direct".</help>
+        <help>Proxy group. Ignored for the direct scope.</help>
         <grid_view>
             <sequence>30</sequence>
         </grid_view>
     </field>
     <field>
-        <id>mihomo.firewall</id>
-        <label>Policy Routing</label>
-        <type>dropdown</type>
-        <help>Auto: the plugin also creates the OPNsense side (interface, gateway, firewall rule) after you confirm a dialog. Manual: only the mihomo rules are written, you route the traffic yourself.</help>
+        <id>mihomo.source</id>
+        <label>Source</label>
+        <type>text</type>
+        <help>Optional. Empty uses the interface network.</help>
         <advanced>true</advanced>
         <grid_view>
-            <sequence>35</sequence>
+            <sequence>40</sequence>
             <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>mihomo.firewall</id>
+        <label>Network side</label>
+        <type>dropdown</type>
+        <help>Interface: the plugin also creates the interface, gateway and firewall rule on the OPNsense side.</help>
+        <grid_view>
+            <sequence>50</sequence>
         </grid_view>
     </field>
     <field>
@@ -66,7 +64,7 @@
         <label>Description</label>
         <type>text</type>
         <grid_view>
-            <sequence>40</sequence>
+            <sequence>60</sequence>
         </grid_view>
     </field>
 </form>

@@ -220,36 +220,35 @@ TRANSLATIONS: dict[str, str] = {
     'Policy Routing': '路由策略',
     'Edit Policy Rule': '编辑路由策略',
     'Scope': '规则范围',
-    'Only foreign traffic': '仅国外流量',
-    'All traffic': '全部流量',
-    'Direct, no proxy': '直连（不走代理）',
-    'Effective state': '当前生效状态',
-    'Notes': '说明',
     'Preview': '预览',
-    'Changes': '变更',
-    'on': '开',
-    'present': '已存在',
-    'absent': '不存在',
     'in effect': '生效中',
-    'waiting for the OPNsense side': '待同步网络侧',
-    'not reached by mihomo': '未经过 mihomo',
-    'manual routing': '手动路由',
-    'not in the current configuration': '不在当前配置中',
-    '(no rule)': '（无规则）',
-    'Apply routing policy': '应用路由策略',
-    'Routing policy applied': '路由策略已应用',
-    'The following mihomo rules will be written:': '将写入以下 mihomo 规则：',
-    'Target files:': '目标文件：',
-    'config.yaml snippet (managed block):': 'config.yaml 片段（受管区块）：',
-    'Bind a physical interface to mihomo: its traffic is policy routed into the TUN device, while interfaces without a row here are never routed into mihomo.':
-        '把一个物理接口绑给 mihomo：它的流量会被策略路由进 TUN 设备；这里没有出现的接口，流量完全不会进入 mihomo。',
-    'TUN is currently disabled, so these rules are stored but no traffic reaches mihomo yet.':
-        'TUN 当前关闭：规则会被写入并通过校验，但暂时没有流量会进入 mihomo。',
     'TUN is disabled: these rules are written and validated, but no traffic reaches mihomo yet.':
         'TUN 已关闭：规则会写入并通过校验，但暂时没有流量进入 mihomo。',
     'TUN is disabled: traffic does not reach mihomo.': 'TUN 已关闭：流量不会进入 mihomo。',
-    'No policy rule yet. Interfaces without a rule never reach mihomo.':
-        '还没有策略行。没有规则的接口永远不会进入 mihomo。',
+    'TUN off': 'TUN 未启用',
+    'auto-route on': '自动接管路由已开',
+    'nothing bound': '未绑定任何接口',
+    'not synchronized': '未同步',
+    'mihomo rules': 'mihomo 规则',
+    'OPNsense changes': 'OPNsense 变更',
+    'OPNsense side': '网络侧',
+    'Network side': '网络侧',
+    'rule': '规则',
+    'Foreign only': '仅国外',
+    'Direct': '直连',
+    'Interface whose traffic goes through mihomo.': '流量进入 mihomo 的物理接口。',
+    'Foreign: domestic traffic stays direct. All: everything through the outbound.':
+        '仅国外：国内直连，国外走所选出口；全部：所有流量都走所选出口。',
+    'Proxy group. Ignored for the direct scope.': '代理组；直连范围下忽略。',
+    'Optional. Empty uses the interface network.': '可留空，默认使用接口网段。',
+    'Interface: the plugin also creates the interface, gateway and firewall rule on the OPNsense side.':
+        '自动：同时创建 OPNsense 侧的接口、网关与防火墙规则。',
+    'Mihomo': 'Mihomo',
+    'Proxy Suite': 'Proxy Suite',
+    'Restore the most recent config.xml backup and reload the firewall?':
+        '要还原本插件最近一次创建的 config.xml 备份并重新加载防火墙吗？',
+    'Writes config.yaml, the subscription template, and (if needed) config.xml. A config.xml backup is created automatically.':
+        '将写入 config.yaml、订阅模板，必要时写 config.xml（自动备份）。',
     'No rule would be generated: every row is disabled, has no source, or has no outbound selected.':
         '不会生成任何规则：所有行要么未启用、要么没有源、要么没有选出站。',
     'Proxy group "%s" does not exist in the current configuration file.':
@@ -261,53 +260,17 @@ TRANSLATIONS: dict[str, str] = {
     'Manual: make sure the interface is policy routed into the TUN device.':
         '手动模式：请自行确保该接口的策略路由指向 TUN 设备。',
     'Policy routing is in place.': '策略路由已就位。',
-    'Automatic route takeover is enabled: every interface ends up in the TUN device.':
-        '已启用自动接管路由：所有接口的流量都会进入 TUN 设备。',
-    'Policy routing gateway': '策略路由网关',
-    'Policy routing firewall rule': '策略路由防火墙规则',
-    'Interface whose clients should be routed into mihomo. Interfaces without a rule here never reach mihomo at all.':
-        '希望其客户端流量进入 mihomo 的接口。这里没有规则的接口，其流量完全不会进入 mihomo。',
-    'Which traffic of this source should use the selected outbound.': '该来源的哪些流量使用所选出站。',
-    'Proxy group the traffic should egress through. Ignored when the scope is "direct".':
-        '流量出口所用的代理组；规则范围为“直连”时忽略此项。',
-    'Leave empty to use the interface network. A CIDR (192.168.1.0/24) or an alias name is also accepted.':
-        '留空则使用接口网段；也可以填 CIDR（如 192.168.1.0/24）或别名。',
     'Optional. Leave empty to use the interface network, or enter a CIDR like 192.168.1.0/24.':
         '可留空以使用接口网段，或填写 CIDR（如 192.168.1.0/24）。',
     'Pick an interface, e.g. lan or opt2.': '请选择接口，例如 lan 或 opt2。',
     'Proxy group name, e.g. 🇺🇸United States. Ignored when the scope is "direct".':
         '代理组名字，例如 🇺🇸United States；规则范围为“直连”时忽略。',
-    'Auto: the plugin also creates the OPNsense side (interface, gateway, firewall rule) after you confirm a dialog. Manual: only the mihomo rules are written, you route the traffic yourself.':
-        '自动：确认弹窗后，插件还会创建 OPNsense 侧配置（接口、网关、防火墙规则）。手动：只写 mihomo 规则，路由由你自己处理。',
-
     # ---- 路由策略网络侧（P12-2）----
     'Policy routing is active': '策略路由已启用',
     'Traffic from these interfaces is routed into the mihomo TUN device: %s. While the service is stopped or fails to start, clients on these interfaces lose Internet access.':
         '这些接口的流量会被策略路由进 mihomo 的 TUN 设备：%s。在服务停止或启动失败期间，这些接口上的客户端会断网。',
-    'OPNsense side (interface, gateway, firewall)': 'OPNsense 网络侧（接口 / 网关 / 防火墙）',
-    'Traffic only reaches mihomo when the firewall policy routes the interface into the TUN device. Only interfaces whose policy routing is set to "Automatic" are touched; all other interfaces keep their normal routing.':
-        '只有当防火墙把接口策略路由进 TUN 设备后，流量才会到达 mihomo。只有「策略路由=自动」的接口会被处理，其它接口保持原本的路由方式。',
-    'Synchronize OPNsense side': '同步 OPNsense 网络侧',
-    'Preview changes': '预览变更',
     'Roll back the OPNsense side': '回滚 OPNsense 网络侧',
-    'OPNsense side synchronized': 'OPNsense 网络侧已同步',
-    'Planned OPNsense changes': '计划的 OPNsense 变更',
-    'The following OPNsense changes will be made:': '将进行以下 OPNsense 变更：',
-    'This modifies /conf/config.xml (interface, gateway, firewall rule) and reloads the firewall. Interfaces without a row are not touched. A backup of config.xml is created automatically and can be rolled back from this page.':
-        '这会修改 /conf/config.xml（接口、网关、防火墙规则）并重新加载防火墙。表里没有的接口不会被改动。config.xml 会自动备份，可在本页一键回滚。',
-    'Apply and reload the firewall': '应用并重新加载防火墙',
-    'Restore the most recent config.xml backup created by this plugin and reload the firewall?':
-        '要还原本插件最近一次创建的 config.xml 备份并重新加载防火墙吗？',
     'Roll back': '回滚',
-    'Rolled back': '已回滚',
-    'TUN device': 'TUN 设备',
-    'Interface assignment': '接口分配',
-    'Policy routing rules': '策略路由规则',
-    'config.xml backups': 'config.xml 备份',
-    'TUN peer address used as gateway': '用作网关的 TUN 对端地址',
-    'up': '已启用',
-    'down': '未就绪',
-    'nothing to do': '无需改动',
 }
 
 
@@ -322,6 +285,8 @@ def main() -> int:
     parser.add_argument('--out', required=True, help='输出的 .po 路径')
     parser.add_argument('--missing', default='', help='待补清单（只允许翻译其中的词条，避免覆盖核心译文）')
     parser.add_argument('--force', action='store_true', help='覆盖已存在的 .po')
+    parser.add_argument('--prune', action='store_true',
+                        help='删除本文件中「源码里已不存在」的词条（界面改版后清理废弃文案）')
     args = parser.parse_args()
 
     out = Path(args.out)
@@ -330,6 +295,15 @@ def main() -> int:
         return 0
 
     known = set(json.loads(Path(args.strings).read_text(encoding='utf-8')))
+
+    if args.prune:
+        removed = prune_stale(Path(__file__), known)
+        print(f'pruned {len(removed)} stale entries')
+        for key in removed:
+            print(f'  - {key[:80]!r}')
+        if removed:
+            print('重新运行（不带 --prune）以生成 .po')
+        return 0
 
     # 宽松解析：允许用「前 50 字符」唯一匹配，规避控制台复制长句时标点（如破折号）失真
     resolved: dict[str, str] = {}
@@ -391,6 +365,49 @@ def main() -> int:
 
 def po_escape(text: str) -> str:
     return text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\t', '\\t')
+
+
+def prune_stale(path, known: set) -> list:
+    """删除本文件中「源码里已不存在」的词条（按 ast 行号精确定位，保留其余内容与注释）
+
+    注意：本文件的词条允许写成「长句的前 50 字符」（生成时做前缀匹配），
+    因此只要某个源码字符串以该词条开头，就认为它仍在使用，不能删除。
+    """
+    import ast
+
+    def still_used(key: str) -> bool:
+        if key in known:
+            return True
+        prefix = key[:50]
+        return any(known_key.startswith(prefix) for known_key in known)
+
+    text = path.read_text(encoding='utf-8')
+    tree = ast.parse(text)
+    spans = []
+    for node in tree.body:
+        target = None
+        value = None
+        if isinstance(node, ast.AnnAssign):
+            target, value = node.target, node.value
+        elif isinstance(node, ast.Assign):
+            target, value = (node.targets[0] if node.targets else None), node.value
+        if getattr(target, 'id', '') == 'TRANSLATIONS' and isinstance(value, ast.Dict):
+            for k, v in zip(value.keys, value.values):
+                key = k.value
+                if not still_used(key):
+                    spans.append((k.lineno, v.end_lineno, key))
+
+    lines = text.splitlines(keepends=True)
+    drop = set()
+    for start, end, _ in spans:
+        for number in range(start, end + 1):
+            drop.add(number)
+        if end < len(lines) and lines[end].strip() == '':
+            drop.add(end + 1)
+
+    kept = [line for index, line in enumerate(lines, start=1) if index not in drop]
+    path.write_text(''.join(kept), encoding='utf-8', newline='\n')
+    return [key for _, _, key in spans]
 
 
 if __name__ == '__main__':
