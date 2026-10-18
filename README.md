@@ -38,9 +38,35 @@ https://github.com/Vincent-Loeng/clash-meta/releases/download/v1.19.31-vincent/c
 1. 当前仅支持 x86_64 / amd64 平台。
 2. 安装完成，无需添加接口、防火墙规则，只需修改节点信息即可使用。
 3. 安装调试完成后，将日志层级调整为 `error`，避免长期运行产生过多日志。
-4. 默认配置会开启 Clash API，可通过 `http://LAN_IP:9090/ui` 访问仪表盘查看代理连接信息。
+4. **仪表盘已内嵌到 OPNsense WebGUI**：进入 `VPN > Proxy Suite > Mihomo` 即可查看代理连接、
+   切换节点、改配置、看日志。**不再需要**访问 `http://LAN_IP:9090/ui`（第三方 Web 面板），
+   浏览器也不需要、不应该直连 mihomo 的控制器端口。
 5. 修改配置不要改动config.yaml文件中tun接口名称（tun_mihomo），否则会影响安装程序生成的默认防火墙规则。
 6. 如果局域网客户端使用 OPNsense 的 LAN 地址作为 DNS，Unbound 会在请求到达 mihomo 之前在本地处理查询。若要让 mihomo 接管 DNS 查询，可以通过 NAT 重定向局域网的 DNS 流量，或者通过 DHCP 为客户端指定一个外部 DNS 服务器，或者启用 Unbound 的查询转发来解决。本安装包通过在 Unbound 添加一个指向1053（mihomo监听端口）端口的转发来处理本地查询，同时在Fake-IP增加geosite:cn过滤，实现国内域名返回真实IP，国外域名使用Fake-IP。
+
+> [!WARNING]
+> **启动服务前请务必确认已换成真实节点/订阅。**
+> 随包分发的 `config.yaml` 使用占位节点 `88.88.88.88`，而 `tun.auto-route` 默认开启；
+> 在这种状态下启动 mihomo，会把本机后面所有设备的流量导入 TUN，
+> 由于节点不可用，**全网会立刻断网**。
+> 本插件默认 **不** 开机自启（`/etc/rc.conf.d/mihomo` = `NO`），
+> 并且仪表盘会在检测到这些风险时显示红色体检横幅。
+
+## 界面（1.1.0 二次开发）
+
+由 OPNsense 原生 MVC（Volt + Bootstrap 3 + opnsense 主题）渲染，菜单：
+```
+VPN > Proxy Suite > Mihomo（概览 / 设置 / 订阅 / 日志）
+```
+
+| 页面 | 能力 |
+|---|---|
+| Mihomo（概览） | 服务状态与启停、安全体检、实时速率曲线、累计流量、代理分组与节点测速/切换、运行模式切换、活动连接表（可断连） |
+| 设置 | 原生表单（服务/控制器/TUN/DNS/订阅）+ 原始 YAML 编辑器（写盘前 `mihomo -t` 校验并自动备份）+ 从配置文件导入 |
+| 订阅 | 订阅地址/密钥、一键更新（默认不自动重启服务）、实时日志 |
+| 日志 | 内核日志 / 订阅日志，支持行数、下载、清空（经 configd 读取，无需放宽文件权限） |
+
+旧地址 `/mihomo.php`、`/mihomo_sub.php` 等会 302 跳转到新页面。
 
 ## 安装命令
 
@@ -52,6 +78,13 @@ pkg add -f os-mihomo.pkg
 ```text
 VPN > Proxy Suite > Mihomo
 ```
+
+> [!CAUTION]
+> `pkg add` 会执行包内的 `+POST_INSTALL`，它会向 `config.xml` 添加 `tun_mihomo` 接口与一条防火墙放行规则，
+> 并把 Unbound 的查询转发指向 `127.0.0.1:1053`（mihomo 未运行时会造成 DNS 不可用）。
+> **在正在服务生产网络的设备上安装前请先评估**；若只想装 WebUI / 服务端文件而不动网络配置，
+> 使用本仓库的 `scripts/deploy.sh`（安全路径，本次实机交付走的就是它）。
+
 ## 卸载命令
 ```sh
 pkg delete os-mihomo
