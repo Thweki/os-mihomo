@@ -44,7 +44,7 @@
 | 安全体检 | 启动前显式列出 TUN 接管、占位节点、控制器暴露、DNS 劫持等风险 |
 | 服务控件 | 页面标题栏原生 start/stop/restart 按钮（`updateServiceControlUI`） |
 | 内核资产 | 沿用上游 mihomo 内核（1.19.31-vincent）、rc.d、订阅脚本、configd 动作 |
-| 安装包 | `os-mihomo-1.1.0.pkg`（25.7 MiB，sha256 `01221aa2…`）已在目标机实机构建并回传 `dist/` |
+| 安装包 | `os-mihomo-1.1.0.pkg`（25.7 MiB，sha256 `2faa09a9…`），native ABI，已是**标准 OPNsense 插件包**格式，可被自带插件管理器管理 |
 | 中文化 | 146 条 zh_CN 词条，四个页面 + 表单标签 + 帮助 + 风险详情全中文 |
 
 ---
@@ -486,11 +486,16 @@ SHA256 (os-mihomo.pkg) = 01221aa2853962652a3d0df47d5811f458f6c6aa0bee09dc4ae88eb
 | 项 | 值 |
 |---|---|
 | 文件名 | `os-mihomo-1.1.0.pkg`（`dist/os-mihomo.pkg`，已回传本地 `dist/`） |
-| 大小 | 26,933,860 字节（25.7 MiB） |
-| SHA256 | `01221aa2…81d032`（本地与设备一致） |
+| 大小 | 26,934,356 字节（25.7 MiB） |
+| SHA256 | `2faa09a9…16f2c54`（本地与设备一致，native ABI 构建） |
+| ABI / 架构 | `FreeBSD:15:amd64` / `freebsd:15:x86:64` |
 | 文件数 | 49 |
 | Flat size | 76.8 MiB |
-| 元数据 | `pkg info -F` 校验通过（name/version/origin/ABI/deps） |
+| 元数据 | `pkg info -F` 校验通过（name/version/origin/ABI/deps/annotations） |
+| 安装脚本 | `+POST_INSTALL`(135 行) / `+PRE_DEINSTALL`(122 行) / `+POST_DEINSTALL`(13 行)，`sh -n` 全部通过 |
+
+> `make package` 生成的 tar 会记录文件 mtime，因此**两次构建的 SHA256 不同**（本次先出 `b23d4dd2…`，
+> 随后 `make repo` 触发的重构建产出 `2faa09a9…`）。以最后一次构建产物与 `dist/` 回传副本为准。
 
 **发现并修掉一个打包缺陷**：`build.sh` 只给上游那批文件设了执行位，
 本次新增的 `subscription_run.sh` 在包里是 `0644` —— 而 configd 会**直接执行**它，
@@ -509,6 +514,47 @@ SHA256 (os-mihomo.pkg) = 01221aa2853962652a3d0df47d5811f458f6c6aa0bee09dc4ae88eb
 
 > ⚠️ 安装这个包会执行上游的 `+POST_INSTALL`（改 config.xml / 加防火墙规则 / 改 Unbound 转发），
 > 与上游行为一致；不想动网络配置请用 `scripts/deploy.sh` 的安全路径。
+
+### 13.1b 把包做成「插件管理器可管理」的标准格式（P10）
+
+**需求**：本项目是**独立插件项目**，交付物必须是 OPNsense **自带插件管理器**（`系统 → 固件 → 插件`）
+能安装 / 升级 / 卸载的标准插件包，而不只是一个能 `pkg add` 的文件。
+
+**取证**（在目标机上对着同类插件反推格式）：
+
+| 取证点 | 结论 |
+|---|---|
+| 已由插件管理器安装的 `os-ttyd` / `os-ddns-go` 的 `+MANIFEST` | 字段：`name/origin/version/comment/maintainer/www/abi/arch/prefix/flatsize/licenses/desc/annotations{repo_type,repository}`，`abi` 是**本机 ABI**（`FreeBSD:15:amd64`），`annotations.repository` = 仓库名 |
+| 仓库从哪来 | `/usr/local/etc/pkg/repos/opnwall.conf` → `url: https://opnwall.github.io/OPNsense-repo/repo/${ABI}`，即**第三方插件仓库** |
+| 插件页面的数据源 | `configctl firmware remote` / `firmware local`，每行 9 个 `|||` 字段：`name\|version\|comment\|flatsize\|locked\|automatic\|license\|repository\|origin`；`Core/Api/FirmwareController::infoAction()` 里只要 `name` 以 `os-` 开头就归为插件 |
+| 安装路径 | `firmware/install.sh`：`os-*` 包先校验核心版本，然后 `pkg install -y <pkg>` + `register.php install <pkg>` |
+
+**据此改造**：
+
+1. `build.sh`：`ABI` 默认由 `universal` 改为 **`native`**（仓库按 ABI 分目录，必须匹配）；
+   清单新增 `licenses` 与 `annotations{repo_type:"binary", repository:"$REPO_NAME"}`；
+   同时修掉 `VERSION` 默认值仍是上游 `1.0.4` 的陈旧默认。
+2. `Makefile`：`ABI ?= native`、新增 `REPO_NAME`、新增 **`make repo`** 与 `make install-repo`。
+3. `scripts/make_repo.sh`（新增）：产出标准仓库目录
+   `dist/repo/<ABI>/{meta.conf,meta,data.pkg,packagesite.pkg,os-mihomo-<ver>.pkg,os-mihomo.conf}`。
+4. 目标机上落地：仓库放到 `/usr/local/opnsense/_bak/os-mihomo-repo/<ABI>/`，
+   仓库配置 `/usr/local/etc/pkg/repos/os-mihomo.conf` 默认 **`enabled: no`**（现网设备不启用）。
+
+**验证（临时启用 → 取证 → 立即关闭并清缓存）**：
+
+```
+Updating os-mihomo repository catalogue... 1 packages processed.
+
+# 插件页面的数据源（configctl firmware remote）：
+os-mihomo|||1.1.0|||Mihomo proxy integration for OPNsense|||76.8MiB|||0|||0||||||os-mihomo|||opnsense/os-mihomo
+os-mihomo|||1.0.4|||Mihomo proxy integration for OPNsense|||76.7MiB|||0|||0||||||opnwall|||opnsense/os-mihomo
+
+pkg version -t 1.1.0 1.0.4   →  >          # 插件管理器会视为「上游版本的升级」
+```
+
+关闭后复核：`pkg search os-mihomo` 只剩上游 `1.0.4`；`/var/db/pkg/repos/os-mihomo` 缓存已删除；
+启用中的仓库仍是 `OPNsense` + `opnwall` 两个（与改造前一致）。本插件**没有**进入 pkg 数据库
+（`pkg info os-mihomo` → no package matching），即目标机仍是手工部署状态，未因这次验证被安装。
 
 ### 13.2 回滚演练（实跑，0 failures）
 

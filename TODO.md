@@ -14,8 +14,9 @@
 | P5 | 部署到设备 + 语法/接口验证 | [x] |
 | P6 | 视觉验收（agent-browser 截图、与核心页面对照） | [x] |
 | P7 | 报告：docs/report.md（含真实截图） | [x] |
-| P8 | 收尾：打包脚本、README、回滚演练 | [~] |
+| P8 | 收尾：打包脚本、README、回滚演练 | [x] |
 | P9 | 修复：表单布尔控件、Apply 落盘链路、补丁器最小化 | [x] |
+| P10 | 项目定位与分发格式：标准 OPNsense 插件包 + 插件管理器可管理 + README 重写 | [x] |
 
 ## 交付结果（2026-10-18）
 
@@ -30,10 +31,21 @@
 - [x] README 重写（指向新 UI，移除"浏览器连 :9090"的旧姿势）
 - [x] 版本号提升到 1.1.0（`Makefile` / `version/mihomo`）
 - [x] 部署/回滚/体检/取证脚本齐备（`scripts/`、`tools/`）
-- [x] `make package` 实机跑通：`os-mihomo-1.1.0.pkg`（26.9 MB，sha256 `01221aa2…`），
+- [x] `make package` 实机跑通：`os-mihomo-1.1.0.pkg`（26.9 MB，native ABI，sha256 `2faa09a9…`），
       并修掉 `subscription_run.sh` 在包里权限是 0644 的打包缺陷
 - [x] 回滚演练实跑：41 文件回滚 → 与备份逐字节一致 → 重新部署 → 与回滚前 100% 一致，**0 failures**
 - [x] 补 `zh_CN` 翻译：146 条词条，四页全中文，覆盖核心译文 0 条（见报告 §13.3）
+
+## P10 项目定位与分发格式（已完成）
+
+- [x] **定位**：README 重写为**独立新项目**（不再是"上游的新版本"），中英文各一份
+- [x] **标准插件包**：`ABI` 默认 `native`；清单补 `licenses` 与
+      `annotations{repo_type:"binary", repository:"os-mihomo"}`（与同类插件 `os-ttyd`/`os-ddns-go` 的格式对齐）
+- [x] **插件仓库**：`scripts/make_repo.sh` + `make repo` → `dist/repo/<ABI>/{meta.conf,meta,data.pkg,packagesite.pkg,os-mihomo-<ver>.pkg,os-mihomo.conf}`
+- [x] **插件管理器验证**：临时启用本机仓库后，插件页数据源 `configctl firmware remote` 出现
+      `os-mihomo|||1.1.0|||…|||os-mihomo|||opnsense/os-mihomo`，且 `pkg version -t 1.1.0 1.0.4` → `>`（视为升级）
+- [x] 验证后复原：仓库配置改回 `enabled: no`、删除该仓库的本地缓存、`pkg search` 只剩上游 1.0.4
+- [x] 目标机保留物：`/usr/local/opnsense/_bak/os-mihomo-repo/<ABI>/`（仓库）+ `/usr/local/etc/pkg/repos/os-mihomo.conf`（默认不启用）
 
 ## 后续可选（不在本轮范围）
 
@@ -59,3 +71,5 @@
 | R10 | 表单布尔字段用 `<type>boolean</type>`，`base_form` 不渲染 | 改为 `<type>checkbox</type>`（核心对 base_form 都这么写）；已实测 7 个开关全部正常 |
 | R11 | 误判"上游保存配置/日志必然失效" | **已更正**：WebGUI 的 PHP 以 root 运行，上游那些写法可用；文档与日志均已修正 |
 | R12 | Apply 会重写受管行从而丢掉行尾注释 | 补丁器改为"值相同不动 + 改动时保留行尾注释"，Apply 实测只产生 1 行 diff |
+| R13 | 插件要"可被 OPNsense 自带插件管理器管理" | 光有 `.pkg` 不够：必须是 `os-*` 命名 + native ABI + `annotations.repository`，且由**仓库**提供（固件系统走 `pkg install`）；已补 `make repo` 与仓库配置模板，并实测插件页数据源可见 |
+| R14 | `make package` 两次构建哈希不同 | tar 记录 mtime，构建不可复现；文档标注以最后一次产物为准 |

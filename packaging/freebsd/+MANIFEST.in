@@ -8,6 +8,11 @@ abi: "@ABI@"
 arch: "@ARCH@"
 prefix: "@PREFIX@"
 flatsize: @FLATSIZE@
+licenses: [""]
+annotations: {
+    repo_type: "binary",
+    repository: "@REPO_NAME@"
+}
 deps: {
     jq: {
         origin: "textproc/jq"

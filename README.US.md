@@ -3,150 +3,275 @@
   <a href="README.US.md">English</a>
 </div>
 
-# Mihomo for OPNsense
+# os-mihomo
 
-![OPNsense](https://img.shields.io/badge/OPNsense-orange)
-![Mihomo](https://img.shields.io/badge/Mihomo-MetaCubeX-purple)
+**Mihomo for OPNsense with a native OPNsense WebGUI**
 
-Mihomo, formerly Clash Meta, is a high-performance open source proxy core compatible with Clash configuration files. It provides rule-based routing, DNS handling, load balancing, and transparent proxy support.
+![OPNsense](https://img.shields.io/badge/OPNsense-26.7-orange)
+![FreeBSD](https://img.shields.io/badge/FreeBSD-15.1-999999)
+![mihomo](https://img.shields.io/badge/mihomo-1.19.31--vincent-purple)
+![plugin](https://img.shields.io/badge/plugin-os--mihomo-blue)
+![i18n](https://img.shields.io/badge/i18n-zh__CN-green)
 
-This project packages Mihomo as an OPNsense plugin so it can run on OPNsense and provide transparent proxy functionality through the OPNsense WebGUI.
+An **independently maintained OPNsense plugin project**: it installs
+[mihomo](https://github.com/MetaCubeX/mihomo) (formerly Clash Meta) on OPNsense and manages it
+from **OPNsense's own WebGUI**. No separate HTTP service, no embedded third-party dashboard.
 
-Tested on:
+The plugin is shipped as a **standard OPNsense plugin package**, so it can be installed,
+upgraded and removed by the built-in **plugin manager** (`System → Firmware → Plugins`).
 
-- OPNsense 26.7.5
+> The package name matches the upstream plugin (`os-mihomo`, the same plugin slot), which makes
+> this a drop-in replacement/upgrade. The WebGUI, however, is a re-implementation: every page is
+> native OPNsense MVC instead of the legacy `.php` pages.
 
-![](images/mihomo.us.png)
+---
 
-## Binary
+## 1. Design principles
 
-The project uses the static binary from [Vincent-Loeng](https://github.com/Vincent-Loeng/clash-meta). The default local asset path is:
+| Principle | How |
+|---|---|
+| **Native rendering** | Pages are rendered by OPNsense itself (Phalcon + Volt + Bootstrap 3 + opnsense theme). Routes `/ui/mihomo/*`, API `/api/mihomo/*` |
+| **Browser never touches the controller** | mihomo's RESTful controller (`:9090`) binds to loopback only and is proxied by server-side PHP using the controller secret |
+| **No third-party frontend** | No iframe, no zashboard/yacd/metacubexd, no external JS/CSS assets |
+| **Auditable privileged actions** | Writing config, reading/clearing logs and running subscription updates all go through **configd** (root) instead of shell string building in PHP |
+| **Validate before writing** | Raw YAML is checked with `mihomo -t` before it replaces the active file, the previous file is kept as a timestamped backup, and the patcher only touches the keys that actually change |
+| **Service is off by default** | The plugin never enables autostart on its own; the dashboard shows a red safety banner when it detects placeholder nodes, TUN auto-route takeover or DNS hijacking |
 
-```text
-src/usr/local/bin/clash-meta-freebsd-amd64.xz
-```
+## 2. Features
 
-The build script prefers the local `src/usr/local/bin/clash-meta-freebsd-amd64.xz` file. If it is missing, the script downloads it from GitHub:
+Menu: `VPN → Proxy Suite → Mihomo / Settings / Subscription / Log File`
 
-```text
-https://github.com/Vincent-Loeng/clash-meta/releases/download/v1.19.31-vincent/clash-meta-freebsd-amd64.xz
-```
+| Page | Route | Capabilities |
+|---|---|---|
+| **Mihomo** (overview) | `/ui/mihomo` | Service state and start/stop, boot-enable toggle, **safety check banner**, live rate chart, cumulative traffic, memory/core version, proxy groups with node switch and latency test, runtime mode switch, active connections table (close one / close all) |
+| **Settings** | `/ui/mihomo/settings` | Native form (service / controller / TUN / DNS / subscription) plus a raw YAML editor (validated with `mihomo -t`, timestamped backup, minimal one-line patching) and import from the active configuration file |
+| **Subscription** | `/ui/mihomo/subscription` | Subscription URL and secret, one-click update (deliberately does **not** restart the service by default), live subscription log |
+| **Log File** | `/ui/mihomo/log` | Core log / subscription log: line count, download, clear (read through configd, so no file permissions have to be loosened) |
 
-Plugin version: `1.0.4`; FreeBSD core version: `1.19.31-vincent`. The source URL and SHA256 are recorded in `packaging/freebsd/binary-source.json` and verified during packaging.
+API: `/api/mihomo/{service,settings,dashboard,subscription,log}/*`
+Legacy URLs (`/mihomo.php`, `/mihomo_sub.php`, …) redirect (302) to the new pages.
 
-This plugin uses the adapted FreeBSD core. Official Mihomo v1.19.32 failed to create TUN on OPNsense 26.7.5 / FreeBSD 15.1 (`create NetworkUpdateMonitor: invalid argument`).
+## 3. Screenshots (real device, Chinese UI)
 
-## Notes
+![Overview](docs/screenshots/09-overview-zh_CN.png)
 
-1. Only x86_64 / amd64 is currently supported.
-2. After installation, no interface or firewall rule needs to be added manually. Edit the node information in the default configuration and use it directly.
-3. After debugging is complete, set the log level to `error` to avoid excessive long-term logs.
-4. The default configuration enables the Clash API. You can open the dashboard at `http://LAN_IP:9090/ui`.
-5. Do not change the TUN interface name `tun_mihomo` in `config.yaml`, otherwise the installer-generated firewall rules may stop matching.
-6. If a LAN client uses the OPNsense LAN address as its DNS server, Unbound processes queries locally before they reach mihomo. To ensure mihomo handles DNS queries, you can redirect LAN DNS traffic via NAT, assign an external DNS server to clients via DHCP, or enable query forwarding in Unbound. This installation package configures Unbound to forward queries to port 1053 (the port mihomo listens on) and applies a `geosite:cn` filter to the Fake-IP mechanism; this ensures that domestic domains resolve to their actual IP addresses, while foreign domains utilize Fake-IPs.
+![Settings](docs/screenshots/08-settings-zh_CN.png)
 
-## Install
+![Subscription](docs/screenshots/04-subscription.png)
 
-Upload the package to OPNsense and run:
+![Log](docs/screenshots/05-log.png)
 
-```sh
-pkg add -f os-mihomo.pkg
-```
+## 4. Install
 
-After installation, refresh the OPNsense WebGUI and go to:
+Pick one of three paths:
 
-```text
-VPN > Proxy Suite > Mihomo
-```
-
-## Uninstall
-
-```sh
-pkg delete os-mihomo
-```
-
-## Subscription Updates
-
-Automatic subscription updates can be scheduled with Cron:
-
-```text
-System > Settings > Cron
-```
-
-Add a scheduled task and select:
-
-```text
-Renew mihomo Subscription
-```
-
-## Build pkg
-
-Build on a FreeBSD or OPNsense host. The following commands are required:
+| Path | Command / entry point | Touches system networking? | Use when |
+|---|---|---|---|
+| **A. Plugin manager** | `System → Firmware → Plugins → Install` (configure a plugin repository first, see §5) | Yes (runs the package `+POST_INSTALL`, see warning below) | Fresh devices; you want the firmware system to manage it |
+| **B. Single package** | `pkg add -f os-mihomo.pkg` | Same as A | Offline distribution |
+| **C. Safe deploy script** | `scripts/deploy.sh` (driven by `tools/remote.ps1`) | **No** — only writes the plugin's own files; never touches firewall, interfaces, DNS or routes | Devices already serving a production network (this is how this project was delivered) |
 
 ```sh
-pkg, tar, make, xz, curl or fetch
+# Path C: file-by-file install, php -l / sh -n checks, menu cache clear, configd restart
+powershell -File tools/deploy.ps1               # first install (includes the core binary)
+powershell -File tools/deploy.ps1               # later upgrades (keeps your config.yaml)
+powershell -File tools/webtest.ps1              # end-to-end check: pages 200 / APIs 200 / unauthorized 302
 ```
 
-Run:
+> [!CAUTION]
+> **Installing via `pkg add` or the plugin manager runs the package `+POST_INSTALL`** (upstream behaviour):
+> 1. adds a `tun_mihomo` interface and one firewall pass rule to `/conf/config.xml`;
+> 2. points Unbound forwarding at `127.0.0.1:1053` (DNS breaks for clients while mihomo is not running);
+> 3. writes `mihomo_enable="YES"` to `/etc/rc.conf.d/mihomo` (**autostart on boot**);
+> 4. generates a random `secret` and writes it back into the configuration.
+>
+> The shipped `config.yaml` still contains the placeholder node `88.88.88.88` while `tun.auto-route`
+> defaults to true — **autostart in that state takes the whole network down.** Either replace the
+> nodes/subscription first, or use path C (no networking changes, no autostart).
+
+## 5. Publishing a plugin repository
+
+The build chain produces a **standard OPNsense plugin repository tree** (ABI-scoped, same shape as
+the official repos):
 
 ```sh
-make package ABI=universal
+make package          # → dist/os-mihomo.pkg (native ABI by default)
+make repo             # → dist/repo/<ABI>/
 ```
-
-Output file:
 
 ```text
-dist/os-mihomo.pkg
+dist/repo/FreeBSD:15:amd64/
+├── os-mihomo-1.1.0.pkg        the plugin package
+├── meta.conf / meta           repository metadata (pkg 2.x)
+├── data.pkg / packagesite.pkg  catalog data
+└── os-mihomo.conf             client-side repository config template
 ```
 
-Inspect package metadata:
+Upload that directory to any static host (or keep it in a local directory) and point a repository
+config at it:
 
 ```sh
+# /usr/local/etc/pkg/repos/os-mihomo.conf
+os-mihomo: {
+  url: "https://example.com/mihomo/FreeBSD:15:amd64",   # or file:///usr/local/opnsense/_bak/os-mihomo-repo/FreeBSD:15:amd64
+  enabled: yes,
+  priority: 20
+}
+```
+
+```sh
+pkg update        # refresh the catalog
+```
+
+**os-mihomo** then shows up under `System → Firmware → Plugins` and can be installed, upgraded and
+removed there (the firmware system installs it with `pkg install -y os-mihomo` plus
+`register.php install`).
+
+<details>
+<summary>Why this is "manageable by the plugin manager" — measured evidence</summary>
+
+The Plugins page (`/ui/core/firmware`) consumes `configctl firmware remote` / `firmware local`,
+where every line carries 9 `|||`-separated fields:
+`name|||version|||comment|||flatsize|||locked|||automatic|||license|||repository|||origin`.
+Any package whose `name` starts with `os-` and that resolves from a repository is listed as a plugin.
+With this project's repository attached:
+
+```text
+os-mihomo|||1.1.0|||Mihomo proxy integration for OPNsense|||76.8MiB|||0|||0||||||os-mihomo|||opnsense/os-mihomo
+os-mihomo|||1.0.4|||Mihomo proxy integration for OPNsense|||76.7MiB|||0|||0||||||opnwall|||opnsense/os-mihomo
+        ^ this project (repository=os-mihomo)                     ^ upstream 1.0.4 (repository=opnwall)
+```
+
+`pkg version -t 1.1.0 1.0.4` → `>`, so the plugin manager treats it as an upgrade of the upstream package.
+</details>
+
+## 6. First run (read this first)
+
+1. **Replace the nodes/subscription before starting the service.** Edit `Settings → Configuration File`,
+   or submit a subscription on the `Subscription` page. The overview banner lists the current risks
+   (placeholder nodes, TUN auto-route, strict route, DNS hijacking, controller exposed to the network).
+2. **Decide about autostart**: `Settings → Service → Enable mihomo` (off by default; you choose).
+3. After starting, the overview page shows proxy groups, node switching, connections and live rates.
+4. Once stable, set `Settings → Log level` to `error` or `silent` to keep the log small.
+
+> **About DNS**: if LAN clients use the OPNsense LAN address as their resolver, Unbound answers before
+> the query ever reaches mihomo. To let mihomo handle DNS you can NAT-redirect LAN DNS, hand out an
+> external resolver via DHCP, or forward Unbound to mihomo's listen port (`1053`). Upstream's
+> `+POST_INSTALL` does the last one and adds a `geosite:cn` filter to Fake-IP (domestic domains get
+> real IPs, foreign ones get Fake-IPs). **This project never changes that for you** — DNS and TUN
+> behaviour is controlled only by what you set explicitly in `Settings`.
+
+## 7. Repository layout
+
+The repository root **is** the plugin tree; `src/` mirrors the install paths:
+
+```text
+src/
+├── etc/rc.conf.d/mihomo                                  boot enable switch
+├── usr/bin/mihomo_sub                                    subscription CLI helper
+└── usr/local/
+    ├── bin/mihomo  +  etc/mihomo/{config.yaml,GeoIP.dat,GeoSite.dat,sub/}
+    ├── etc/rc.d/mihomo                                   service script
+    ├── etc/inc/plugins.inc.d/mihomo.inc                  registration with the OPNsense core
+    ├── opnsense/version/mihomo                           plugin version metadata
+    ├── opnsense/service/conf/actions.d/actions_mihomo.conf  14 configd actions
+    ├── opnsense/scripts/mihomo/                          privileged scripts (config_apply/env/logtail/…)
+    ├── opnsense/mvc/app/
+    │   ├── models/OPNsense/Mihomo/       models, Config (Safety/Subscription/…), ACL, Menu
+    │   ├── controllers/OPNsense/Mihomo/  page controllers + Api/* + forms/settings.xml
+    │   └── views/OPNsense/Mihomo/        index/settings/subscription/log Volt templates
+    └── www/mihomo*.php                                   legacy URLs → 302 redirects
+```
+
+## 8. Translation (zh_CN)
+
+The UI ships Simplified Chinese entries (146 of them: four pages, form labels, help texts and the
+safety details). OPNsense uses a **single gettext domain**, so plugin strings can only be translated
+by merging into `/usr/local/share/locale/<locale>/LC_MESSAGES/OPNsense.mo`. This project provides
+add-only tooling for that:
+
+```sh
+powershell -File tools/i18n.ps1              # backup → merge → verify → restart WebGUI
+powershell -File tools/i18n.ps1 -Status      # is it applied?
+powershell -File tools/i18n.ps1 -Rollback    # restore the backup
+```
+
+* `locales/zh_CN.po` is a standard gettext catalog (usable with `msgfmt`, submittable upstream);
+* existing core translations are **never overwritten** (verified entry by entry; 0 overwrites);
+* an OPNsense upgrade may reset that `.mo` — just re-run `tools/i18n.ps1`.
+
+## 9. Building
+
+Build on FreeBSD / OPNsense (needs `pkg`, `tar`, `make`, `xz`, `sha256` and `curl` or `fetch`):
+
+```sh
+make package                  # native ABI (for plugin repositories)
+make package ABI=universal    # portable ABI (single-file distribution only)
+make repo                     # also produce the plugin repository tree dist/repo/<ABI>/
 pkg info -F dist/os-mihomo.pkg
 ```
 
-## Common Commands
+The core binary defaults to the in-tree asset `src/usr/local/bin/clash-meta-freebsd-amd64.xz` and is
+only downloaded from [Vincent-Loeng/clash-meta](https://github.com/Vincent-Loeng/clash-meta) when
+missing; its SHA256 from `packaging/freebsd/binary-source.json` is always verified.
 
-Service control:
+## 10. Plugin identity
 
-```sh
-service mihomo start
-service mihomo stop
-service mihomo status
-service mihomo restart
-service mihomo rcvar
-```
+| Item | Value |
+|---|---|
+| Package / origin | `os-mihomo` / `opnsense/os-mihomo` |
+| Version | `1.1.0` (same plugin slot; must sort above upstream 1.0.4 to be seen as an upgrade) |
+| ABI / arch | `FreeBSD:<major>:amd64` / `freebsd:<major>:x86:64` |
+| Registration points | `models/OPNsense/Mihomo/{ACL,Menu}`, `etc/inc/plugins.inc.d/mihomo.inc`, `version/mihomo`, `actions_mihomo.conf` |
+| Dependencies | `jq`, `curl` |
 
-View logs:
-
-```sh
-tail -f /var/log/mihomo.log
-```
-
-Check listening ports:
+## 11. Uninstall
 
 ```sh
-sockstat -4 -l | egrep ':53|:7891|:9090'
+# Plugin manager: System → Firmware → Plugins → Remove
+# Or on the command line:
+pkg delete os-mihomo
 ```
 
-Check the TUN interface:
+`+PRE_DEINSTALL` stops the service, removes the `tun_mihomo` interface and its firewall rule, reverts
+the Unbound forwarding and cleans related cron entries; `+POST_DEINSTALL` clears the menu cache,
+deletes `actions_mihomo.conf`, restarts configd and then removes `/usr/local/etc/mihomo`.
+**Back up `/usr/local/etc/mihomo/` (configuration and subscription credentials) before uninstalling.**
+
+## 12. Common commands
 
 ```sh
-ifconfig tun_mihomo
+service mihomo start|stop|restart|status|rcvar   # service control
+tail -f /var/log/mihomo.log                      # core log
+sockstat -4 -l | egrep ':53|:7891|:9090'         # listening ports
+ifconfig tun_mihomo                              # TUN interface
+pfctl -sr | grep tun_mihomo                      # runtime rules
+configctl mihomo status|config-current|env-get   # plugin configd actions
+/usr/local/etc/rc.restart_webgui                 # restart the WebGUI (after view/i18n changes)
 ```
 
-Check runtime firewall rules:
+Scheduled subscription updates: `System → Settings → Cron`, add a task and pick the command
+`Renew mihomo Subscription`.
 
-```sh
-pfctl -sr | grep -E 'tun_mihomo'
-```
+## 13. Documentation
 
-## Credits
+| Document | Content |
+|---|---|
+| [`docs/report.md`](docs/report.md) | Delivery report: requirements, architecture, **real screenshots**, safety proof, verification matrix, rollback procedure, incident log |
+| [`docs/design.md`](docs/design.md) | Design notes: MVC structure, API contract, configd actions, YAML patcher rules |
+| [`AGENTS.md`](AGENTS.md) / [`TODO.md`](TODO.md) | Working manual / status board (safety red lines and verification method) |
 
-[MetaCubeX](https://github.com/MetaCubeX/mihomo)<br>
-[Vincent-Loeng](https://github.com/Vincent-Loeng?tab=repositories)
+## 14. Credits
 
-## Disclaimer
+[mihomo](https://github.com/MetaCubeX/mihomo) ·
+[Vincent-Loeng/clash-meta](https://github.com/Vincent-Loeng/clash-meta) (FreeBSD core) ·
+[Opnwall/OPNsense-repo](https://github.com/Opnwall/OPNsense-repo) (source of the runtime assets) ·
+[OPNsense](https://opnsense.org/)
+
+## 15. Disclaimer
 
 > [!CAUTION]
-> This is an unofficial plugin and is not supported by the OPNsense team. Use it at your own risk.
+> Unofficial plugin, not supported by the OPNsense team. The proxy core and the network settings it
+> can touch have a wide blast radius: before enabling TUN / automatic route takeover / DNS hijacking
+> on a device that serves a production network, make sure you understand the consequences.
+> Use at your own risk.

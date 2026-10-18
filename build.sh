@@ -2,14 +2,18 @@
 set -eu
 
 PKG_NAME="${PKG_NAME:-os-mihomo}"
-VERSION="${VERSION:-1.0.4}"
+VERSION="${VERSION:-1.1.0}"
 ORIGIN="${ORIGIN:-opnsense/os-mihomo}"
 COMMENT="${COMMENT:-Mihomo proxy integration for OPNsense}"
 MAINTAINER="${MAINTAINER:-https://github.com/Opnwall/}"
 WWW="${WWW:-https://github.com/MetaCubeX/mihomo}"
 PREFIX="${PREFIX:-/usr/local}"
 FORMAT="${FORMAT:-tgz}"
-ABI="${ABI:-universal}"
+# OPNsense 的插件仓库是按 ABI 分目录的（<base>/<abi>/），
+# 因此要放进插件仓库就必须用本机 ABI；只做单文件 pkg add 时可用 ABI=universal。
+ABI="${ABI:-native}"
+# 记入包清单的仓库名，用于 OPNsense 插件页面显示 "仓库/来源"。
+REPO_NAME="${REPO_NAME:-os-mihomo}"
 OUTPUT_NAME="${OUTPUT_NAME:-${PKG_NAME}.pkg}"
 MIHOMO_ASSET="${MIHOMO_ASSET:-clash-meta-freebsd-amd64.xz}"
 MIHOMO_DOWNLOAD_URL="${MIHOMO_DOWNLOAD_URL:-https://github.com/Vincent-Loeng/clash-meta/releases/download/v1.19.31-vincent/$MIHOMO_ASSET}"
@@ -193,6 +197,12 @@ echo "==> Generating metadata"
     printf 'arch: "%s"\n' "$PKG_ARCH"
     printf 'prefix: "%s"\n' "$PREFIX"
     printf 'flatsize: %s\n' "$FLATSIZE"
+    printf 'licenses: [""]\n'
+    # 让 OPNsense 固件/插件页面能正确归属「哪个仓库提供的这个插件」
+    printf 'annotations: {\n'
+    printf '    repo_type: "binary",\n'
+    printf '    repository: "%s"\n' "$REPO_NAME"
+    printf '}\n'
     printf 'deps: {\n'
     printf '    jq: { origin: "textproc/jq", version: ">=0" }\n'
     printf '    curl: { origin: "ftp/curl", version: ">=0" }\n'
