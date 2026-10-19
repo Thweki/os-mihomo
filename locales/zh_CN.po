@@ -166,6 +166,9 @@ msgstr "已配置 DNS 劫持"
 msgid "DNS listen address, e.g. 127.0.0.1:1053."
 msgstr "DNS 监听地址，如 127.0.0.1:1053。"
 
+msgid "DNS nameserver"
+msgstr "DNS 上游服务器"
+
 msgid "DNS over IPv6"
 msgstr "DNS 返回 IPv6"
 
@@ -178,6 +181,15 @@ msgstr "服务运行期间，53 端口的 DNS 查询会被重定向到 mihomo。
 msgid "DNS status"
 msgstr "DNS 状态"
 
+msgid "DNS upstream"
+msgstr "DNS 上游"
+
+msgid "DNS upstream (YAML)"
+msgstr "DNS 上游（YAML）"
+
+msgid "DNS upstream YAML must use spaces, not tabs."
+msgstr "DNS 上游 YAML 只能用空格缩进，不能用制表符。"
+
 msgid "Device MTU."
 msgstr "设备 MTU。"
 
@@ -189,6 +201,9 @@ msgstr "直连"
 
 msgid "Do not create"
 msgstr "不创建"
+
+msgid "Do not include the top-level dns: line in the DNS upstream box."
+msgstr "DNS 上游文本框里不要包含顶层的 dns: 行。"
 
 msgid "Domain sniffing"
 msgstr "域名嗅探"
@@ -249,6 +264,9 @@ msgstr "保存订阅设置失败。"
 
 msgid "File (config.yaml)"
 msgstr "文件（config.yaml）"
+
+msgid "Fill recommended values"
+msgstr "填入推荐值"
 
 msgid "Firewall rule"
 msgstr "防火墙规则"
@@ -408,6 +426,9 @@ msgstr "未应用"
 
 msgid "Not policy-routed: Unbound answers DNS on this interface."
 msgstr "未走策略路由：这个接口的 DNS 由 Unbound 应答。"
+
+msgid "Not written until you unlock and apply."
+msgstr "解锁并点「应用」后才写入。"
 
 msgid "Note"
 msgstr "说明"
@@ -607,6 +628,9 @@ msgstr "订阅更新失败"
 msgid "Subscription update started"
 msgstr "订阅更新已开始"
 
+msgid "Suggested values; apply to activate."
+msgstr "推荐值；点「应用」后才写入。"
+
 msgid "Switched \"%s\" to \"%s\"."
 msgstr "已将 \"%s\" 切换到 \"%s\"。"
 
@@ -655,8 +679,14 @@ msgstr "DNS 模块未启用：已绑定接口无法使用 mihomo DNS。"
 msgid "The DNS module is off: mihomo cannot answer DNS queries."
 msgstr "DNS 模块未启用：mihomo 无法应答 DNS 查询。"
 
+msgid "The DNS upstream block in the configuration file is not closed."
+msgstr "配置文件里的 DNS 上游受管区块没有闭合。"
+
 msgid "The TUN device is guaranteed to win over other default routes while the service runs."
 msgstr "服务运行时，TUN 设备将优先于其它默认路由。"
+
+msgid "The configuration file has no dns: block."
+msgstr "配置文件里没有 dns: 块。"
 
 msgid "The configuration file was not written. mihomo rejected it:%s"
 msgstr "配置文件未写入，mihomo 校验未通过：%s"
@@ -783,6 +813,9 @@ msgstr "写入 mihomo 配置；需要时在 OPNsense 上创建接口、网关和
 
 msgid "Written by the plugin: on Apply the value above is written into the file. Click to leave the file alone instead."
 msgstr "由插件写入：点「应用」时按上面的值改配置文件；点一下改为「不修改」。"
+
+msgid "YAML fragment relative to the dns: block: default-nameserver / nameserver / proxy-server-nameserver / direct-nameserver / nameserver-policy / respect-rules. Do not include the dns: line. Empty removes these keys."
+msgstr "相对于 dns: 块的 YAML 片段：default-nameserver / nameserver / proxy-server-nameserver / direct-nameserver / nameserver-policy / respect-rules。不要写 dns: 这一行；留空会删除这些键。"
 
 msgid "all interfaces"
 msgstr "所有接口"

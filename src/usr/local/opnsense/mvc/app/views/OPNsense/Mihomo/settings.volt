@@ -180,11 +180,56 @@
             syncManagedHidden();
         }
 
+        /* 推荐值：与仓库模板里的 DNS 上游保持一致（不会自动写入） */
+        const RECOMMENDED_DNS_UPSTREAM = 'default-nameserver:\n  - 223.5.5.5\n  - 119.29.29.29\nnameserver:\n  - https://dns.alidns.com/dns-query\n  - https://doh.pub/dns-query\nproxy-server-nameserver:\n  - 223.5.5.5\n  - 119.29.29.29\nnameserver-policy:\n  "geosite:private,cn":\n    - https://dns.alidns.com/dns-query\n    - https://doh.pub/dns-query\n  "geosite:gfw,geolocation-!cn":\n    - "https://dns.google/dns-query#RULES"\n    - "https://cloudflare-dns.com/dns-query#RULES"\nrespect-rules: true';
+
+        /* DNS 上游文本框首次填充：模型里为空时，从当前 config.yaml 读取受管区块 */
+        function loadDnsUpstreamIntoForm() {
+            const el = document.getElementById('mihomo.dns.upstream');
+            if (!el) {
+                return;
+            }
+            el.placeholder = RECOMMENDED_DNS_UPSTREAM;
+            if (el.value) {
+                return;
+            }
+            ajaxGet('/api/mihomo/settings/dns_upstream', {}, function (data, status) {
+                if (status === 'success' && data['status'] === 'ok' && !el.value) {
+                    el.value = data['content'] || '';
+                }
+            });
+        }
+
+        /* 文本框下方加一个「填入推荐值」按钮；只填内容并解锁，点「应用」才落盘 */
+        function addDnsUpstreamTools() {
+            const el = document.getElementById('mihomo.dns.upstream');
+            if (!el || $('#dns-upstream-recommended').length) {
+                return;
+            }
+            const $btn = $('<button type="button" class="btn btn-xs btn-default" id="dns-upstream-recommended">')
+                .css({ 'margin-top': '6px' })
+                .attr('title', '{{ lang._('Suggested values; apply to activate.') }}')
+                .html('<i class="fa fa-magic fa-fw"></i> ' + '{{ lang._('Fill recommended values') }}')
+                .on('click', function () {
+                    el.value = RECOMMENDED_DNS_UPSTREAM;
+                    const $sw = $('[data-managed-for="mihomo.dns.upstream"]');
+                    $sw.attr('data-managed', '1');
+                    applyLeaveAlone();
+                    syncManagedHidden();
+                });
+            $(el).after($btn).after(
+                $('<div class="text-muted">').css('margin-top', '4px')
+                    .text('{{ lang._('Not written until you unlock and apply.') }}')
+            );
+        }
+
         function reloadForm() {
             return mapDataToFormUI({ 'frm_Settings': '/api/mihomo/settings/get' }).done(function () {
                 formatTokenizersUI();
                 $('.selectpicker').selectpicker('refresh');
                 applyManagedFromModel();
+                loadDnsUpstreamIntoForm();
+                addDnsUpstreamTools();
             });
         }
 
@@ -302,6 +347,9 @@
                     ['Unbound', u['enabled']
                         ? escapeHtml(u['all'] ? '{{ lang._('all interfaces') }}' : (u['interfaces'] || []).join(', '))
                         : '{{ lang._('disabled') }}'],
+                    ['{{ lang._('DNS nameserver') }}', up['nameserver']
+                        ? '{{ lang._('configured') }}'
+                        : '{{ lang._('not configured') }}'],
                     ['{{ lang._('Upstream policy') }}', up['nameserver_policy']
                         ? '{{ lang._('configured') }}'
                         : '{{ lang._('not configured') }}'],
@@ -482,6 +530,17 @@
         margin-left: 7px;
         opacity: .6;
         cursor: default;
+    }
+    /* DNS 上游 YAML 文本框：撑满单元格，等宽字体 */
+    #mihomo\.dns\.upstream {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-height: 220px;
+        font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+        font-size: 12px;
+        white-space: pre;
+        overflow-wrap: normal;
+        resize: vertical;
     }
 </style>
 

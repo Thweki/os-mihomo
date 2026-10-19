@@ -110,6 +110,13 @@
 - [x] 用户确认后执行 `scripts/dns_tcp_hijack.sh`：运行中的 `config.yaml` → `tun.dns-hijack` 补 `any:53 + tcp://any:53`
       （`mihomo -t` 通过，备份 `config.yaml.bak.20261019_225744`，服务重启后运行态 `coverage=udp+tcp`）；
       订阅模板本来就有这两条，无需改
+- [x] 设置页 DNS 区新增「DNS 上游（YAML）」多行编辑框（字段 `mihomo.dns.upstream`）：
+      `default-nameserver / nameserver / proxy-server-nameserver / direct-nameserver / nameserver-policy / respect-rules`；
+      受管区块 `# >>> os-mihomo:dns-upstream`，写入前移除同名旧键，整块替换；留空 = 删除这些键
+- [x] 「填入推荐值」按钮：填入仓库模板同款 DoH 策略并解锁，点「应用」才落盘；默认仍是「不修改」
+- [x] `GET /api/mihomo/settings/dns_upstream` 首次填充；「从配置导入」也会读回当前块
+- [x] 纯函数测试：抽取 / 替换 / 二次应用幂等 / 清空 / 缩进规整 / `mihomo -t`（合成配置与真实配置各一次）全部通过
+- [ ] 尚未替用户选定上游；需要用户在页面里填/点推荐值后点「应用」
 
 ## P12-3 可选（待确认）
 

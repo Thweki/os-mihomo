@@ -127,6 +127,13 @@
         <type>checkbox</type>
         <help>Answer AAAA records. Turn off if the tunnel only carries IPv4.</help>
     </field>
+    <field>
+        <id>mihomo.dns.upstream</id>
+        <label>DNS upstream (YAML)</label>
+        <type>textbox</type>
+        <height>12</height>
+        <help>YAML fragment relative to the dns: block: default-nameserver / nameserver / proxy-server-nameserver / direct-nameserver / nameserver-policy / respect-rules. Do not include the dns: line. Empty removes these keys.</help>
+    </field>
 
     <field>
         <type>header</type>

@@ -146,7 +146,11 @@ class SettingsController extends ApiMutableModelControllerBase
         );
 
         /* ---- 1. config.yaml ---- */
-        if ($write === []) {
+        /* DNS 上游是列表/嵌套映射，不能走 patchKeys 的单行标量通道：
+           它由下面的 applyDnsUpstreamBlock() 以受管区块整块替换。 */
+        $upstreamOwned = $touched('mihomo.dns.upstream');
+        $upstreamFragment = (string)$mdl->dns->upstream;
+        if ($write === [] && !$upstreamOwned) {
             $result['messages'][] = gettext('Every item is set to "leave alone", so the configuration file was not touched.');
         } else {
             $patch = [];
@@ -155,6 +159,9 @@ class SettingsController extends ApiMutableModelControllerBase
             }
             try {
                 $content = Config::patchKeys(Config::rawText(), $patch);
+                if ($upstreamOwned) {
+                    $content = Config::applyDnsUpstreamBlock($content, $upstreamFragment);
+                }
                 $staging = Config::createStagingFile($content);
             } catch (\Throwable $e) {
                 $result['message'] = $e->getMessage();
@@ -169,6 +176,10 @@ class SettingsController extends ApiMutableModelControllerBase
                 );
                 return $result;
             }
+            if ($upstreamOwned) {
+                $writtenLabels[] = gettext('DNS upstream');
+            }
+            $writtenLabels = array_values(array_unique($writtenLabels));
             $result['messages'][] = sprintf(
                 gettext('Configuration file updated: %d item(s) written — %s'),
                 count($writtenLabels),
@@ -304,6 +315,18 @@ class SettingsController extends ApiMutableModelControllerBase
     }
 
     /**
+     * 当前 DNS 上游 YAML 片段（只读），用于设置页文本框首次填充。
+     */
+    public function dnsUpstreamAction()
+    {
+        try {
+            return ['status' => 'ok', 'content' => Config::dnsUpstreamBlock()];
+        } catch (\Throwable $e) {
+            return ['status' => 'failed', 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
      * 「DNS 状态」：mihomo DNS、53 劫持覆盖、各接口的客户端 DNS 路径（只读）。
      */
     public function dnsStatusAction()
@@ -416,6 +439,7 @@ class SettingsController extends ApiMutableModelControllerBase
         $mdl->dns->enabled = $yesNo($scan['dns.enable'] ?? null);
         $mdl->dns->listen = (string)($scan['dns.listen'] ?? '127.0.0.1:1053');
         $mdl->dns->enhancedMode = (string)($scan['dns.enhanced-mode'] ?? 'fake-ip');
+        $mdl->dns->upstream = Config::dnsUpstreamBlock();
 
         $env = \OPNsense\Mihomo\Subscription::env();
         if (!empty($env['mihomo_URL'])) {

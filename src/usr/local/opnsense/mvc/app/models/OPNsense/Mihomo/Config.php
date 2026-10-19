@@ -378,6 +378,227 @@ class Config
         return $normalize($current) === $normalize($wanted);
     }
 
+    /* =====================================================================
+     * DNS 上游（nameserver / nameserver-policy）受管区块
+     *
+     * 这些键是列表/嵌套映射，不能用 patchKeys 的单行标量方式安全改写；
+     * 因此用带标记的 YAML 子块，整块替换。区块位于 dns: 内部，缩进 2 格。
+     * ===================================================================== */
+
+    public const DNS_UPSTREAM_MARK_BEGIN = '# >>> os-mihomo:dns-upstream (managed, do not edit) >>>';
+    public const DNS_UPSTREAM_MARK_END = '# <<< os-mihomo:dns-upstream <<<';
+
+    /** 受管区块接管的 DNS 上游键；写入前先移除旧的，避免重复键 */
+    private const DNS_UPSTREAM_KEYS = [
+        'default-nameserver',
+        'nameserver',
+        'nameserver-policy',
+        'proxy-server-nameserver',
+        'proxy-server-nameserver-policy',
+        'direct-nameserver',
+        'direct-nameserver-follow-policy',
+        'respect-rules',
+        'fallback',
+        'fallback-filter',
+    ];
+
+    /**
+     * 读取当前 DNS 上游配置（供 WebUI 文本框显示）。
+     *
+     * 优先读受管区块；没有区块时，从现有 dns: 块里抽取上面列出的键。
+     * 返回的是去掉 2 空格缩进的 YAML 片段（不含 dns: 这一行）。
+     */
+    public static function dnsUpstreamBlock(?string $content = null): string
+    {
+        $content = $content ?? self::rawText();
+        $lines = preg_split("/\r\n|\n|\r/", $content) ?: [];
+        [$start, $end] = self::dnsUpstreamMarkers($lines);
+        if ($start !== null && $end !== null) {
+            return self::dedentBlock(array_slice($lines, $start + 1, $end - $start - 1), 2);
+        }
+
+        $dnsLine = self::findKeyLine($lines, 0, count($lines), 0, 'dns');
+        if ($dnsLine === null) {
+            return '';
+        }
+        $dnsEnd = self::findBlockEnd($lines, $dnsLine, count($lines), 0);
+        $ranges = [];
+        foreach (self::DNS_UPSTREAM_KEYS as $key) {
+            $line = self::findKeyLine($lines, $dnsLine + 1, $dnsEnd, 2, $key);
+            if ($line === null) {
+                continue;
+            }
+            $ranges[] = [$line, self::findBlockEnd($lines, $line, $dnsEnd, 2)];
+        }
+        usort($ranges, fn ($a, $b) => $a[0] <=> $b[0]);
+        $block = [];
+        foreach ($ranges as [$from, $to]) {
+            if ($block !== []) {
+                $block[] = '';
+            }
+            $block = array_merge($block, array_slice($lines, $from, $to - $from));
+        }
+        return self::dedentBlock($block, 2);
+    }
+
+    /**
+     * 用 WebUI 里的 YAML 片段替换 DNS 上游受管区块。
+     *
+     * 片段为空 = 删除受管区块与旧的上游键（用户明确清空）。
+     * 写入前会移除同名旧键，避免 YAML 重复键导致 mihomo 拒绝。
+     */
+    public static function applyDnsUpstreamBlock(string $content, string $fragment): string
+    {
+        $eol = str_contains($content, "\r\n") ? "\r\n" : "\n";
+        $lines = preg_split("/\r\n|\n|\r/", $content) ?: [];
+        if ($lines !== [] && end($lines) === '') {
+            array_pop($lines);
+        }
+        $dnsLine = self::findKeyLine($lines, 0, count($lines), 0, 'dns');
+        if ($dnsLine === null) {
+            throw new \RuntimeException(gettext('The configuration file has no dns: block.'));
+        }
+
+        [$start, $end] = self::dnsUpstreamMarkers($lines);
+        if ($start !== null || $end !== null) {
+            if ($start === null || $end === null || $end < $start) {
+                throw new \RuntimeException(gettext('The DNS upstream block in the configuration file is not closed.'));
+            }
+            array_splice($lines, $start, $end - $start + 1);
+        }
+
+        $fragmentLines = self::normalizeDnsFragment($fragment);
+
+        /* 片段里出现的顶层键也要从旧 dns: 块里移除，避免重复 */
+        $removeKeys = self::DNS_UPSTREAM_KEYS;
+        foreach ($fragmentLines as $line) {
+            if (preg_match('/^"?([A-Za-z0-9_-]+)"?\s*:/', $line, $m)) {
+                $removeKeys[] = $m[1];
+            }
+        }
+        $removeKeys = array_values(array_unique($removeKeys));
+
+        $dnsLine = self::findKeyLine($lines, 0, count($lines), 0, 'dns');
+        $dnsEnd = self::findBlockEnd($lines, $dnsLine, count($lines), 0);
+        $remove = [];
+        for ($i = $dnsLine + 1; $i < $dnsEnd;) {
+            if (self::isContentLine($lines[$i]) && self::lineIndent($lines[$i]) === 2) {
+                if (preg_match('/^"?([A-Za-z0-9_-]+)"?\s*:/', trim($lines[$i]), $m)
+                    && in_array($m[1], $removeKeys, true)
+                ) {
+                    $blockEnd = self::findBlockEnd($lines, $i, $dnsEnd, 2);
+                    for ($j = $i; $j < $blockEnd; $j++) {
+                        $remove[$j] = true;
+                    }
+                    $i = $blockEnd;
+                    continue;
+                }
+            }
+            $i++;
+        }
+        if ($remove !== []) {
+            $kept = [];
+            foreach ($lines as $i => $line) {
+                if (!isset($remove[$i])) {
+                    $kept[] = $line;
+                }
+            }
+            $lines = $kept;
+        }
+
+        if ($fragmentLines !== []) {
+            $dnsLine = self::findKeyLine($lines, 0, count($lines), 0, 'dns');
+            $dnsEnd = self::findBlockEnd($lines, $dnsLine, count($lines), 0);
+            $block = ['  ' . self::DNS_UPSTREAM_MARK_BEGIN];
+            foreach ($fragmentLines as $line) {
+                $block[] = $line === '' ? '' : '  ' . $line;
+            }
+            $block[] = '  ' . self::DNS_UPSTREAM_MARK_END;
+            array_splice($lines, $dnsEnd, 0, $block);
+        }
+        return implode($eol, $lines);
+    }
+
+    /** @return array{0:?int,1:?int} 受管区块起止行号 */
+    private static function dnsUpstreamMarkers(array $lines): array
+    {
+        $start = $end = null;
+        foreach ($lines as $i => $line) {
+            $trim = trim($line);
+            if ($trim === self::DNS_UPSTREAM_MARK_BEGIN && $start === null) {
+                $start = $i;
+            } elseif ($trim === self::DNS_UPSTREAM_MARK_END && $start !== null) {
+                $end = $i;
+                break;
+            }
+        }
+        return [$start, $end];
+    }
+
+    /** 去掉固定缩进，返回 YAML 片段字符串 */
+    private static function dedentBlock(array $lines, int $indent): string
+    {
+        $out = [];
+        foreach ($lines as $line) {
+            if (trim($line) === '') {
+                $out[] = '';
+                continue;
+            }
+            $remove = min($indent, strlen($line) - strlen(ltrim($line)));
+            $out[] = substr($line, $remove);
+        }
+        return rtrim(implode("\n", $out));
+    }
+
+    /** 规整 WebUI 提交的 YAML 片段：去 CRLF、去外层缩进、拒绝制表符与 dns: 行 */
+    private static function normalizeDnsFragment(string $fragment): array
+    {
+        $fragment = str_replace(["\r\n", "\r"], "\n", $fragment);
+        $lines = explode("\n", $fragment);
+        $out = [];
+        foreach ($lines as $line) {
+            if (str_contains($line, "\t")) {
+                throw new \RuntimeException(gettext('DNS upstream YAML must use spaces, not tabs.'));
+            }
+            $trim = trim($line);
+            if ($trim === self::DNS_UPSTREAM_MARK_BEGIN || $trim === self::DNS_UPSTREAM_MARK_END) {
+                continue;
+            }
+            if (preg_match('/^\s*dns:\s*$/', $line)) {
+                throw new \RuntimeException(gettext('Do not include the top-level dns: line in the DNS upstream box.'));
+            }
+            $out[] = rtrim($line);
+        }
+        while ($out !== [] && trim($out[0]) === '') {
+            array_shift($out);
+        }
+        while ($out !== [] && trim(end($out)) === '') {
+            array_pop($out);
+        }
+        if ($out === []) {
+            return [];
+        }
+        $min = null;
+        foreach ($out as $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+            $indent = strlen($line) - strlen(ltrim($line));
+            $min = $min === null ? $indent : min($min, $indent);
+        }
+        $min = $min ?? 0;
+        foreach ($out as &$line) {
+            if (trim($line) === '') {
+                $line = '';
+                continue;
+            }
+            $remove = min($min, strlen($line) - strlen(ltrim($line)));
+            $line = substr($line, $remove);
+        }
+        unset($line);
+        return $out;
+    }
+
     /**
      * 「不修改」开关：从完整键表里挑出**用户交给插件**的键。
      *

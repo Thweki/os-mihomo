@@ -43,6 +43,7 @@ $checks = @(
     @{ name = 'Overview   /ui/mihomo';              url = '/ui/mihomo';                must = 'proxy-groups'; expect = 200 },
     @{ name = 'Settings   /ui/mihomo/settings';     url = '/ui/mihomo/settings';       must = 'frm_Settings'; expect = 200 },
     @{ name = 'DNS tab    /ui/mihomo/settings';     url = '/ui/mihomo/settings';       must = 'dnsStatusTab'; expect = 200 },
+    @{ name = 'DNS upstrm /ui/mihomo/settings';     url = '/ui/mihomo/settings';       must = 'mihomo.dns.upstream'; expect = 200 },
     @{ name = 'Subscribe  /ui/mihomo/subscription'; url = '/ui/mihomo/subscription';   must = 'log-viewer';   expect = 200 },
     @{ name = 'Log        /ui/mihomo/log';          url = '/ui/mihomo/log';            must = 'log-source';   expect = 200 },
     @{ name = 'Legacy     /mihomo.php';             url = '/mihomo.php';               must = 'Location: /ui/mihomo'; expect = 302 }
@@ -73,6 +74,7 @@ $apis = @(
     '/api/mihomo/service/safety',
     '/api/mihomo/settings/get',
     '/api/mihomo/settings/dns_status',
+    '/api/mihomo/settings/dns_upstream',
     '/api/mihomo/settings/config_get',
     '/api/mihomo/subscription/get',
     '/api/mihomo/subscription/log',

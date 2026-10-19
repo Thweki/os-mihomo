@@ -215,7 +215,7 @@ rules:
 - `proxies:` —— 节点（订阅更新会重写这一段）
 - `proxy-groups:` —— 分组（策略页的"代理组"下拉就是从这读的）
 - `rules:` —— **受管区块之外**的所有规则，包括最后的 `MATCH`
-- `dns:` 里的 nameserver / fake-ip 过滤 / nameserver-policy 等细节（页面只给 `enable` / `listen` / `enhanced-mode` 三个）
+- `dns:` 里的 fake-ip 过滤 / fallback 细节（`nameserver` / `nameserver-policy` / `respect-rules` 等已放进设置页的「DNS 上游（YAML）」受管区块；其余仍只能改 YAML）
 - 各种端口：`mixed-port`、`socks-port`、`port`
 - 性能与行为开关：`unified-delay`、`tcp-concurrent`、`find-process-mode`、`client-fingerprint`、`profile.*`
 - `geodata-*`（GeoIP/GeoSite 自动更新）
@@ -311,6 +311,34 @@ rules:
 - **没绑的接口**：DNS 到 OPNsense 仍由 Unbound 回答。只把 DNS 指到 mihomo 而不绑接口，会在 `redir-host` 下解析出真实 IP 后直连（等于没代理），在 `fake-ip` 下直接连不上。
 - **TCP DNS**：`dns-hijack` 里只写 `any:53` / `0.0.0.0:53` 时只覆盖 UDP。要同时覆盖 TCP，必须写成 `any:53` + `tcp://any:53`；页面会把“只劫持 UDP”标成警告。
 - **DoH/DoT/IPv6**：53 端口劫持管不到 853/443 的加密 DNS，也管不到 IPv6 DNS。
+
+### 设置页「DNS 上游（YAML）」
+
+设置页的 DNS 区新增了一个多行文本框（字段 `mihomo.dns.upstream`），用来写：
+
+```yaml
+default-nameserver:
+  - 223.5.5.5
+nameserver:
+  - https://dns.alidns.com/dns-query
+proxy-server-nameserver:
+  - 223.5.5.5
+nameserver-policy:
+  "geosite:private,cn":
+    - https://dns.alidns.com/dns-query
+  "geosite:gfw,geolocation-!cn":
+    - "https://dns.google/dns-query#RULES"
+respect-rules: true
+```
+
+规则：
+
+- 只写 `dns:` **里面** 的内容，不要写顶层的 `dns:` 行；
+- 默认是「不修改」（小锁合着）：文本框只显示文件现状，不写盘；
+- 点小锁解锁后才能编辑；点「应用」时整块替换，写前会先移除同名的旧键，避免 YAML 重复键；
+- 留空 = 删除这些上游键；
+- 文本框下方的「填入推荐值」只填内容并解锁，仍然要点「应用」才生效；
+- 落盘前照例走 `mihomo -t` + 备份 + 原子替换；校验不过不会写。
 
 ---
 

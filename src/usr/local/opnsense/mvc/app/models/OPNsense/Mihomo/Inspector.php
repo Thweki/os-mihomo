@@ -440,8 +440,8 @@ class Inspector
             'hijack' => $hijack,
             'unbound' => $unbound,
             'upstream' => [
-                'nameserver' => preg_match('/^\s{2}nameserver:\s*$/m', $yaml) === 1,
-                'nameserver_policy' => preg_match('/^\s{2}nameserver-policy:\s*$/m', $yaml) === 1,
+                'nameserver' => preg_match('/^\s+nameserver:\s*(?:$|\[)/m', $yaml) === 1,
+                'nameserver_policy' => preg_match('/^\s+nameserver-policy:\s*(?:$|\{)/m', $yaml) === 1,
                 'respect_rules' => self::boolValue($scan['dns.respect-rules'] ?? null, false),
             ],
             'interfaces' => $interfaces,
@@ -887,7 +887,7 @@ class Inspector
                 ),
             ];
         }
-        if (preg_match('/^\s{2}nameserver-policy:\s*$/m', $yaml) !== 1) {
+        if (preg_match('/^\s+nameserver-policy:\s*(?:$|\{)/m', $yaml) !== 1) {
             $warnings[] = [
                 'level' => 'info',
                 'text' => gettext('No nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant.'),

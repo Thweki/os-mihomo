@@ -118,6 +118,9 @@
                 <Required>Y</Required>
                 <ValidationMessage>Answer AAAA (IPv6) records too.</ValidationMessage>
             </ipv6>
+            <upstream type="TextField">
+                <Required>N</Required>
+            </upstream>
         </dns>
         <subscription>
             <url type="TextField">

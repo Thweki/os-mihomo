@@ -344,6 +344,7 @@ TRANSLATIONS: dict[str, str] = {
     'DNS path by interface': '各接口 DNS 去向',
     'See DNS status for which interface uses mihomo DNS.': '哪些接口使用 mihomo DNS，见「DNS 状态」。',
     'Client DNS hijack': '客户端 DNS 劫持',
+    'DNS nameserver': 'DNS 上游服务器',
     'Upstream policy': '上游策略',
     'Follow routing rules': '遵循路由规则',
     'configured': '已配置',
@@ -405,6 +406,20 @@ TRANSLATIONS: dict[str, str] = {
         '这些接口是手动策略路由：%s。请自行确认 pf 规则。',
     'No nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant.':
         '没有配置 nameserver-policy：mihomo 会使用默认上游，未必能防污染。',
+    # ---- DNS 上游表单（P19）----
+    'DNS upstream (YAML)': 'DNS 上游（YAML）',
+    'DNS upstream': 'DNS 上游',
+    'Fill recommended values': '填入推荐值',
+    'Suggested values; apply to activate.': '推荐值；点「应用」后才写入。',
+    'Not written until you unlock and apply.': '解锁并点「应用」后才写入。',
+    'YAML fragment relative to the dns: block: default-nameserver / nameserver / proxy-server-nameserver / direct-nameserver / nameserver-policy / respect-rules. Do not include the dns: line. Empty removes these keys.':
+        '相对于 dns: 块的 YAML 片段：default-nameserver / nameserver / proxy-server-nameserver / '
+        'direct-nameserver / nameserver-policy / respect-rules。不要写 dns: 这一行；留空会删除这些键。',
+    'The configuration file has no dns: block.': '配置文件里没有 dns: 块。',
+    'The DNS upstream block in the configuration file is not closed.': '配置文件里的 DNS 上游受管区块没有闭合。',
+    'DNS upstream YAML must use spaces, not tabs.': 'DNS 上游 YAML 只能用空格缩进，不能用制表符。',
+    'Do not include the top-level dns: line in the DNS upstream box.':
+        'DNS 上游文本框里不要包含顶层的 dns: 行。',
 }
 
 

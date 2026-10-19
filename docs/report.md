@@ -1434,6 +1434,13 @@ log             142611 字节  PHP 报错: 无 ✅
 用户确认后，另行执行了 `scripts/dns_tcp_hijack.sh`：把运行中 `config.yaml` 的
 `tun.dns-hijack` 从默认的 UDP-only 补成 `any:53 + tcp://any:53`（幂等脚本；
 `mihomo -t` 校验通过，旧文件备份为 `config.yaml.bak.20261019_225744`，重启后运行态
-`coverage=udp+tcp`）。订阅模板本就有这两条，无需修改。仍未做的是 P12-3 的
-“NAT 53→1053”（把 Unbound 接口的 DNS 也强制交给 mihomo）。
+`coverage=udp+tcp`）。订阅模板本就有这两条，无需修改。
+
+同一轮还加了 **「DNS 上游（YAML）」多行编辑框**（字段 `mihomo.dns.upstream`）：
+`nameserver` / `default-nameserver` / `proxy-server-nameserver` / `direct-nameserver` /
+`nameserver-policy` / `respect-rules` 等列表与嵌套映射，用带标记的受管区块整块替换
+（`# >>> os-mihomo:dns-upstream`）。写入前会移除同名旧键，避免 YAML 重复键；
+留空 = 删除这些键；默认仍是「不修改」，「填入推荐值」只填内容并解锁，点「应用」才落盘。
+纯函数测试覆盖了抽取 / 替换 / 幂等 / 清空 / 缩进规整，并用合成配置与真实配置各跑了一次
+`mihomo -t`。尚未替用户选定上游，也仍未做 P12-3 的 “NAT 53→1053”。
 
