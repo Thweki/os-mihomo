@@ -379,6 +379,60 @@ class Config
     }
 
     /**
+     * 「只写入改动过的项」：从完整键表里挑出本次真正要写的键。
+     *
+     * @param array $managed       yamlKey => ['value' => mixed, 'fields' => [字段 id...], 'label' => 显示名]
+     * @param array $changedFields 页面上本次改动过的字段 id
+     * @param bool  $onlyChanged   true = 只写改动过的项（页面默认）；false = 全部写（以页面为准）
+     * @param array $current       文件里现在的值（Config::scan()），用于判断"跳过的项到底有没有差别"
+     * @return array{0: array, 1: array, 2: array}  [要写的键表, 写了的显示名, 跳过且有差别的显示名]
+     */
+    public static function selectManagedKeys(
+        array $managed,
+        array $changedFields,
+        bool $onlyChanged,
+        array $current = []
+    ): array {
+        if (!$onlyChanged) {
+            return [$managed, self::labels($managed), []];
+        }
+
+        $changed = array_flip(array_map('strval', $changedFields));
+        $write = [];
+        $written = [];
+        $skipped = [];
+        foreach ($managed as $yamlKey => $info) {
+            $touched = false;
+            foreach ($info['fields'] as $field) {
+                if (isset($changed[$field])) {
+                    $touched = true;
+                    break;
+                }
+            }
+            if ($touched) {
+                $write[$yamlKey] = $info;
+                $written[] = $info['label'];
+                continue;
+            }
+            /* 没改过的项：只有"文件里现在和页面不一样"才值得提一句（否则本来就不用动） */
+            if (array_key_exists($yamlKey, $current) && !self::valuesEqual($current[$yamlKey], $info['value'])) {
+                $skipped[] = $info['label'];
+            }
+        }
+        return [$write, array_values(array_unique($written)), array_values(array_unique($skipped))];
+    }
+
+    /** 键表里的显示名（去重） */
+    private static function labels(array $managed): array
+    {
+        $labels = [];
+        foreach ($managed as $info) {
+            $labels[] = $info['label'];
+        }
+        return array_values(array_unique($labels));
+    }
+
+    /**
      * 生成一个仅 www 可读写的临时文件，供 configd（root）校验并接管写入。
      * 返回绝对路径，失败抛异常。
      */
@@ -497,24 +551,38 @@ class Config
             }
         }
 
-        /* 决定块的缩进：沿用规则列表第一项的缩进，否则用两个空格 */
+        /* 决定块的缩进：优先沿用文件里「我们区块之外」的第一条规则；其次沿用区块自身的；最后两空格 */
         $indent = '  ';
-        if ($start === null) {
-            foreach ($lines as $i => $line) {
-                if (preg_match('/^rules:\s*$/', $line)) {
-                    for ($j = $i + 1; $j < count($lines); $j++) {
-                        if (preg_match('/^(\s*)-\s/', $lines[$j], $m)) {
-                            $indent = $m[1];
-                            break;
-                        }
-                        if (preg_match('/^\S/', $lines[$j])) {
-                            break;
-                        }
-                    }
-                    break;
-                }
+        $fileIndent = null;
+        $seenRules = false;
+        $inBlock = false;
+        foreach ($lines as $line) {
+            if (trim($line) === self::POLICY_MARK_BEGIN) {
+                $inBlock = true;
+                continue;
             }
-        } elseif (isset($lines[$start + 1]) && preg_match('/^(\s*)-/', $lines[$start + 1], $m)) {
+            if (trim($line) === self::POLICY_MARK_END) {
+                $inBlock = false;
+                continue;
+            }
+            if ($inBlock) {
+                continue;
+            }
+            if (preg_match('/^rules:\s*$/', $line)) {
+                $seenRules = true;
+                continue;
+            }
+            if ($seenRules && preg_match('/^(\s+)-\s/', $line, $m)) {
+                $fileIndent = $m[1];
+                break;
+            }
+            if ($seenRules && preg_match('/^\S/', $line)) {
+                break;
+            }
+        }
+        if ($fileIndent !== null) {
+            $indent = $fileIndent;
+        } elseif ($start !== null && isset($lines[$start + 1]) && preg_match('/^(\s*)-/', $lines[$start + 1], $m)) {
             $indent = $m[1];
         }
 

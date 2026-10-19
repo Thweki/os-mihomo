@@ -28,6 +28,7 @@
 14. [路由策略（P12-1）](#15-路由策略p12-1按接口源分流原生表格--真实节点实测)
 20. [附录：命令速查](#20-附录命令速查)
 21. [P15：界面细节修复 + 配置说明文档](#21-p15界面细节修复--配置说明文档)
+22. [P17：修好「应用」报错 + IPv6 选项 + 只写入我改过的项](#22-p17修好应用报错--ipv6-选项--只写入我改过的项)
 
 ---
 
@@ -1130,6 +1131,75 @@ ls -1 /usr/local/opnsense/_bak/os-mihomo-i18n/            # 词库备份
 ---
 
 **报告完** — 如需继续（i18n、opt-in 化 post-install、历史曲线），见 `TODO.md` 的 P8 与 §11。
+
+---
+
+## 22. P17：修好「应用」报错 + IPv6 选项 + 只写入我改过的项
+
+### 22.1 用户报的错：首绑时「防火墙规则未能更新：…网关无效」
+
+**现象**（真实对话框）：第一次把接口绑给 mihomo 时，应用失败：
+
+```
+[mihomo]     config.yaml: already up to date
+[OPNsense]   防火墙规则未能更新: [OPNsense\Firewall\Filter:rules.rule.….gateway]
+             从与网络ip协议匹配的列表中指定一个有效网关。{MIHOMO_TUN}
+```
+
+**根因**：顺序反了。原本先写**浮动规则**（带 `gateway=MIHOMO_TUN`）再建**网关**，
+而防火墙模型的 gateway 字段会校验「这个网关存在且与规则的 IP 协议匹配」——
+网关还不存在，校验直接失败。independently，mihomo 侧的规则已经写好了，于是留下"一半绑定"的状态。
+
+**修法**：改成三段式（`policy_net.php` 支持 `verify` / `verify_only` 标志）：
+
+| 段 | 做什么 | 自检 |
+|---|---|---|
+| ① `verify=false` | 只写接口块 + 网关（config.xml，带备份） | 不重载（规则还没写） |
+| ② （WebGUI 侧） | 写/删浮动规则（核心防火墙模块） | 网关已存在 → 校验通过 |
+| ③ `verify_only=true` | `configctl filter reload` + 数 pf 里的 `route-to … tun_mihomo` | 数量为 0 → 报错，并让 WebGUI **撤销刚写的规则**（宁可"没绑定"也不留假象） |
+
+### 22.2 同一轮抓出的另外三个坑
+
+| # | 坑 | 表现 | 修法 |
+|---|---|---|---|
+| 1 | bypass 规则**撞名** | 描述只写目标接口（`Mihomo bypass (opt1)`），两个绑定接口会生成同名规则 → 把"重复项"去重时把该留的那条删掉了（实测 6 条只留 5 条） | 描述改成 `来源 -> 目标`（`Mihomo bypass (lan -> opt1)`） |
+| 2 | **configd 丢弃失败脚本的 stdout** | 第三段自检失败时 `exit 1` → 界面只显示「（无输出）」，真实原因被吞掉 | 第三段改成输出 `{"status":"failed","message":…}` 并 `exit 0` |
+| 3 | 部署脚本的 **`php -l` 有洞** | `find` 表达式写错，`/usr/local/opnsense/scripts/mihomo/*.php` **从未被检查** —— 我的解析错误因此溜到线上 | 修好 find；现在 32 个 PHP 文件全部检查（日志会打印检查数量） |
+
+### 22.3 新增功能（按用户要求）
+
+* **设置页 → IPv6**：`IPv6 处理`（`ipv6`）、`DNS 返回 IPv6`（`dns.ipv6`）两项，纳入受管键。
+  体检里的 IPv6 警告现在直接指向这个开关。
+* **「应用方式」默认只写改动过的项**：页面装载时记快照，提交时把动过的字段名列给后端，
+  后端只改对应的那几行。未动过的项即使与文件不一致也**不覆盖**，并在结果里告诉你有哪些
+  （"想同步请点『从配置导入』，或选『以页面为准』"）。按钮旁边实时显示「将写入：X、Y」。
+* **配置对照的「运行中」栏补全**：协议栈、域名嗅探、控制器地址都能填了；
+  密钥用"拿错密钥问内核"的探针判断（401 = 会校验），DNS 监听用一次真实查询探测（有应答 = 在监听）。
+  真正拿不到的只剩「严格路由」「DNS 模式」，页面明确说明。
+* 对照页的提示文案改成**说人话**（"运行中那列是内核现在真的在用的值，改完文件还得重启服务才会变"…）。
+
+### 22.4 实测（真实设备，用户自己的两个接口）
+
+```
+应用：interface block added: opt3 -> tun_mihomo / gateway added: MIHOMO_TUN -> 198.18.0.2 via opt3
+      firewall: 6 floating rules added (opt2, lan)
+      filter reload: OK      pf route-to rules into tun_mihomo: 2
+
+pf 顺序：第一条 route-to 行号 69 < 接口默认放行 73   ✅（浮动规则先于接口规则）
+规则：  opt2 → lan/opt1 内网直达 + 策略路由(US-AUTO)
+        lan  → opt1/opt2 内网直达 + 策略路由(US-AUTO)
+        igb4（LanDirect）route-to：0 条 ✅
+
+内核规则：SrcIPCIDR 192.168.10.0/24 → US-AUTO
+          AND((SrcIPCIDR,192.168.1.0/24) && (GeoSite,geolocation-!cn)) → US-AUTO
+自检：  opt2 出口 48.46.15.95（US-AUTO[US-HK01]）命中 SrcIPCIDR(192.168.10.0/24)
+        lan  出口 48.46.15.95（US-AUTO[US-HK01]）命中 AND(…GeoSite…)
+
+安全：默认路由 pppoe1 未变；出网 200；TUN 198.18.0.1；回归测试 0 失败
+```
+
+> 注：应用完成后内核仍在跑旧配置（文件比进程新），重启一次才加载 —— 这是"应用 ≠ 重启"的活例子，
+> 也正好写进了 `docs/config-guide.md` §2。
 
 ---
 

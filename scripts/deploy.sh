@@ -181,18 +181,18 @@ mkdir -p /usr/local/etc/mihomo/sub/temp
 # ---------------------------------------------------------------- 3. 语法检查
 log "== php -l =="
 PHP_ERRORS=0
-for f in $(find /usr/local/opnsense/mvc/app/models/OPNsense/Mihomo \
-                /usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo \
-                /usr/local/opnsense/scripts/mihomo \
-                /usr/local/www -maxdepth 1 -name 'mihomo*.php' -o \
-                -path '*/OPNsense/Mihomo/*' -name '*.php' 2>/dev/null | sort -u); do
+PHP_FILES="$(find /usr/local/opnsense/mvc/app/models/OPNsense/Mihomo \
+                  /usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo \
+                  /usr/local/opnsense/scripts/mihomo -name '*.php' 2>/dev/null | sort -u)
+$(ls /usr/local/www/mihomo*.php 2>/dev/null)"
+for f in $PHP_FILES; do
     if ! out=$(php -l "$f" 2>&1); then
         echo "SYNTAX ERROR: $f"
         echo "$out"
         PHP_ERRORS=$((PHP_ERRORS + 1))
     fi
 done
-log "  php files with syntax errors: $PHP_ERRORS"
+log "  php files checked: $(printf '%s\n' $PHP_FILES | grep -c . ) / syntax errors: $PHP_ERRORS"
 
 log "== sh -n =="
 for f in /usr/local/opnsense/scripts/mihomo/*.sh /usr/local/etc/rc.d/mihomo /usr/bin/mihomo_sub; do

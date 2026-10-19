@@ -43,13 +43,14 @@ class Inspector
         'external-ui-url',
     ];
 
-    /**
-     * 对照项定义。
+    /** 对照项定义。
      *
      * key   = YAML 里的路径（点号分层）
      * label = 界面上的名字（与设置页表单标签保持一致，直接复用已有译文）
      * secret= 该行是敏感值，只显示"已设置/空"
-     * run   = 运行值在 /configs 里的取法：'flat' 取顶层键，'tun' 取 tun 子对象
+     * run   = 运行值（内核 /configs）的取法：
+     *         ['flat', 键] 顶层字段；['tun', 键] tun 子对象；['probe', 说明] 用探针推断
+     *         没写 run 的项 = 内核不对外报告，界面显示"（内核不报告）"
      */
     private static function items(): array
     {
@@ -57,18 +58,20 @@ class Inspector
             ['key' => 'log-level', 'label' => gettext('Log Level'), 'run' => ['flat', 'log-level']],
             ['key' => 'mode', 'label' => gettext('Mode'), 'run' => ['flat', 'mode']],
             ['key' => 'allow-lan', 'label' => gettext('Allow LAN'), 'run' => ['flat', 'allow-lan']],
-            ['key' => 'external-controller', 'label' => gettext('External Controller')],
-            ['key' => 'secret', 'label' => gettext('Secret'), 'secret' => true],
+            ['key' => 'external-controller', 'label' => gettext('External Controller'), 'run' => ['controller', '']],
+            ['key' => 'secret', 'label' => gettext('Secret'), 'secret' => true, 'run' => ['auth', '']],
             ['key' => 'tun.enable', 'label' => gettext('TUN Mode'), 'run' => ['tun', 'enable']],
             ['key' => 'tun.device', 'label' => gettext('Device Name'), 'run' => ['tun', 'device']],
-            ['key' => 'tun.stack', 'label' => gettext('Stack')],
+            ['key' => 'tun.stack', 'label' => gettext('Stack'), 'run' => ['tun', 'stack']],
             ['key' => 'tun.auto-route', 'label' => gettext('Automatic Route'), 'run' => ['tun', 'auto-route']],
             ['key' => 'tun.strict-route', 'label' => gettext('Strict Route')],
             ['key' => 'tun.mtu', 'label' => gettext('MTU'), 'run' => ['tun', 'mtu']],
-            ['key' => 'dns.enable', 'label' => gettext('DNS Module')],
-            ['key' => 'dns.listen', 'label' => gettext('Listen Address')],
+            ['key' => 'dns.enable', 'label' => gettext('DNS Module'), 'run' => ['dns-probe', 'enable']],
+            ['key' => 'dns.listen', 'label' => gettext('Listen Address'), 'run' => ['dns-probe', 'listen']],
             ['key' => 'dns.enhanced-mode', 'label' => gettext('Enhanced Mode')],
-            ['key' => 'sniffer.enable', 'label' => gettext('Domain sniffing')],
+            ['key' => 'dns.ipv6', 'label' => gettext('DNS over IPv6')],
+            ['key' => 'ipv6', 'label' => gettext('IPv6 handling'), 'run' => ['flat', 'ipv6']],
+            ['key' => 'sniffer.enable', 'label' => gettext('Domain sniffing'), 'run' => ['flat', 'sniffing']],
         ];
     }
 
@@ -78,7 +81,6 @@ class Inspector
         return [
             ['key' => 'mixed-port', 'label' => gettext('Mixed port'), 'run' => ['flat', 'mixed-port']],
             ['key' => 'socks-port', 'label' => gettext('SOCKS port'), 'run' => ['flat', 'socks-port']],
-            ['key' => 'ipv6', 'label' => gettext('IPv6'), 'run' => ['flat', 'ipv6']],
         ];
     }
 
@@ -204,21 +206,99 @@ class Inspector
      * @param array|null $runtime mihomo /configs 的解码结果；null = 服务没跑/读不到
      * @return array<int, array{key: string, label: string, model: string, file: string, runtime: string, state: string, secret: bool}>
      */
-    public static function compare(string $yaml, array $model, ?array $runtime): array
+    public static function compare(string $yaml, array $model, ?array $runtime, array $probe = []): array
     {
         $rows = [];
         foreach (self::items() as $item) {
-            $rows[] = self::buildRow($item, $yaml, $model, $runtime);
+            $rows[] = self::buildRow($item, $yaml, $model, $runtime, false, $probe);
         }
         foreach (self::runtimeOnlyItems() as $item) {
-            $row = self::buildRow($item, $yaml, $model, $runtime, true);
-            $rows[] = $row;
+            $rows[] = self::buildRow($item, $yaml, $model, $runtime, true, $probe);
         }
         return $rows;
     }
 
+    /**
+     * 探针 1：内核到底要不要校验密钥。
+     * 用错误的密钥问一次 /version：401 = 会校验（说明密钥确实设置了）；200 = 不校验。
+     */
+    public static function authProbe(): ?string
+    {
+        if (Config::controllerBase() === null) {
+            return null;
+        }
+        $ch = curl_init(Config::controllerBase() . '/version');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 2,
+            CURLOPT_TIMEOUT => 3,
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer __os-mihomo-probe__'],
+        ]);
+        curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code === 0) {
+            return null;
+        }
+        return $code === 401 || $code === 403
+            ? gettext('checked by the core')
+            : gettext('not checked (no secret)');
+    }
+
+    /**
+     * 探针 2：mihomo 自己的 DNS 是否在配置里写的地址上应答。
+     * 发一个最小的 example.com/A 查询，只看有没有正常应答 —— 不改动任何状态。
+     */
+    public static function dnsProbe(string $yaml): ?string
+    {
+        $listen = self::yamlValue($yaml, 'dns.listen');
+        if ($listen === null) {
+            return null;
+        }
+        $listen = trim($listen, "\"'");
+        if (!str_contains($listen, ':')) {
+            return null;
+        }
+        [$host, $port] = explode(':', $listen, 2);
+        $port = (int)$port;
+        if ($port <= 0) {
+            return null;
+        }
+        if ($host === '' || $host === '0.0.0.0') {
+            $host = '127.0.0.1';
+        }
+
+        $query = "\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+            . "\x07example\x03com\x00" . "\x00\x01\x00\x01";
+
+        $answer = false;
+        try {
+            $socket = @stream_socket_client(
+                sprintf('udp://%s:%d', $host, $port),
+                $errno,
+                $errstr,
+                1
+            );
+            if ($socket !== false) {
+                stream_set_timeout($socket, 2);
+                fwrite($socket, $query);
+                $response = fread($socket, 512);
+                fclose($socket);
+                if (is_string($response) && strlen($response) >= 12) {
+                    $answer = true;
+                }
+            }
+        } catch (\Throwable $e) {
+            $answer = false;
+        }
+
+        return $answer
+            ? sprintf(gettext('%s (answering)'), $listen)
+            : sprintf(gettext('%s (no answer)'), $listen);
+    }
+
     /** 单行对照 */
-    private static function buildRow(array $item, string $yaml, array $model, ?array $runtime, bool $runtimeOnly = false): array
+    private static function buildRow(array $item, string $yaml, array $model, ?array $runtime, bool $runtimeOnly = false, array $probe = []): array
     {
         $key = $item['key'];
         $secret = (bool)($item['secret'] ?? false);
@@ -229,11 +309,21 @@ class Inspector
         $runtimeValue = null;
         if ($runtime !== null && isset($item['run'])) {
             [$where, $name] = $item['run'];
-            $source = $where === 'tun' ? ($runtime['tun'] ?? null) : $runtime;
-            if (is_array($source) && array_key_exists($name, $source)) {
-                $runtimeValue = is_bool($source[$name])
-                    ? ($source[$name] ? 'true' : 'false')
-                    : (string)$source[$name];
+            if ($where === 'controller') {
+                /* 内核能应答，就证明它确实在这个地址上监听 */
+                $base = Config::controllerBase();
+                $runtimeValue = $base === null ? null : preg_replace('@^https?://@', '', $base);
+            } elseif ($where === 'auth') {
+                $runtimeValue = $probe['auth_enforced'] ?? null;
+            } elseif ($where === 'dns-probe') {
+                $runtimeValue = $probe['dns'] ?? null;
+            } else {
+                $source = $where === 'tun' ? ($runtime['tun'] ?? null) : $runtime;
+                if (is_array($source) && array_key_exists($name, $source)) {
+                    $runtimeValue = is_bool($source[$name])
+                        ? ($source[$name] ? 'true' : 'false')
+                        : (string)$source[$name];
+                }
             }
         }
 
@@ -278,8 +368,12 @@ class Inspector
     {
         $yaml = Config::rawText();
         $runtimeValues = self::runtimeValues();
-        $rows = self::compare($yaml, self::modelValues(), $runtimeValues);
         $runtime = $runtimeValues !== null;
+        $probe = [
+            'auth_enforced' => $runtime ? self::authProbe() : null,
+            'dns' => $runtime ? self::dnsProbe($yaml) : null,
+        ];
+        $rows = self::compare($yaml, self::modelValues(), $runtimeValues, $probe);
 
         $differs = 0;
         $missing = 0;
@@ -295,37 +389,41 @@ class Inspector
         if (!$runtime) {
             $notes[] = [
                 'level' => 'info',
-                'text' => gettext('The running service cannot be reached, so only the WebUI and the file are compared. Start the service to see the values that are actually in use.'),
+                'text' => gettext('The running service cannot be read right now (stopped, or the secret does not match), so only the page and the file are compared here.'),
             ];
         } else {
             $notes[] = [
                 'level' => 'info',
-                'text' => gettext('Runtime values come from the mihomo external controller, i.e. the configuration currently held in memory.'),
+                'text' => gettext('The "Running" column is what the core is using right now. Change the file and you still have to restart the service before it shows up here.'),
+            ];
+            $notes[] = [
+                'level' => 'info',
+                'text' => gettext('A few items are not reported by the core at all (strict route, DNS mode, ...), so their "Running" cell stays empty — only the file and the core log can tell.'),
             ];
         }
         if ($differs > 0) {
             $notes[] = [
                 'level' => 'warning',
-                'text' => gettext('Some values differ between the WebUI and the file. Press Apply on this page to write the WebUI values into the file, or press Import to load the file values into the WebUI.'),
+                'text' => gettext('The page and the file disagree on some items: press Apply to write what the page says into the file, or press Import to load what the file says into the page.'),
             ];
         }
         if (self::looksHandwritten($yaml)) {
             $notes[] = [
                 'level' => 'warning',
-                'text' => gettext('The configuration file looks hand-written. A subscription update would replace it completely; edit the file by hand instead (or back it up first).'),
+                'text' => gettext('This config.yaml is hand-written, not generated from the subscription template. Updating the subscription replaces the whole file, so your own edits would be gone — do not use it, or take a backup first.'),
             ];
         }
         $notes[] = self::hasManagedBlock($yaml) ? [
             'level' => 'info',
-            'text' => gettext('A managed policy-routing block is present: the routing policy page replaces this block as a whole and leaves everything else untouched.'),
+            'text' => gettext('The file contains a block of rules that the plugin keeps up to date (from the Policy Routing page). Do not edit inside that block: it gets replaced as a whole.'),
         ] : [
             'level' => 'info',
-            'text' => gettext('No managed policy-routing block in the file (no interface is bound).'),
+            'text' => gettext('No interface is bound to mihomo right now, so the file contains no plugin-managed rules.'),
         ];
         if (self::ipv6Allowed($yaml)) {
             $notes[] = [
                 'level' => 'warning',
-                'text' => gettext('IPv6 is enabled, but the TUN device only carries IPv4: IPv6 traffic bypasses mihomo. Set ipv6: false to turn IPv6 off on the proxy side, or add IPv6 handling separately.'),
+                'text' => gettext('IPv6 traffic does not go through the proxy: the mihomo tunnel only handles IPv4. Add ipv6: false in the configuration if you want IPv6 handled by the normal route, or ignore this.'),
             ];
         }
 

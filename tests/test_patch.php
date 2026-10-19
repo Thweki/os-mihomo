@@ -344,5 +344,40 @@ check('对照：密钥不外泄', ($byKey['secret']['file'] ?? '') !== '"abc123"
     && ($byKey['secret']['model'] ?? '') !== 'abc123', (string)($byKey['secret']['file'] ?? '?'));
 check('对照：密钥被识别为已设置', ($byKey['secret']['state'] ?? '') === Inspector::STATE_MATCH);
 
+echo "\n=== 15. 设置应用方式：只写入改动过的项 ===\n";
+$managed = [
+    'log-level' => ['value' => 'info', 'fields' => ['mihomo.general.logLevel'], 'label' => 'Log Level'],
+    'tun.mtu' => ['value' => 1500, 'fields' => ['mihomo.tun.mtu'], 'label' => 'MTU'],
+    'tun.auto-route' => ['value' => false, 'fields' => ['mihomo.tun.autoRoute'], 'label' => 'Automatic Route'],
+];
+$current = ['log-level' => 'info', 'tun.mtu' => '1400', 'tun.auto-route' => 'true'];
+
+[$write, $written, $skipped] = Config::selectManagedKeys($managed, ['mihomo.tun.mtu'], true, $current);
+check('只写改动过的项', array_keys($write) === ['tun.mtu'], implode(',', array_keys($write)));
+check('写入项的显示名', $written === ['MTU'], implode(',', $written));
+check('跳过的是"文件有差别但没改"的项', $skipped === ['Automatic Route'], implode(',', $skipped));
+check('本来就一致的不算跳过', !in_array('Log Level', $skipped, true), implode(',', $skipped));
+
+[$write2, , ] = Config::selectManagedKeys($managed, [], true, $current);
+check('什么都没改 → 一个都不写', $write2 === [], (string)count($write2));
+
+[$write3, , $skipped3] = Config::selectManagedKeys($managed, [], false, $current);
+check('以页面为准 → 全部写', count($write3) === 3 && $skipped3 === [], (string)count($write3));
+
+$managedBool = [
+    'allow-lan' => ['value' => false, 'fields' => ['mihomo.general.allowLan'], 'label' => 'Allow LAN'],
+];
+[, , $skipped4] = Config::selectManagedKeys($managedBool, [], true, ['allow-lan' => 'false']);
+check('写法不同但语义相同 → 不提', $skipped4 === [], implode(',', $skipped4));
+
+/* 同时改了两个字段 → 两项都写（含"一个字段对应多个键"的情形） */
+[$write5, $written5, ] = Config::selectManagedKeys(
+    $managed,
+    ['mihomo.tun.mtu', 'mihomo.tun.autoRoute'],
+    true,
+    $current
+);
+check('多字段改动', count($write5) === 2 && $written5 === ['MTU', 'Automatic Route'], implode(',', $written5));
+
 echo "\n=== 汇总: {$failures} 个失败 ===\n";
 exit($failures === 0 ? 0 : 1);

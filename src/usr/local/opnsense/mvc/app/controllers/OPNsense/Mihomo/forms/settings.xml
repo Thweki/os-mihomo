@@ -121,6 +121,23 @@
         <type>dropdown</type>
         <help>fake-ip returns synthetic addresses, redir-host returns real ones.</help>
     </field>
+    <field>
+        <id>mihomo.dns.ipv6</id>
+        <label>DNS over IPv6</label>
+        <type>checkbox</type>
+        <help>Answer AAAA records. Turn off if the tunnel only carries IPv4.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>IPv6</label>
+    </field>
+    <field>
+        <id>mihomo.general.ipv6</id>
+        <label>IPv6 handling</label>
+        <type>checkbox</type>
+        <help>Let the core handle IPv6. Off = IPv6 traffic stays on the normal route (current design).</help>
+    </field>
 
     <field>
         <type>header</type>

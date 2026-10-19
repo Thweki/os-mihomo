@@ -53,6 +53,11 @@
                 <Required>Y</Required>
                 <ValidationMessage>Recover domains from TLS SNI, required for domain based rules on routed traffic.</ValidationMessage>
             </sniffer>
+            <ipv6 type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Let the core handle IPv6 traffic.</ValidationMessage>
+            </ipv6>
         </general>
         <tun>
             <enabled type="BooleanField">
@@ -108,6 +113,11 @@
                     <redir-host>redir-host</redir-host>
                 </OptionValues>
             </enhancedMode>
+            <ipv6 type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Answer AAAA (IPv6) records too.</ValidationMessage>
+            </ipv6>
         </dns>
         <subscription>
             <url type="TextField">

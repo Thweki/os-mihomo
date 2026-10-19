@@ -38,34 +38,59 @@ class SettingsController extends ApiMutableModelControllerBase
     protected static $internalSaveRequiresAdmin = true;
 
     /**
+     * 本插件管理的键：yaml 键 => [值, 来自哪个页面字段, 显示名]。
+     *
+     * 页面字段 id 必须与表单里的 id 一致（`mihomo.tun.mtu` 这种），
+     * 这样「只写入我改过的项」才能把字段名对应到 YAML 键。
+     */
+    private function managedKeys(): array
+    {
+        $mdl = $this->getModel();
+        $flag = fn ($node) => ((string)$node === '1');
+        $keys = [];
+        $add = function (string $yamlKey, $value, array $fields, string $label) use (&$keys): void {
+            $keys[$yamlKey] = ['value' => $value, 'fields' => $fields, 'label' => $label];
+        };
+
+        $add('log-level', (string)$mdl->general->logLevel, ['mihomo.general.logLevel'], gettext('Log Level'));
+        $add('mode', (string)$mdl->general->mode, ['mihomo.general.mode'], gettext('Mode'));
+        $add('allow-lan', $flag($mdl->general->allowLan), ['mihomo.general.allowLan'], gettext('Allow LAN'));
+        $add(
+            'external-controller',
+            sprintf('%s:%s', (string)$mdl->general->controllerBind, (string)$mdl->general->controllerPort),
+            ['mihomo.general.controllerBind', 'mihomo.general.controllerPort'],
+            gettext('External Controller')
+        );
+        $add('secret', (string)$mdl->general->secret, ['mihomo.general.secret'], gettext('Secret'));
+        $add('tun.enable', $flag($mdl->tun->enabled), ['mihomo.tun.enabled'], gettext('TUN Mode'));
+        $add('tun.device', (string)$mdl->tun->device, ['mihomo.tun.device'], gettext('Device Name'));
+        $add('tun.stack', (string)$mdl->tun->stack, ['mihomo.tun.stack'], gettext('Stack'));
+        $add('tun.auto-route', $flag($mdl->tun->autoRoute), ['mihomo.tun.autoRoute'], gettext('Automatic Route'));
+        $add('tun.strict-route', $flag($mdl->tun->strictRoute), ['mihomo.tun.strictRoute'], gettext('Strict Route'));
+        $add('tun.mtu', (int)(string)$mdl->tun->mtu, ['mihomo.tun.mtu'], gettext('MTU'));
+        $add('dns.enable', $flag($mdl->dns->enabled), ['mihomo.dns.enabled'], gettext('DNS Module'));
+        $add('dns.listen', (string)$mdl->dns->listen, ['mihomo.dns.listen'], gettext('Listen Address'));
+        $add('dns.enhanced-mode', (string)$mdl->dns->enhancedMode, ['mihomo.dns.enhancedMode'], gettext('Enhanced Mode'));
+        $add('dns.ipv6', $flag($mdl->dns->ipv6), ['mihomo.dns.ipv6'], gettext('DNS over IPv6'));
+        $add('ipv6', $flag($mdl->general->ipv6), ['mihomo.general.ipv6'], gettext('IPv6 handling'));
+        foreach (Config::snifferKeys($flag($mdl->general->sniffer)) as $key => $value) {
+            $add($key, $value, ['mihomo.general.sniffer'], gettext('Domain sniffing'));
+        }
+
+        return $keys;
+    }
+
+    /**
      * 模型 → config.yaml 的映射。
      * 只列出本插件管理的键；其余内容（proxies / proxy-groups / rules …）原样保留。
      */
     private function modelPatch(): array
     {
-        $mdl = $this->getModel();
-        $flag = fn ($node) => ((string)$node === '1');
-
-        return [
-            'log-level' => (string)$mdl->general->logLevel,
-            'mode' => (string)$mdl->general->mode,
-            'allow-lan' => $flag($mdl->general->allowLan),
-            'external-controller' => sprintf(
-                '%s:%s',
-                (string)$mdl->general->controllerBind,
-                (string)$mdl->general->controllerPort
-            ),
-            'secret' => (string)$mdl->general->secret,
-            'tun.enable' => $flag($mdl->tun->enabled),
-            'tun.device' => (string)$mdl->tun->device,
-            'tun.stack' => (string)$mdl->tun->stack,
-            'tun.auto-route' => $flag($mdl->tun->autoRoute),
-            'tun.strict-route' => $flag($mdl->tun->strictRoute),
-            'tun.mtu' => (int)(string)$mdl->tun->mtu,
-            'dns.enable' => $flag($mdl->dns->enabled),
-            'dns.listen' => (string)$mdl->dns->listen,
-            'dns.enhanced-mode' => (string)$mdl->dns->enhancedMode,
-        ] + Config::snifferKeys($flag($mdl->general->sniffer));
+        $patch = [];
+        foreach ($this->managedKeys() as $key => $info) {
+            $patch[$key] = $info['value'];
+        }
+        return $patch;
     }
 
     /**
@@ -91,36 +116,74 @@ class SettingsController extends ApiMutableModelControllerBase
         $mdl = $this->getModel();
         $backend = new Backend();
 
-        /* ---- 1. config.yaml ---- */
-        try {
-            $content = Config::patchKeys(Config::rawText(), $this->modelPatch());
-            $staging = Config::createStagingFile($content);
-        } catch (\Throwable $e) {
-            $result['message'] = $e->getMessage();
-            return $result;
+        /* ---- 0. 应用方式：默认只写"这次改过的项"（避免把文件里没动过的值覆盖掉）---- */
+        $mode = (string)$this->request->getPost('mode', null, 'all');
+        $onlyChanged = $mode === 'changed';
+        $changedRaw = (string)$this->request->getPost('changed', null, '[]');
+        $changedFields = json_decode($changedRaw, true);
+        if (!is_array($changedFields)) {
+            $changedFields = [];
         }
+        $changedFields = array_map('strval', $changedFields);
+        [$write, $writtenLabels, $skippedLabels] = Config::selectManagedKeys(
+            $this->managedKeys(),
+            $changedFields,
+            $onlyChanged,
+            Config::scan()
+        );
+        $touched = fn (string $field): bool => !$onlyChanged || in_array($field, $changedFields, true);
 
-        $output = trim((string)$backend->configdpRun('mihomo config-install', [$staging]));
-        if (stripos($output, 'installed successfully') === false) {
-            $result['message'] = sprintf(
-                gettext('The configuration file was not written. mihomo rejected it:%s'),
-                $output === '' ? ' ' . gettext('(no output)') : "\n" . $output
+        /* ---- 1. config.yaml ---- */
+        if ($write === []) {
+            $result['messages'][] = gettext('Nothing was changed on this page, so the file was left alone.');
+        } else {
+            $patch = [];
+            foreach ($write as $key => $info) {
+                $patch[$key] = $info['value'];
+            }
+            try {
+                $content = Config::patchKeys(Config::rawText(), $patch);
+                $staging = Config::createStagingFile($content);
+            } catch (\Throwable $e) {
+                $result['message'] = $e->getMessage();
+                return $result;
+            }
+
+            $output = trim((string)$backend->configdpRun('mihomo config-install', [$staging]));
+            if (stripos($output, 'installed successfully') === false) {
+                $result['message'] = sprintf(
+                    gettext('The configuration file was not written. mihomo rejected it:%s'),
+                    $output === '' ? ' ' . gettext('(no output)') : "\n" . $output
+                );
+                return $result;
+            }
+            $result['messages'][] = sprintf(
+                gettext('Configuration file updated: %d item(s) written — %s'),
+                count($writtenLabels),
+                implode('、', $writtenLabels)
             );
-            return $result;
         }
-        $result['messages'][] = gettext('Configuration file updated and validated.');
+        if ($skippedLabels !== []) {
+            $result['messages'][] = sprintf(
+                gettext('The page and the file disagree on %d item(s), but you did not touch them, so they were left as they are: %s — press Import to use the file values in the page, or pick "takes precedence" to write them.'),
+                count($skippedLabels),
+                implode('、', $skippedLabels)
+            );
+        }
 
         /* ---- 2. 开机自启 ---- */
-        $enabled = (string)$mdl->general->enabled === '1';
-        $backend->configdpRun('mihomo set-enabled', [$enabled ? 'yes' : 'no']);
-        $result['messages'][] = $enabled
-            ? gettext('Service will start automatically on boot.')
-            : gettext('Service will not start automatically on boot.');
+        if ($touched('mihomo.general.enabled')) {
+            $enabled = (string)$mdl->general->enabled === '1';
+            $backend->configdpRun('mihomo set-enabled', [$enabled ? 'yes' : 'no']);
+            $result['messages'][] = $enabled
+                ? gettext('Service will start automatically on boot.')
+                : gettext('Service will not start automatically on boot.');
+        }
 
         /* ---- 3. 订阅凭据（仅在填写时写入，避免清空既有值）---- */
         $url = trim((string)$mdl->subscription->url);
         $secret = trim((string)$mdl->subscription->secret);
-        if ($url !== '' || $secret !== '') {
+        if (($touched('mihomo.subscription.url') || $touched('mihomo.subscription.secret')) && ($url !== '' || $secret !== '')) {
             $out = trim((string)$backend->configdpRun('mihomo env-set', [$url, $secret]));
             if ($out !== '') {
                 $result['messages'][] = $out;
@@ -128,16 +191,18 @@ class SettingsController extends ApiMutableModelControllerBase
         }
 
         /* ---- 4. 订阅自动更新（写 OPNsense 原生 Cron 任务）---- */
-        try {
-            $cronMessage = $this->syncSubscriptionCron(
-                (string)$mdl->subscription->updateEnabled === '1',
-                (string)$mdl->subscription->updateInterval
-            );
-            if ($cronMessage !== '') {
-                $result['messages'][] = $cronMessage;
+        if ($touched('mihomo.subscription.updateEnabled') || $touched('mihomo.subscription.updateInterval')) {
+            try {
+                $cronMessage = $this->syncSubscriptionCron(
+                    (string)$mdl->subscription->updateEnabled === '1',
+                    (string)$mdl->subscription->updateInterval
+                );
+                if ($cronMessage !== '') {
+                    $result['messages'][] = $cronMessage;
+                }
+            } catch (\Throwable $e) {
+                $result['messages'][] = sprintf(gettext('Scheduled task could not be updated: %s'), $e->getMessage());
             }
-        } catch (\Throwable $e) {
-            $result['messages'][] = sprintf(gettext('Scheduled task could not be updated: %s'), $e->getMessage());
         }
 
         /* ---- 5. 显式重启 ---- */

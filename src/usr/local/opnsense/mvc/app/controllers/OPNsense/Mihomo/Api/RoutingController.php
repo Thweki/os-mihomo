@@ -318,40 +318,67 @@ class RoutingController extends ApiMutableModelControllerBase
         $this->throwReadOnly();
 
         $payload = $this->netPayload();
+        $interfaces = $payload['interfaces'];
 
-        /* 1) 防火墙规则：写进核心防火墙模块的「浮动规则」——
-         *    浮动规则先于接口规则执行，因此不会被该接口的默认放行规则挡住。
-         *    （写进旧版根 <filter> 的规则会被默认放行规则抢先，实测 Evaluations=0） */
-        try {
-            $result['messages'] = array_merge($result['messages'], $this->syncFloatingRules($payload['interfaces']));
-        } catch (\Throwable $e) {
-            $result['message'] = sprintf(gettext('Firewall rules could not be updated: %s'), $e->getMessage());
-            return $result;
-        }
+        /* 顺序很重要（首绑实测报过「网关无效」）：
+         *   ① 先建接口 + 网关（此时还不写规则，所以不带自检）
+         *   ② 再写浮动规则 —— 网关已在 config.xml 里，模型校验才通得过
+         *   ③ 最后 reload + 自检 pf 里是否真有 route-to；没有就把刚写的规则撤掉
+         */
+        $messages = [];
 
-        /* 2) 接口 + 网关（root 脚本，文本级编辑 + 备份），并清理旧版遗留规则 */
-        $staging = null;
+        /* ① 接口 + 网关 */
         try {
-            $staging = $this->writeStaging($payload);
-            $netResult = $this->configdJson('policy-net-apply', [$staging]);
+            $r1 = $this->callNetScript($payload + ['verify' => false]);
         } catch (\Throwable $e) {
             $result['message'] = $e->getMessage();
             return $result;
-        } finally {
-            if ($staging !== null) {
-                @unlink($staging);
-            }
+        }
+        if (($r1['status'] ?? '') !== 'ok') {
+            return $r1;
+        }
+        $messages = array_merge($messages, $r1['messages'] ?? []);
+
+        /* ② 浮动规则 */
+        try {
+            $messages = array_merge($messages, $this->syncFloatingRules($interfaces));
+        } catch (\Throwable $e) {
+            return [
+                'status' => 'failed',
+                'messages' => $messages,
+                'message' => sprintf(gettext('Firewall rules could not be updated: %s'), $e->getMessage()),
+            ];
         }
 
-        if (($netResult['status'] ?? '') !== 'ok') {
-            return $netResult;
+        /* ③ 生效 + 自检 */
+        try {
+            $r3 = $this->callNetScript($payload + ['verify_only' => true]);
+        } catch (\Throwable $e) {
+            $result['message'] = $e->getMessage();
+            return $result;
+        }
+        $messages = array_merge($messages, $r3['messages'] ?? []);
+
+        if (($r3['status'] ?? '') === 'ok') {
+            return [
+                'status' => 'ok',
+                'messages' => $messages,
+                'diff' => $r1['diff'] ?? '',
+                'state' => $r3['state'] ?? ($r1['state'] ?? []),
+            ];
         }
 
+        /* 自检没过：把刚写的规则撤掉，宁可"没绑定"也不要留下"看着绑了其实没生效" */
+        try {
+            $messages = array_merge($messages, $this->syncFloatingRules([]));
+        } catch (\Throwable $e) {
+            /* 撤销失败也只能如实报告 */
+        }
         return [
-            'status' => 'ok',
-            'messages' => array_merge($result['messages'], $netResult['messages'] ?? []),
-            'diff' => $netResult['diff'] ?? '',
-            'state' => $netResult['state'] ?? [],
+            'status' => 'failed',
+            'messages' => $messages,
+            'message' => trim((string)($r3['message'] ?? '')) . "\n"
+                . gettext('The firewall rules written by this attempt have been removed, so nothing is bound.'),
         ];
     }
 
@@ -367,7 +394,9 @@ class RoutingController extends ApiMutableModelControllerBase
         $model = new \OPNsense\Firewall\Filter();
         $subnets = $this->bindableInterfaces();
 
-        /* 现有本插件规则：description → uuid 列表（同一描述出现多次视为重复，保留一个） */
+        /* 现有本插件规则：description → uuid 列表（同一描述出现多次视为重复，保留一个）
+         * 注意：描述里必须带**来源接口**，否则两个绑定接口会生成同名规则，
+         * 去重逻辑会把其中一条（本该保留的）删掉 —— 实测踩过。 */
         $existing = [];
         foreach ($model->rules->rule->iterateItems() as $uuid => $node) {
             if (preg_match('/^Mihomo (bypass|policy) \(([^)]*)\)$/', (string)$node->description, $m)) {
@@ -379,16 +408,18 @@ class RoutingController extends ApiMutableModelControllerBase
             $existingKey[$key] = $uuids[0];
         }
 
-        /* 期望集合：绑定接口的内网直达 + 策略路由（键与 description 一致，便于比对） */
+        /* 期望集合：绑定接口的内网直达 + 策略路由（键与 description 一致，便于比对）
+         * 键里必须同时含来源与目标，否则两个接口会撞名（见上方注释）。 */
         $desired = [];
         foreach ($interfaces as $iface) {
             foreach (array_keys($subnets) as $destIface) {
                 if ($destIface === $iface) {
                     continue;
                 }
-                $desired['bypass(' . $destIface . ')'] = ['kind' => 'bypass', 'iface' => $iface, 'dest' => $destIface];
+                $label = $iface . ' -> ' . $destIface;
+                $desired['bypass(' . $label . ')'] = ['kind' => 'bypass', 'iface' => $iface, 'dest' => $destIface, 'label' => $label];
             }
-            $desired['policy(' . $iface . ')'] = ['kind' => 'policy', 'iface' => $iface, 'dest' => ''];
+            $desired['policy(' . $iface . ')'] = ['kind' => 'policy', 'iface' => $iface, 'dest' => '', 'label' => $iface];
         }
 
         /* 删除不再需要的规则 + 同名重复项 */
@@ -423,7 +454,7 @@ class RoutingController extends ApiMutableModelControllerBase
             $rule->quick = '1';
             $rule->ipprotocol = 'inet';
             $rule->direction = 'in';
-            $rule->description = sprintf('Mihomo %s (%s)', $spec['kind'], $spec['kind'] === 'policy' ? $spec['iface'] : $spec['dest']);
+            $rule->description = sprintf('Mihomo %s (%s)', $spec['kind'], $spec['label']);
             if ($spec['kind'] === 'policy') {
                 $rule->source_net = $spec['iface'];
                 $rule->destination_net = 'any';
@@ -483,6 +514,17 @@ class RoutingController extends ApiMutableModelControllerBase
             $payload,
             JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         ));
+    }
+
+    /** 调一次 policy-net-apply（自动清理暂存文件） */
+    private function callNetScript(array $payload): array
+    {
+        $staging = $this->writeStaging($payload);
+        try {
+            return $this->configdJson('policy-net-apply', [$staging]);
+        } finally {
+            @unlink($staging);
+        }
     }
 
     private function configdJson(string $action, array $args = []): array

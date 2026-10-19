@@ -6,12 +6,20 @@
  *
  * 用法:
  *   policy_net.php check                          只读：现状（接口/网关/规则/TUN 地址）
- *   policy_net.php apply <staging-json>           写入 config.xml（接口 + 网关 + 策略路由规则）并重载过滤器
+ *   policy_net.php apply <staging-json>           写入 config.xml（接口 + 网关）并（按需）重载过滤器
  *   policy_net.php rollback                       还原最近一次本插件做的 config.xml 备份并重载
  *
  * staging JSON:
- *   {"interfaces": ["lan", "opt2"], "gateway": "198.18.0.2", "device": "tun_mihomo"}
+ *   {"interfaces": ["lan", "opt2"], "gateway": "198.18.0.2", "device": "tun_mihomo",
+ *    "verify": true, "verify_only": false}
  *   gateway 留空时自动从 `ifconfig <device>` 推断（/30 时取对端地址）
+ *
+ * 为什么分三段（WebGUI 的「应用」按这个顺序调用）:
+ *   ① verify=false     先建接口与网关 —— 防火墙的浮动规则带 gateway 字段，
+ *                      网关还不存在时模型校验会直接报「网关无效」（实测踩过）
+ *   ② 浮动规则         由 WebGUI 侧写入核心防火墙模块（本脚本不碰）
+ *   ③ verify_only=true 只做 filter reload + 自检（pf 里必须出现 route-to），
+ *                      失败时报错，由 WebGUI 撤销刚写的规则
  *
  * 设计要点（安全第一）:
  *   · 全程**只增不改**：已存在的接口块/网关/规则不重复添加，不删除任何既有配置；
@@ -522,9 +530,46 @@ if (!array_key_exists('interfaces', $payload)) {
 }
 $interfaces = array_values(array_unique($interfaces));
 
+$verify = !array_key_exists('verify', $payload) || (bool)$payload['verify'];
+$verifyOnly = (bool)($payload['verify_only'] ?? false);
+
 $before = (string)file_get_contents($CONFIG_FILE);
 $after = $before;
 $messages = [];
+
+/* 第三段：只重载 + 自检（不再改 config.xml —— 规则已由核心防火墙模块写入） */
+if ($verifyOnly) {
+    [$rc, $filterOut] = run_command('configctl filter reload');
+    $messages[] = $rc === 0 ? 'filter reload: OK' : 'filter reload failed: ' . $filterOut;
+    [$rc2, $routeOut] = run_command("pfctl -sr | grep 'route-to' | grep -c 'tun_mihomo'");
+    $routeCount = (int)trim($routeOut);
+    $messages[] = $interfaces === []
+        ? 'pf route-to rules into tun_mihomo after unbind: ' . $routeCount
+        : 'pf route-to rules into tun_mihomo: ' . $routeCount;
+
+    if ($interfaces !== [] && $routeCount < 1) {
+        /* 这里必须 **exit 0**：configd 在脚本非零退出时会丢掉 stdout，
+         * WebGUI 就只剩一句"(no output)"，看不到真实原因（实测踩过）。 */
+        out([
+            'status' => 'failed',
+            'message' => sprintf(
+                'safety check failed: firewall rules are written but no pf route-to rule points at %s. '
+                . 'Check that gateway %s uses interface %s (and that filter reload keeps it).',
+                $DEFAULT_DEVICE,
+                $GATEWAY_NAME,
+                interface_name_for_device((string)file_get_contents($CONFIG_FILE), $DEFAULT_DEVICE) ?: '?'
+            ),
+            'messages' => $messages,
+            'state' => current_state(),
+        ]);
+        @unlink($staging);
+        exit(0);
+    }
+
+    @unlink($staging);
+    out(['status' => 'ok', 'messages' => $messages, 'state' => current_state()]);
+    exit(0);
+}
 
 /* ---------------- 1. 网关地址 ---------------- */
 $gwIp = trim((string)($payload['gateway'] ?? ''));
@@ -703,8 +748,23 @@ chmod($CONFIG_FILE, 0644);
 $messages[] = 'config.xml written (backup ' . basename($backup) . ')';
 
 /* ---------------- 6. 重载过滤器 + 安全自检（不通过就自动回滚） ----------------
+ * 第一段（verify=false）时跳过：此时浮动规则还没写，pf 里当然没有 route-to，
+ * 那一步由第三段（verify_only=true）负责。
+ *
  * 注意：绝不能在脚本里 `service configd restart` —— 本脚本正是由 configd 拉起的，
  * 重启它等于中断自己（输出丢失、后续步骤不执行）。实测踩过这个坑。 */
+if (!$verify) {
+    @unlink($staging);
+    $messages[] = 'filter reload skipped (first stage: firewall rules are written next)';
+    out([
+        'status' => 'ok',
+        'messages' => $messages,
+        'diff' => diff_text($before, $after, 'config.xml'),
+        'state' => current_state(),
+    ]);
+    exit(0);
+}
+
 [$rc, $filterOut] = run_command('configctl filter reload');
 $messages[] = $rc === 0 ? 'filter reload: OK' : 'filter reload failed: ' . $filterOut;
 

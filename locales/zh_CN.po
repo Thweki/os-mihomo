@@ -10,6 +10,12 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+msgid "%s (answering)"
+msgstr "%s（有应答）"
+
+msgid "%s (no answer)"
+msgstr "%s（没应答）"
+
 msgid "%s does not exist, the service cannot start."
 msgstr "%s 不存在，服务无法启动。"
 
@@ -25,8 +31,8 @@ msgstr "（文件里没有）"
 msgid "(set, hidden)"
 msgstr "（已设置）"
 
-msgid "A managed policy-routing block is present: the routing policy page replaces this block as a whole and leaves everything else untouched."
-msgstr "文件里有策略路由的受管区块：路由策略页只会整块替换这一段，其余内容不动。"
+msgid "A few items are not reported by the core at all (strict route, DNS mode, ...), so their \"Running\" cell stays empty — only the file and the core log can tell."
+msgstr "有几项内核不对外报告（严格路由、DNS 模式等），它们那格只能空着；要确认得看文件和内核日志。"
 
 msgid "A node name is required."
 msgstr "需要提供节点名称。"
@@ -46,8 +52,17 @@ msgstr "当前配置有效"
 msgid "All connections closed."
 msgstr "已关闭全部连接。"
 
+msgid "All page settings will be written into the file."
+msgstr "将把页面上的全部设置写入文件。"
+
 msgid "Allow LAN"
 msgstr "允许局域网"
+
+msgid "Answer AAAA (IPv6) records too."
+msgstr "是否同时回答 AAAA（IPv6）解析。"
+
+msgid "Answer AAAA records. Turn off if the tunnel only carries IPv4."
+msgstr "是否回答 AAAA（IPv6）解析。隧道只有 IPv4 时建议关闭。"
 
 msgid "Apply failed"
 msgstr "应用失败"
@@ -97,8 +112,8 @@ msgstr "配置文件缺失"
 msgid "Configuration file not found."
 msgstr "未找到配置文件。"
 
-msgid "Configuration file updated and validated."
-msgstr "配置文件已更新并通过校验。"
+msgid "Configuration file updated: %d item(s) written — %s"
+msgstr "配置文件已更新，写入了 %d 项：%s"
 
 msgid "Configuration history"
 msgstr "配置历史"
@@ -147,6 +162,9 @@ msgstr "已配置 DNS 劫持"
 
 msgid "DNS listen address, e.g. 127.0.0.1:1053."
 msgstr "DNS 监听地址，如 127.0.0.1:1053。"
+
+msgid "DNS over IPv6"
+msgstr "DNS 返回 IPv6"
 
 msgid "DNS queries on port 53 are redirected into mihomo while the service runs. If the proxy is broken, name resolution for all clients behind this firewall breaks with it."
 msgstr "服务运行期间，53 端口的 DNS 查询会被重定向到 mihomo。若代理失效，本机后面所有客户端的域名解析也会随之失效。"
@@ -244,11 +262,17 @@ msgstr "需要提供分组与节点名称。"
 msgid "How often the scheduled task runs."
 msgstr "定时任务的执行频率。"
 
-msgid "IPv6 is enabled, but the TUN device only carries IPv4: IPv6 traffic bypasses mihomo. Set ipv6: false to turn IPv6 off on the proxy side, or add IPv6 handling separately."
-msgstr "IPv6 是开着的，而 TUN 设备只有 IPv4 地址：IPv6 流量会绕过 mihomo。可在配置里设 ipv6: false 关掉它，或单独为 v6 做分流。"
+msgid "IPv6 handling"
+msgstr "IPv6 处理"
 
 msgid "IPv6 traffic bypasses the proxy"
 msgstr "IPv6 流量不经过代理"
+
+msgid "IPv6 traffic does not go through mihomo (this tunnel only carries IPv4). Open Settings → IPv6 and clear \"IPv6 handling\" to turn it off; otherwise you can ignore this."
+msgstr "IPv6 流量不会经过 mihomo（这条通道只管 IPv4）。要关掉就到「设置 → IPv6」把「IPv6 处理」取消勾选；不在意也可以不管。"
+
+msgid "IPv6 traffic does not go through the proxy: the mihomo tunnel only handles IPv4. Add ipv6: false in the configuration if you want IPv6 handled by the normal route, or ignore this."
+msgstr "IPv6 流量不会走代理（mihomo 这条通道只管 IPv4）。想让它按普通线路走就在配置里写 ipv6: false；不在意也可以不管。"
 
 msgid "Import failed"
 msgstr "导入失败"
@@ -280,6 +304,12 @@ msgstr "允许局域网客户端直接使用代理端口。"
 msgid "Let mihomo resolve DNS itself (required for fake-ip)."
 msgstr "由 mihomo 解析 DNS（fake-ip 需要）。"
 
+msgid "Let the core handle IPv6 traffic."
+msgstr "是否让内核处理 IPv6 流量。"
+
+msgid "Let the core handle IPv6. Off = IPv6 traffic stays on the normal route (current design)."
+msgstr "让内核处理 IPv6 流量。关闭 = IPv6 照常走普通线路（当前设计如此）。"
+
 msgid "Loading …"
 msgstr "加载中 …"
 
@@ -307,8 +337,8 @@ msgstr "混合端口"
 msgid "Mode switched to %s."
 msgstr "已切换到 %s 模式。"
 
-msgid "No managed policy-routing block in the file (no interface is bound)."
-msgstr "文件里没有受管区块（当前没有任何接口被绑定）。"
+msgid "No interface is bound to mihomo right now, so the file contains no plugin-managed rules."
+msgstr "现在没有任何接口走 mihomo，所以文件里也没有插件替你维护的规则。"
 
 msgid "No output from the configuration test."
 msgstr "配置校验没有输出。"
@@ -324,6 +354,9 @@ msgstr "还没有绑定接口 —— 点「添加」选择接口与代理组，�
 
 msgid "Nothing to test: no enabled row requests a firewall rule."
 msgstr "无可自检项：没有启用且要求创建防火墙规则的行。"
+
+msgid "Nothing was changed on this page, so the file was left alone."
+msgstr "本次没有改动任何设置，文件保持原样。"
 
 msgid "OPNsense changes"
 msgstr "OPNsense 变更"
@@ -406,9 +439,6 @@ msgstr "用虚拟网卡把流量导入 mihomo。"
 msgid "Running (memory)"
 msgstr "运行中（内存）"
 
-msgid "Runtime values come from the mihomo external controller, i.e. the configuration currently held in memory."
-msgstr "运行值来自 mihomo 的外部控制器，也就是进程内存里正在用的那份配置。"
-
 msgid "SOCKS port"
 msgstr "SOCKS 端口"
 
@@ -462,9 +492,6 @@ msgstr "已从当前配置导入设置。"
 
 msgid "Settings saved"
 msgstr "设置已保存"
-
-msgid "Some values differ between the WebUI and the file. Press Apply on this page to write the WebUI values into the file, or press Import to load the file values into the WebUI."
-msgstr "页面与文件有不一致的值：点本页「应用」会把页面里的值写进文件；点「从配置导入」则是反过来，用文件里的值更新页面。"
 
 msgid "Stack"
 msgstr "协议栈"
@@ -538,14 +565,11 @@ msgstr "接管默认路由；节点不可用时会断网。"
 msgid "Test Active Configuration"
 msgstr "校验当前配置"
 
+msgid "The \"Running\" column is what the core is using right now. Change the file and you still have to restart the service before it shows up here."
+msgstr "「运行中」那一列是内核现在真的在用的值。改完文件还得重启服务，这里才会变。"
+
 msgid "The TUN device is guaranteed to win over other default routes while the service runs."
 msgstr "服务运行时，TUN 设备将优先于其它默认路由。"
-
-msgid "The TUN device only carries IPv4, so IPv6 traffic leaves this firewall without going through mihomo. Set ipv6: false in the configuration to stop that, or add IPv6 handling separately."
-msgstr "TUN 设备只有 IPv4 地址，IPv6 流量会不经过 mihomo 直接出去。可在配置里设 ipv6: false 阻止它，或单独处理 v6。"
-
-msgid "The configuration file looks hand-written. A subscription update would replace it completely; edit the file by hand instead (or back it up first)."
-msgstr "这份 config.yaml 看起来是手写的：点「更新订阅」会用订阅模板整份重写它。要继续手写就别点更新订阅（或先备份）。"
 
 msgid "The configuration file was not written. mihomo rejected it:%s"
 msgstr "配置文件未写入，mihomo 校验未通过：%s"
@@ -562,8 +586,20 @@ msgstr "控制器对网络开放且未设密钥，任何能访问它的人都能
 msgid "The controller listens on 127.0.0.1, so it cannot be reached from the network. A secret is only needed when you bind the controller to a network address."
 msgstr "控制器只监听 127.0.0.1，网络侧访问不到；只有把它绑到网络地址时才需要密钥。"
 
-msgid "The running service cannot be reached, so only the WebUI and the file are compared. Start the service to see the values that are actually in use."
-msgstr "读不到正在运行的服务，因此只对照页面与文件。启动服务后才能看到真正在用的值。"
+msgid "The file contains a block of rules that the plugin keeps up to date (from the Policy Routing page). Do not edit inside that block: it gets replaced as a whole."
+msgstr "文件里有一段是插件替你维护的规则（来自「路由策略」页）。别手动改这一段，它会被整段替换。"
+
+msgid "The firewall rules written by this attempt have been removed, so nothing is bound."
+msgstr "本次写入的防火墙规则已撤销，当前没有任何接口被绑定。"
+
+msgid "The page and the file disagree on %d item(s), but you did not touch them, so they were left as they are: %s — press Import to use the file values in the page, or pick \"takes precedence\" to write them."
+msgstr "还有 %d 项页面和文件对不上，但你这次没改，所以文件里没动它们：%s —— 想用文件里的值刷新页面就点「从配置导入」；想以页面为准就选「全部写入文件」。"
+
+msgid "The page and the file disagree on some items: press Apply to write what the page says into the file, or press Import to load what the file says into the page."
+msgstr "有几项页面和文件对不上：点「应用」就是把页面里的值写进文件；点「从配置导入」则相反，用文件里的值刷新页面。"
+
+msgid "The running service cannot be read right now (stopped, or the secret does not match), so only the page and the file are compared here."
+msgstr "现在读不到运行中的服务（可能是没启动，或密钥对不上），所以这里只对比页面和文件。"
 
 msgid "The running service keeps its current in-memory configuration until it is restarted."
 msgstr "运行中的服务在重启前仍使用内存中的旧配置。"
@@ -585,6 +621,9 @@ msgstr "更新后会立即重启服务，这会重建 TUN 设备及其路由。�
 
 msgid "The subscription script is not installed; subscription updates are unavailable."
 msgstr "未安装订阅脚本，无法执行订阅更新。"
+
+msgid "This config.yaml is hand-written, not generated from the subscription template. Updating the subscription replaces the whole file, so your own edits would be gone — do not use it, or take a backup first."
+msgstr "你这份 config.yaml 是自己写的（不是订阅生成的）。点「更新订阅」会把整份文件换成订阅模板的内容，自己写的就没了 —— 想保留就别点它，或者先备份。"
 
 msgid "Total Downloaded / Uploaded"
 msgstr "累计下载 / 上传"
@@ -649,14 +688,29 @@ msgstr "等待同步 OPNsense 网络侧：接口、网关与策略路由规则�
 msgid "WebGUI"
 msgstr "页面（设置）"
 
+msgid "Will be written"
+msgstr "将写入"
+
+msgid "Write all page settings into the file"
+msgstr "以页面为准，全部写入文件"
+
+msgid "Write only what I changed (recommended)"
+msgstr "只写入我改过的项（推荐）"
+
 msgid "Writes the mihomo configuration and, where needed, creates the interface, gateway and firewall rule on OPNsense. config.xml is backed up first."
 msgstr "写入 mihomo 配置；需要时在 OPNsense 上创建接口、网关和防火墙规则（先备份 config.xml）。"
+
+msgid "You have not changed anything yet — pressing Apply will not write to the file."
+msgstr "你还没改任何项 —— 现在点「应用」不会写文件。"
 
 msgid "apply to take effect"
 msgstr "应用后生效"
 
 msgid "bytes"
 msgstr "字节"
+
+msgid "checked by the core"
+msgstr "内核会校验密钥"
 
 msgid "consistent"
 msgstr "一致"
@@ -690,6 +744,9 @@ msgstr "mihomo 正在运行，并会在重启后自动启动。"
 
 msgid "mihomo rules"
 msgstr "mihomo 规则"
+
+msgid "not checked (no secret)"
+msgstr "没设密钥，内核不校验"
 
 msgid "not in file"
 msgstr "文件未写"

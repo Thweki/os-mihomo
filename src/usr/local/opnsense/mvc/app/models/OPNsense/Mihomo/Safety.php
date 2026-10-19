@@ -128,7 +128,7 @@ class Safety
                 'level' => self::LEVEL_WARNING,
                 'title' => gettext('IPv6 traffic bypasses the proxy'),
                 'detail' => gettext(
-                    'The TUN device only carries IPv4, so IPv6 traffic leaves this firewall without going through mihomo. Set ipv6: false in the configuration to stop that, or add IPv6 handling separately.'
+                    'IPv6 traffic does not go through mihomo (this tunnel only carries IPv4). Open Settings → IPv6 and clear "IPv6 handling" to turn it off; otherwise you can ignore this.'
                 ),
             ];
         }
