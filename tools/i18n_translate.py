@@ -137,7 +137,6 @@ TRANSLATIONS: dict[str, str] = {
     'Stack': '协议栈',
     'DNS Module': 'DNS 模块',
     'Enhanced Mode': '增强模式',
-    'Restart After Update': '更新后重启',
     'External Controller': '外部控制器',
     'TUN Device': 'TUN 设备',
     'TUN Mode': 'TUN 模式',
@@ -201,6 +200,11 @@ TRANSLATIONS: dict[str, str] = {
         'TUN 模式关着：下面的绑定在它打开之前都不会生效。到「设置」里打开再回来。',
     # ---- 「不修改」开关（P18）----
     'leave alone': '不修改',
+    'fixed': '固定',
+    'Fixed (tun_mihomo): the firewall rules refer to this device name by hand.':
+        '固定为 tun_mihomo：防火墙规则里是按这个名字写的。',
+    'Fixed (gvisor): the combination verified on FreeBSD.':
+        '固定为 gvisor：FreeBSD 上验证过的组合。',
     'Tick "leave alone" = this plugin never writes that item.':
         '勾上「不修改」= 本插件不写这一项。',
     'Tick = this plugin never writes this item: the file keeps whatever you wrote. Clear the tick to let the page write it.':
@@ -270,8 +274,6 @@ TRANSLATIONS: dict[str, str] = {
     'Controller port.': '控制器端口。',
     'Controller API secret.': '控制器 API 密钥。',
     'Route traffic into mihomo through a virtual device.': '用虚拟网卡把流量导入 mihomo。',
-    'Device name, must match the firewall rules (default tun_mihomo).': '设备名，需与防火墙规则一致（默认 tun_mihomo）。',
-    'gvisor is recommended on FreeBSD.': 'FreeBSD 下建议 gvisor。',
     'Take over the default route. Without working proxy nodes this cuts the network off.':
         '接管默认路由；节点不可用时会断网。',
     'Keep the TUN device above other default routes.': '保持 TUN 设备优先于其它默认路由。',

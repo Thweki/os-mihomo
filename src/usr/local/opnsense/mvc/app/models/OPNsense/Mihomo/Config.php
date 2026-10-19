@@ -427,6 +427,67 @@ class Config
         return array_values(array_unique($labels));
     }
 
+    /* =====================================================================
+     * 设置页「不修改」开关：哪些项不给开关
+     *
+     *  · 插件自己的状态（开机自启、订阅凭据、自动更新）不是 config.yaml 里的键，
+     *    "不修改"对它们没有意义（插件必须知道自己的状态）→ 不给开关，始终由插件维护；
+     *  · 设备名与协议栈是写死的：防火墙规则里的接口名、FreeBSD 上验证过的协议栈，
+     *    改了只会把网络搞坏 → 页面上只读，写配置时恒用下面的值。
+     * ===================================================================== */
+
+    /** 写死的项：页面字段 id => [YAML 键, 固定值] */
+    public const FIXED_SETTINGS = [
+        'mihomo.tun.device' => ['key' => 'tun.device', 'value' => 'tun_mihomo'],
+        'mihomo.tun.stack' => ['key' => 'tun.stack', 'value' => 'gvisor'],
+    ];
+
+    /** 插件自己的状态字段：没有「不修改」开关，始终随「应用」同步 */
+    public const PLUGIN_OWNED_FIELDS = [
+        'mihomo.general.enabled',
+        'mihomo.subscription.url',
+        'mihomo.subscription.secret',
+        'mihomo.subscription.updateEnabled',
+        'mihomo.subscription.updateInterval',
+    ];
+
+    /** 设置页上不该出现「不修改」开关的字段（= 始终由插件写） */
+    public static function fieldsWithoutSwitch(): array
+    {
+        return array_merge(array_keys(self::FIXED_SETTINGS), self::PLUGIN_OWNED_FIELDS);
+    }
+
+    /**
+     * 页面提交的「允许写入」清单 + 始终由插件维护的项（后端兜底：前端漏传也不会漏写）。
+     */
+    public static function ownedFieldsWithDefaults(array $fromPage): array
+    {
+        $fields = [];
+        foreach ($fromPage as $field) {
+            $field = trim((string)$field);
+            if ($field !== '' && !in_array($field, $fields, true)) {
+                $fields[] = $field;
+            }
+        }
+        foreach (self::fieldsWithoutSwitch() as $field) {
+            if (!in_array($field, $fields, true)) {
+                $fields[] = $field;
+            }
+        }
+        return $fields;
+    }
+
+    /** 写死项的固定值（按 YAML 键取） */
+    public static function fixedValue(string $yamlKey, string $default = ''): string
+    {
+        foreach (self::FIXED_SETTINGS as $info) {
+            if ($info['key'] === $yamlKey) {
+                return $info['value'];
+            }
+        }
+        return $default;
+    }
+
     /**
      * 生成一个仅 www 可读写的临时文件，供 configd（root）校验并接管写入。
      * 返回绝对路径，失败抛异常。

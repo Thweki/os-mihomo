@@ -72,13 +72,13 @@
         <id>mihomo.tun.device</id>
         <label>Device Name</label>
         <type>text</type>
-        <help>Device name, must match the firewall rules (default tun_mihomo).</help>
+        <help>Fixed (tun_mihomo): the firewall rules refer to this device name by hand.</help>
     </field>
     <field>
         <id>mihomo.tun.stack</id>
         <label>Stack</label>
         <type>dropdown</type>
-        <help>gvisor is recommended on FreeBSD.</help>
+        <help>Fixed (gvisor): the combination verified on FreeBSD.</help>
     </field>
     <field>
         <id>mihomo.tun.autoRoute</id>
@@ -154,12 +154,6 @@
         <label>Access Secret</label>
         <type>text</type>
         <help>Secret written into the generated configuration.</help>
-    </field>
-    <field>
-        <id>mihomo.subscription.restartAfterUpdate</id>
-        <label>Restart After Update</label>
-        <type>checkbox</type>
-        <help>Restart the service after a successful update.</help>
     </field>
     <field>
         <id>mihomo.subscription.updateEnabled</id>

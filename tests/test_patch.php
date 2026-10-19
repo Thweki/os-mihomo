@@ -390,5 +390,49 @@ $sniffer = [
 [$w5, $l5, ] = Config::selectManagedKeys($sniffer, ['mihomo.general.sniffer'], []);
 check('一组键共用一个开关', count($w5) === 2 && $l5 === ['Domain sniffing'], implode(',', array_keys($w5)));
 
+/* (6) 没有「不修改」开关的项：始终算作由插件写 */
+$noSwitch = Config::fieldsWithoutSwitch();
+check(
+    '插件自己的状态没有开关',
+    in_array('mihomo.general.enabled', $noSwitch, true)
+    && in_array('mihomo.subscription.url', $noSwitch, true),
+    implode(',', $noSwitch)
+);
+check(
+    '写死的两项没有开关',
+    in_array('mihomo.tun.device', $noSwitch, true) && in_array('mihomo.tun.stack', $noSwitch, true),
+    implode(',', $noSwitch)
+);
+
+/* (7) 后端兜底：页面一个都没勾，也仍然会写这些项 */
+$owned = Config::ownedFieldsWithDefaults([]);
+check(
+    '兜底清单包含插件项与写死项',
+    in_array('mihomo.general.enabled', $owned, true)
+    && in_array('mihomo.tun.device', $owned, true)
+    && in_array('mihomo.tun.stack', $owned, true),
+    implode(',', $owned)
+);
+check('兜底清单去重', count($owned) === count(array_unique($owned)), (string)count($owned));
+$owned2 = Config::ownedFieldsWithDefaults(['mihomo.tun.mtu', ' mihomo.tun.mtu ', '']);
+check(
+    '兜底清单保留页面选择并去重',
+    in_array('mihomo.tun.mtu', $owned2, true) && count($owned2) === count(array_unique($owned2)),
+    implode(',', $owned2)
+);
+
+/* (8) 写死的值 */
+check('设备名写死', Config::fixedValue('tun.device') === 'tun_mihomo', Config::fixedValue('tun.device'));
+check('协议栈写死', Config::fixedValue('tun.stack') === 'gvisor', Config::fixedValue('tun.stack'));
+check('非写死项返回默认值', Config::fixedValue('tun.mtu', 'x') === 'x', Config::fixedValue('tun.mtu', 'x'));
+
+/* (9) 写死的项即使被勾成「不修改」也照样写 */
+$fixedKeys = [
+    'tun.device' => ['value' => 'tun_mihomo', 'fields' => ['mihomo.tun.device'], 'label' => 'Device Name'],
+    'tun.stack' => ['value' => 'gvisor', 'fields' => ['mihomo.tun.stack'], 'label' => 'Stack'],
+];
+[$w6, , ] = Config::selectManagedKeys($fixedKeys, ['mihomo.tun.device', 'mihomo.tun.stack'], []);
+check('写死项始终写入', count($w6) === 2, (string)count($w6));
+
 echo "\n=== 汇总: {$failures} 个失败 ===\n";
 exit($failures === 0 ? 0 : 1);

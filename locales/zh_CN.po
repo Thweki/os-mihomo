@@ -166,9 +166,6 @@ msgstr "服务运行期间，53 端口的 DNS 查询会被重定向到 mihomo。
 msgid "Device MTU."
 msgstr "设备 MTU。"
 
-msgid "Device name, must match the firewall rules (default tun_mihomo)."
-msgstr "设备名，需与防火墙规则一致（默认 tun_mihomo）。"
-
 msgid "Diff"
 msgstr "差异"
 
@@ -246,6 +243,12 @@ msgstr "防火墙规则未能更新：%s"
 
 msgid "Fix these before starting the service"
 msgstr "启动服务前请先修正以下问题"
+
+msgid "Fixed (gvisor): the combination verified on FreeBSD."
+msgstr "固定为 gvisor：FreeBSD 上验证过的组合。"
+
+msgid "Fixed (tun_mihomo): the firewall rules refer to this device name by hand."
+msgstr "固定为 tun_mihomo：防火墙规则里是按这个名字写的。"
 
 msgid "Foreign only"
 msgstr "仅国外"
@@ -402,9 +405,6 @@ msgstr "从 TLS SNI 还原域名；被路由的流量要用域名规则时必须
 
 msgid "Recover domains from TLS SNI. Required for domain based rules on routed traffic."
 msgstr "从 TLS SNI 还原域名；被路由的流量要用域名规则时必须开启。"
-
-msgid "Restart After Update"
-msgstr "更新后重启"
 
 msgid "Restart service after a successful update"
 msgstr "更新成功后重启服务"
@@ -703,8 +703,8 @@ msgstr "external-controller 绑定在 %s。任何能访问该地址并知道密�
 msgid "fake-ip returns synthetic addresses, redir-host returns real ones."
 msgstr "fake-ip 返回合成地址；redir-host 返回真实地址。"
 
-msgid "gvisor is recommended on FreeBSD."
-msgstr "FreeBSD 下建议 gvisor。"
+msgid "fixed"
+msgstr "固定"
 
 msgid "in effect"
 msgstr "生效中"

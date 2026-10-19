@@ -63,8 +63,18 @@ class SettingsController extends ApiMutableModelControllerBase
         );
         $add('secret', (string)$mdl->general->secret, ['mihomo.general.secret'], gettext('Secret'));
         $add('tun.enable', $flag($mdl->tun->enabled), ['mihomo.tun.enabled'], gettext('TUN Mode'));
-        $add('tun.device', (string)$mdl->tun->device, ['mihomo.tun.device'], gettext('Device Name'));
-        $add('tun.stack', (string)$mdl->tun->stack, ['mihomo.tun.stack'], gettext('Stack'));
+        $add(
+            'tun.device',
+            Config::fixedValue('tun.device', (string)$mdl->tun->device),
+            ['mihomo.tun.device'],
+            gettext('Device Name')
+        );
+        $add(
+            'tun.stack',
+            Config::fixedValue('tun.stack', (string)$mdl->tun->stack),
+            ['mihomo.tun.stack'],
+            gettext('Stack')
+        );
         $add('tun.auto-route', $flag($mdl->tun->autoRoute), ['mihomo.tun.autoRoute'], gettext('Automatic Route'));
         $add('tun.strict-route', $flag($mdl->tun->strictRoute), ['mihomo.tun.strictRoute'], gettext('Strict Route'));
         $add('tun.mtu', (int)(string)$mdl->tun->mtu, ['mihomo.tun.mtu'], gettext('MTU'));
@@ -117,16 +127,17 @@ class SettingsController extends ApiMutableModelControllerBase
         $backend = new Backend();
 
         /* ---- 0. 「不修改」开关：只写用户交给插件的项 ----
-         * 页面上每一项前面都有一条「不修改」勾（默认勾上）：
-         *   勾上   = 插件完全不碰这一项 —— config.yaml / rc.conf.d / 环境文件 / Cron 都不动，
-         *            文件里原本怎么写就怎么用（也不会把已有的键删掉）；
+         * 页面上 config.yaml 的键都有「不修改」勾（默认勾上）：
+         *   勾上   = 插件完全不碰这一项 —— 文件里原本怎么写就怎么用（也不会把已有的键删掉）；
          *   取消勾 = 这一项由页面负责写入。
+         * 插件自己的状态（开机自启 / 订阅凭据 / 自动更新）与写死的项（设备名 / 协议栈）
+         * 没有开关，始终随「应用」同步 —— 见 Config::fieldsWithoutSwitch()。
          * 开关状态存在模型的 managed 字段里（逗号分隔的页面字段 id）。
          */
-        $managedFields = array_values(array_filter(array_map(
+        $managedFields = Config::ownedFieldsWithDefaults(array_map(
             'trim',
             explode(',', (string)$mdl->managed)
-        )));
+        ));
         $touched = fn (string $field): bool => in_array($field, $managedFields, true);
         [$write, $writtenLabels, $skippedLabels] = Config::selectManagedKeys(
             $this->managedKeys(),
@@ -172,9 +183,9 @@ class SettingsController extends ApiMutableModelControllerBase
             );
         }
 
-        /* ---- 2. 开机自启 ---- */
-        if ($touched('mihomo.general.enabled')) {
-            $enabled = (string)$mdl->general->enabled === '1';
+        /* ---- 2. 开机自启（插件自己的状态，没有「不修改」开关；值没变就不重复写、不刷屏）---- */
+        $enabled = (string)$mdl->general->enabled === '1';
+        if ($touched('mihomo.general.enabled') && Safety::bootEnabled() !== $enabled) {
             $backend->configdpRun('mihomo set-enabled', [$enabled ? 'yes' : 'no']);
             $result['messages'][] = $enabled
                 ? gettext('Service will start automatically on boot.')
@@ -239,6 +250,19 @@ class SettingsController extends ApiMutableModelControllerBase
             if (str_contains((string)$job->command, 'mihomo sub-update')) {
                 $uuid = $id;
                 break;
+            }
+        }
+
+        if ($enabled && $uuid !== null) {
+            /* 已经在位且配置一致 → 不写、不刷屏 */
+            $existing = $cron->getNodeByReference('jobs.job.' . $uuid);
+            if (
+                (string)$existing->enabled === '1'
+                && (string)$existing->hours === $hours
+                && (string)$existing->minutes === '0'
+                && (string)$existing->who === 'root'
+            ) {
+                return '';
             }
         }
 

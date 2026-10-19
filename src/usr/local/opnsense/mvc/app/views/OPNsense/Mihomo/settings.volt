@@ -31,6 +31,16 @@
         const MANAGED_INPUT = 'mihomo.managed';
         /* 同一个 YAML 键由多个输入组成时共用一个开关 */
         const FIELD_GROUPS = [['mihomo.general.controllerBind', 'mihomo.general.controllerPort']];
+        /* 没有「不修改」开关、始终由插件写的字段（后端 Config::fieldsWithoutSwitch()） */
+        const ALWAYS_OWNED = ('{{ alwaysOwnedFields }}' || '').split(',').filter(Boolean);
+        /* 写死的项：页面只读，值固定 */
+        const FIXED = {};
+        ('{{ fixedSettingPairs }}' || '').split(',').filter(Boolean).forEach(function (pair) {
+            const bits = pair.split('=');
+            if (bits.length === 2) {
+                FIXED[bits[0]] = bits[1];
+            }
+        });
 
         function groupOf(id) {
             for (let i = 0; i < FIELD_GROUPS.length; i++) {
@@ -54,6 +64,9 @@
 
         /* 一个字段（或它所在的组）是否交给插件写 */
         function groupOwned(id) {
+            if (ALWAYS_OWNED.indexOf(id) >= 0) {
+                return true;
+            }
             const group = groupOf(id) || [id];
             let owned = false;
             group.forEach(function (field) {
@@ -78,17 +91,21 @@
             return owned;
         }
 
-        /* 勾上「不修改」的行：控件禁掉、灰掉，看一眼就知道插件不会动它 */
+        /* 勾上「不修改」的行：控件禁掉、灰掉；写死的项也禁掉（值固定） */
         function applyLeaveAlone() {
             fieldInputs().forEach(function (id) {
-                const off = !groupOwned(id);
+                const fixed = FIXED[id] !== undefined;
+                const off = fixed || !groupOwned(id);
                 const el = document.getElementById(id);
                 if (!el) {
                     return;
                 }
                 const $el = $(el);
+                if (fixed && String($el.val()) !== FIXED[id]) {
+                    $el.val(FIXED[id]);
+                }
                 $el.prop('disabled', off);
-                $el.closest('td').toggleClass('mihomo-leave-alone', off);
+                $el.closest('td').toggleClass('mihomo-leave-alone', off || fixed);
                 if ($el.hasClass('selectpicker')) {
                     $el.selectpicker('refresh');
                 }
@@ -100,6 +117,9 @@
            一律走 getElementById。 */
         function buildManagedSwitches() {
             fieldInputs().forEach(function (id) {
+                if (ALWAYS_OWNED.indexOf(id) >= 0) {
+                    return;   // 插件自己的状态 / 写死的项：不给「不修改」开关
+                }
                 const group = groupOf(id);
                 if (group && group[0] !== id) {
                     return;
@@ -118,6 +138,20 @@
                     .append($('<input type="checkbox" checked>').attr('data-managed-for', id))
                     .append($('<span>').text('{{ lang._('leave alone') }}'))
                     .prependTo($label);
+            });
+        }
+
+        /* 写死的项（设备名/协议栈）：标签旁加一个小灰标，值由插件定死 */
+        function markFixedFields() {
+            Object.keys(FIXED).forEach(function (id) {
+                const labelEl = document.getElementById('control_label_' + id);
+                if (!labelEl || $(labelEl).find('.mihomo-fixed-tag').length) {
+                    return;
+                }
+                $('<span>')
+                    .addClass('mihomo-fixed-tag')
+                    .text('{{ lang._('fixed') }}')
+                    .prependTo($(labelEl));
             });
         }
 
@@ -149,6 +183,7 @@
         $('<input type="hidden">').attr('id', MANAGED_INPUT).appendTo('#frm_Settings');
 
         buildManagedSwitches();
+        markFixedFields();
         reloadForm();
         $(document).on('change', '[data-managed-for]', function () {
             applyLeaveAlone();
@@ -297,6 +332,17 @@
     .mihomo-managed-switch input {
         margin: 0 3px 0 0;
         vertical-align: -1px;
+    }
+    /* 写死的项（设备名/协议栈）：小灰标 */
+    .mihomo-fixed-tag {
+        font-size: 11px;
+        color: #777;
+        background: #f0f0f0;
+        border: 1px solid #ddd;
+        border-radius: 2px;
+        margin: 0 8px 0 0;
+        padding: 0 4px;
+        white-space: nowrap;
     }
     /* 勾了「不修改」的行：控件禁掉并变灰 */
     .mihomo-leave-alone input,

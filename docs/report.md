@@ -1187,6 +1187,35 @@ setFormData('frm_dialog_policy_rule', {mihomo:{interface:'opt2'}})
 * `Config::selectManagedKeys($keys, $ownedFields, $fileValues)` 重写为按这个清单挑选要写的键，
   并回报"没写、但文件里和页面不一样"的项。
 
+### 23.5 后续：不是每一项都需要「不修改」；设备名称 / 协议栈写死
+
+用户指出：**不是每个设置都需要「不修改」**（例如「启用 mihomo」），并要求把
+**设备名称（tun.device）与协议栈（tun.stack）** 写死、页面不可操作、默认覆盖配置文件。
+
+| 类别 | 处理 |
+|---|---|
+| `config.yaml` 里的键（日志层级、模式、允许局域网、外部控制器、密钥、TUN 开关、自动路由、严格路由、MTU、DNS 四项、IPv6 处理、域名嗅探） | 保留「不修改」勾，默认不写 |
+| **设备名称 / 协议栈** | 页面只读（禁用 + 小灰标「固定」），值恒为 `tun_mihomo` / `gvisor`；写配置时直接用常量，不看模型值 |
+| **插件自己的状态**（开机自启、订阅地址/密钥、订阅自动更新） | 不给勾，始终随「应用」同步 |
+
+实现：
+
+* `Config::FIXED_SETTINGS`（写死项：字段 → YAML 键 + 固定值）、`Config::PLUGIN_OWNED_FIELDS`（插件自己的状态）、
+  `Config::fieldsWithoutSwitch()`（前端不给开关的清单）、`Config::ownedFieldsWithDefaults()`（后端兜底：
+  页面没传也照样写这些项）、`Config::fixedValue()`；
+* 设置页把两个清单渲染进 JS（`ALWAYS_OWNED` / `FIXED`）：前者不装勾、后者禁用并强制显示固定值；
+* 写入侧 `managedKeys()` 与对照页 `modelValues()` 都用 `fixedValue()`，所以即使配置文件被手工改过，
+  写进去的仍然是固定值；
+* 顺带把三处"每次都刷屏"的提示修成只在真的变化时才说话：`rc.conf.d` 的开机自启、
+  订阅 env（`env.php` 值没变就不写文件也不打印）、Cron 任务（已在位且一致就静默）；
+* 删除设置页里那个从来没生效的「更新后重启」复选框（`subscription.restartAfterUpdate`）——
+  真正起作用的是订阅页按钮旁边那个勾。
+
+实测：设置页现在 15 个「不修改」勾（正好是 `config.yaml` 的键）、2 个「固定」标记；
+「启用 mihomo」「订阅地址」等可编辑且没有勾；设备名称/协议栈禁用且值为 `tun_mihomo` / `gvisor`；
+点「应用」提示"写入了 13 项：… 设备名称、协议栈 …"，不再有多余的开机自启/env 提示；
+回归测试第 15 节扩到 22 条断言，0 失败。
+
 ### 23.4 后续（同日晚）：对照页只留表格
 
 用户看过界面后要求去掉对照页的文字：

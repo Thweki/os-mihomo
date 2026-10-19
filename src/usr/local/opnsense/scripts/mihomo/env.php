@@ -62,6 +62,10 @@ switch ($action) {
         }
 
         $vars = read_env($ENV_FILE);
+        if (($vars['mihomo_URL'] ?? null) === $url && ($vars['mihomo_secret'] ?? null) === $secret) {
+            /* 值没变：不写文件，也不打印（否则每次「应用」都会刷一句"已保存"） */
+            exit(0);
+        }
         $vars['mihomo_URL'] = $url;
         $vars['mihomo_secret'] = $secret;
 
