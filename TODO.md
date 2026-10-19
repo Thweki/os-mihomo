@@ -107,13 +107,15 @@
 - [x] 设备实测（只读）：`lan/opt1 → Unbound`，`opt2/LanUS → mihomo (TUN)`；当前 `dns-hijack=["0.0.0.0:53"]` → **TCP DNS 未覆盖**
 - [x] 不新增/修改防火墙、NAT、DHCP、Unbound、路由；不写 config.yaml
 - [x] zh_CN 新增 38 条词条（只增不改，核心译文 0 覆盖）
-- [ ] 可选后续：把 `any:53 + tcp://any:53` 写进受管 TUN 配置（需另行确认；本轮只展示）
+- [x] 用户确认后执行 `scripts/dns_tcp_hijack.sh`：运行中的 `config.yaml` → `tun.dns-hijack` 补 `any:53 + tcp://any:53`
+      （`mihomo -t` 通过，备份 `config.yaml.bak.20261019_225744`，服务重启后运行态 `coverage=udp+tcp`）；
+      订阅模板本来就有这两条，无需改
 
 ## P12-3 可选（待确认）
 
 - [x] DNS 现状可视化：设置页「DNS 状态」（只读，见 P19）
 - [ ] DNS 交给 mihomo：被策略路由接口的 NAT 重定向（53 → 127.0.0.1:1053）——写错会影响整段解析，需单独确认
-- [ ] TCP DNS 覆盖：把 `any:53 + tcp://any:53` 写进受管 TUN 配置（需确认是否让插件改写 config.yaml）
+- [x] TCP DNS 覆盖：运行配置与订阅模板均已是 `any:53 + tcp://any:53`（脚本 `scripts/dns_tcp_hijack.sh`，幂等）
 - [ ] IPv6 的对应处理（TUN v6 + 独立规则）
 - [ ] 按端口/目标的更细粒度分流；把策略路由导出成可审计的 pf 片段
 

@@ -1429,6 +1429,11 @@ log             142611 字节  PHP 报错: 无 ✅
 由 mihomo 的默认 `dns-hijack: 0.0.0.0:53` 回答；LAN/LanDirect 仍由 Unbound 回答。
 当前 `dns-hijack` 只有 UDP，页面会明确提示 **TCP DNS 未覆盖**。
 
-本轮不修改防火墙、NAT、DHCP、Unbound、路由，也不写 `config.yaml`；因此“把 DNS 交给 mihomo”
-的网络侧动作（NAT 53→1053、TCP 覆盖）仍保留为待确认项。
+本页只读，不修改防火墙、NAT、DHCP、Unbound、路由。
+
+用户确认后，另行执行了 `scripts/dns_tcp_hijack.sh`：把运行中 `config.yaml` 的
+`tun.dns-hijack` 从默认的 UDP-only 补成 `any:53 + tcp://any:53`（幂等脚本；
+`mihomo -t` 校验通过，旧文件备份为 `config.yaml.bak.20261019_225744`，重启后运行态
+`coverage=udp+tcp`）。订阅模板本就有这两条，无需修改。仍未做的是 P12-3 的
+“NAT 53→1053”（把 Unbound 接口的 DNS 也强制交给 mihomo）。
 
