@@ -191,7 +191,6 @@ TRANSLATIONS: dict[str, str] = {
     'Answer AAAA (IPv6) records too.': '是否同时回答 AAAA（IPv6）解析。',
     'Let the core handle IPv6 traffic.': '是否让内核处理 IPv6 流量。',
     # ---- 「只写入我改过的项」（P17）----
-    'Will be written': '将写入',
     'Configuration file updated: %d item(s) written — %s': '配置文件已更新，写入了 %d 项：%s',
     # ---- 对照页：说人话（P17）----
     'The "Running" column is what the core is using right now. Change the file and you still have to restart the service before it shows up here.':
@@ -218,22 +217,15 @@ TRANSLATIONS: dict[str, str] = {
         'TUN 模式关着：下面的绑定在它打开之前都不会生效。到「设置」里打开再回来。',
     # ---- 「不修改」开关（P18）----
     'leave alone': '不修改',
+    'Tick "leave alone" = this plugin never writes that item.':
+        '勾上「不修改」= 本插件不写这一项。',
     'Tick = this plugin never writes this item: the file keeps whatever you wrote. Clear the tick to let the page write it.':
         '勾上 = 本插件完全不写这一项：文件里你怎么写的就怎么用；取消勾选才由页面写入。',
-    'Each item has a "leave alone" tick (on by default): this plugin then never writes that item — the file keeps whatever you wrote, and what is not in the file stays out. Clear the tick to let the page write it.':
-        '每一项前面都有一条「不修改」（默认勾上）：勾着的时候插件完全不碰这一项 —— 文件里你怎么写的就怎么用，'
-        '文件里没有的也不会被加上；想让它按页面上的值写入，就把勾去掉。',
-    'Every item is set to "leave alone" — pressing Apply will not touch the configuration file.':
-        '所有项都是「不修改」—— 现在点「应用」不会改动配置文件。',
     'Every item is set to "leave alone", so the configuration file was not touched.':
         '所有项都是「不修改」，配置文件保持原样。',
     'The page and the file disagree on %d item(s), but those are still set to "leave alone", so the file keeps its own values: %s — clear "leave alone" on them to write the page values, or press Import to load the file values into the page.':
         '有 %d 项页面和文件对不上，但它们还是「不修改」，所以文件里保持原样：%s —— 想让页面说了算就把它们的勾去掉；'
         '想用文件里的值刷新页面就点「从配置导入」。',
-    'Let the page write every item.': '让页面负责每一项（全部取消勾选）。',
-    'Tick nothing (write all)': '全部取消勾选（都由页面写）',
-    'Nothing is written to any file.': '勾上之后什么都不写。',
-    'Tick everything (leave all alone)': '全部勾上（都不修改）',
     'Rows marked with a "leave alone" tag are items this plugin does not write: whatever you put in the file stays as it is.':
         '带「不修改」标记的项：本插件不会写它 —— 文件里你写的是什么，就还是什么。',
     'Internal list of the page fields this plugin may write.':

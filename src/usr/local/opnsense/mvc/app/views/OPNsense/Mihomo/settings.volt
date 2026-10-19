@@ -52,26 +52,6 @@
             return ids;
         }
 
-        /* 字段的中文名：优先取表单标签，取不到就用字段 id */
-        function fieldLabel(id) {
-            let text = '';
-            const ctl = document.getElementById('control_label_' + id);
-            if (ctl) {
-                /* 标签单元格里有我们自己塞的「不修改」开关，取名字时先摘掉它 */
-                const $clone = $(ctl).clone();
-                $clone.find('label.mihomo-managed-switch').remove();
-                text = $clone.text();
-            }
-            if (!text) {
-                const $label = $('label[for="' + id + '"]');
-                if ($label.length) {
-                    text = $label.first().clone().children().remove().end().text();
-                }
-            }
-            text = String(text || '').replace(/\s+/g, ' ').trim();
-            return text || id;
-        }
-
         /* 一个字段（或它所在的组）是否交给插件写 */
         function groupOwned(id) {
             const group = groupOf(id) || [id];
@@ -115,13 +95,6 @@
             });
         }
 
-        function refreshManagedSummary() {
-            const owned = syncManagedHidden();
-            $('#changed-summary').text(owned.length === 0
-                ? '{{ lang._('Every item is set to "leave alone" — pressing Apply will not touch the configuration file.') }}'
-                : '{{ lang._('Will be written') }}: ' + owned.map(fieldLabel).join('、'));
-        }
-
         /* 给每一行装上开关（组内只在第一个输入上装一条）
            注意：字段 id 里带点（mihomo.tun.mtu），不能用 $('#xxx') 拼选择器 —— 点会被当成 class。
            一律走 getElementById。 */
@@ -161,7 +134,7 @@
                 $(this).prop('checked', !isOwned);
             });
             applyLeaveAlone();
-            refreshManagedSummary();
+            syncManagedHidden();
         }
 
         function reloadForm() {
@@ -179,18 +152,7 @@
         reloadForm();
         $(document).on('change', '[data-managed-for]', function () {
             applyLeaveAlone();
-            refreshManagedSummary();
-        });
-        $('[id^="mihomo."]').on('change input', refreshManagedSummary);
-        $('#managedAllAct').click(function () {
-            $('[data-managed-for]').prop('checked', false);
-            applyLeaveAlone();
-            refreshManagedSummary();
-        });
-        $('#managedNoneAct').click(function () {
-            $('[data-managed-for]').prop('checked', true);
-            applyLeaveAlone();
-            refreshManagedSummary();
+            syncManagedHidden();
         });
 
         $('#applyAct').click(function () {
@@ -421,15 +383,8 @@
         </div>
         <div style="margin-top: 10px;">
             <span class="text-muted" style="font-size: 12px;">
-                {{ lang._('Each item has a "leave alone" tick (on by default): this plugin then never writes that item — the file keeps whatever you wrote, and what is not in the file stays out. Clear the tick to let the page write it.') }}
+                {{ lang._('Tick "leave alone" = this plugin never writes that item.') }}
             </span>
         </div>
-        <div style="margin-top: 6px;">
-            <button class="btn btn-xs btn-default __mr" id="managedAllAct" type="button"
-                    title="{{ lang._('Let the page write every item.') }}">{{ lang._('Tick nothing (write all)') }}</button>
-            <button class="btn btn-xs btn-default" id="managedNoneAct" type="button"
-                    title="{{ lang._('Nothing is written to any file.') }}">{{ lang._('Tick everything (leave all alone)') }}</button>
-        </div>
-        <div id="changed-summary" class="text-muted" style="margin-top: 8px; font-size: 12px;"></div>
     </div>
 </section>
