@@ -339,6 +339,72 @@ TRANSLATIONS: dict[str, str] = {
     'Policy routing is active': '策略路由已启用',
     'Traffic from these interfaces is routed into the mihomo TUN device: %s. While the service is stopped or fails to start, clients on these interfaces lose Internet access.':
         '这些接口的流量会被策略路由进 mihomo 的 TUN 设备：%s。在服务停止或启动失败期间，这些接口上的客户端会断网。',
+    # ---- DNS 状态（P12-3 只读部分）----
+    'DNS status': 'DNS 状态',
+    'DNS path by interface': '各接口 DNS 去向',
+    'See DNS status for which interface uses mihomo DNS.': '哪些接口使用 mihomo DNS，见「DNS 状态」。',
+    'Client DNS hijack': '客户端 DNS 劫持',
+    'Upstream policy': '上游策略',
+    'Follow routing rules': '遵循路由规则',
+    'configured': '已配置',
+    'not configured': '未配置',
+    'all interfaces': '所有接口',
+    'running': '运行中',
+    'stopped': '已停止',
+    'Not applied': '未应用',
+    'Manual': '手动',
+    'Mihomo (TUN)': 'mihomo（TUN）',
+    'No obvious DNS path problems.': '没有发现明显的 DNS 路径问题。',
+    'Interface': '接口',
+    'Address': '地址',
+    'Policy routing': '策略路由',
+    'Client DNS': '客户端 DNS',
+    'Note': '说明',
+    'Service': '服务',
+    'mihomo DNS is only used on interfaces whose traffic is policy-routed into the TUN device. Other interfaces keep using Unbound. Plain DNS on port 53 is hijacked; DoH/DoT and IPv6 DNS are not.':
+        '只有流量被策略路由进 TUN 的接口才会使用 mihomo DNS；其它接口仍由 Unbound 解析。'
+        '这里只劫持 53 端口的明文 DNS，DoH/DoT 与 IPv6 DNS 不在其中。',
+    'Manual policy routing: verify that pf sends this interface into the TUN device.':
+        '手动策略路由：请自行确认 pf 已把这个接口的流量送进 TUN。',
+    'Waiting for the OPNsense side: apply the routing policy to create the interface, gateway and firewall rule.':
+        '等待同步 OPNsense 网络侧：应用路由策略以创建接口、网关和防火墙规则。',
+    'TUN is off: DNS queries cannot reach mihomo.':
+        'TUN 未启用：DNS 查询无法到达 mihomo。',
+    'mihomo is not running: DNS on this interface will fail.':
+        'mihomo 未运行：这个接口上的 DNS 会失败。',
+    'The DNS module is off: mihomo cannot answer DNS queries.':
+        'DNS 模块未启用：mihomo 无法应答 DNS 查询。',
+    'No port 53 hijack: DNS queries are not sent to mihomo.':
+        '没有 53 端口劫持：DNS 查询不会送给 mihomo。',
+    'UDP and TCP 53 are hijacked.': 'UDP 与 TCP 53 都已被劫持。',
+    'UDP 53 is hijacked; TCP DNS is not covered.': '只劫持了 UDP 53，TCP DNS 未覆盖。',
+    'TCP 53 is hijacked; UDP DNS is not covered.': '只劫持了 TCP 53，UDP DNS 未覆盖。',
+    'Not policy-routed: Unbound answers DNS on this interface.':
+        '未走策略路由：这个接口的 DNS 由 Unbound 应答。',
+    'No DNS listener: set a DNS server that this interface can reach.':
+        '没有 DNS 监听者：请给客户端指定一个能访问到的 DNS 服务器。',
+    'Unbound is also listening on this address; the TUN policy normally wins.':
+        'Unbound 也在这个地址上监听；通常仍是 TUN 策略优先。',
+    'No interface is bound to mihomo: DNS on all interfaces is handled by Unbound or by the clients themselves.':
+        '没有接口绑定到 mihomo：所有接口的 DNS 都由 Unbound 或客户端自己处理。',
+    'TUN is off: bound interfaces cannot send DNS to mihomo.':
+        'TUN 未启用：已绑定接口无法把 DNS 送给 mihomo。',
+    'mihomo is not running: DNS on bound interfaces will fail.':
+        'mihomo 未运行：已绑定接口上的 DNS 会失败。',
+    'The DNS module is off: bound interfaces cannot use mihomo DNS.':
+        'DNS 模块未启用：已绑定接口无法使用 mihomo DNS。',
+    'Only UDP 53 is hijacked. Add tcp://any:53 to also cover TCP DNS.':
+        '只劫持了 UDP 53。加上 tcp://any:53 才能同时覆盖 TCP DNS。',
+    'Only TCP 53 is hijacked. Add any:53 to also cover UDP DNS.':
+        '只劫持了 TCP 53。加上 any:53 才能同时覆盖 UDP DNS。',
+    'No port 53 hijack is configured: bound interfaces will not use mihomo DNS.':
+        '没有配置 53 端口劫持：已绑定接口不会使用 mihomo DNS。',
+    'Unbound is also listening on %s. Keep it off these interfaces, or make sure the TUN policy wins.':
+        'Unbound 也在这些接口上监听：%s。请让它不要监听这些接口，或确认 TUN 策略优先。',
+    'Manual policy routing on %s: verify the pf rules yourself.':
+        '这些接口是手动策略路由：%s。请自行确认 pf 规则。',
+    'No nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant.':
+        '没有配置 nameserver-policy：mihomo 会使用默认上游，未必能防污染。',
 }
 
 

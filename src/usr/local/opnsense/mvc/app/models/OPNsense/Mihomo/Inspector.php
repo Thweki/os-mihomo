@@ -394,6 +394,508 @@ class Inspector
         ];
     }
 
+    /* =====================================================================
+     * DNS 去向（只读）：mihomo DNS、53 劫持覆盖、各接口的客户端 DNS 路径
+     * ===================================================================== */
+
+    /**
+     * DNS 现状报告。
+     *
+     * 只读：不修改配置文件、不重启服务、不碰防火墙。
+     * 结论基于「配置文件 + 运行态 + config.xml 的接口/Unbound/策略行」；
+     * 实际 pf 规则是否生效仍以路由策略页的状态为准。
+     */
+    public static function dnsReport(): array
+    {
+        $yaml = Config::rawText();
+        $scan = Config::scanText($yaml);
+        $serviceRunning = self::serviceRunning();
+        $runtime = $serviceRunning ? self::runtimeValues() : null;
+        $tunRuntime = is_array($runtime['tun'] ?? null) ? $runtime['tun'] : [];
+
+        $dnsEnabled = self::boolValue($scan['dns.enable'] ?? null, false);
+        $tunEnabled = self::boolValue(
+            $scan['tun.enable'] ?? null,
+            self::boolValue($tunRuntime['enable'] ?? null, false)
+        );
+        $listen = trim((string)($scan['dns.listen'] ?? '127.0.0.1:1053'));
+        $mode = trim((string)($scan['dns.enhanced-mode'] ?? 'redir-host'));
+        $dnsIpv6 = self::boolValue($scan['dns.ipv6'] ?? null, false);
+        $hijack = self::hijackReport($yaml, $tunRuntime);
+        $unbound = self::unboundReport();
+        $interfaces = self::dnsInterfaceRows($hijack, $unbound, $tunEnabled, $dnsEnabled, $serviceRunning);
+        $warnings = self::dnsWarnings($hijack, $interfaces, $tunEnabled, $dnsEnabled, $serviceRunning, $yaml);
+
+        return [
+            'status' => 'ok',
+            'dns' => [
+                'enabled' => $dnsEnabled,
+                'listen' => $listen,
+                'mode' => $mode,
+                'ipv6' => $dnsIpv6,
+                'tun_enabled' => $tunEnabled,
+                'service_running' => $serviceRunning,
+                'controller_alive' => $runtime !== null,
+            ],
+            'hijack' => $hijack,
+            'unbound' => $unbound,
+            'upstream' => [
+                'nameserver' => preg_match('/^\s{2}nameserver:\s*$/m', $yaml) === 1,
+                'nameserver_policy' => preg_match('/^\s{2}nameserver-policy:\s*$/m', $yaml) === 1,
+                'respect_rules' => self::boolValue($scan['dns.respect-rules'] ?? null, false),
+            ],
+            'interfaces' => $interfaces,
+            'warnings' => $warnings,
+        ];
+    }
+
+    /** YAML/运行态里的布尔值归一化（Config::scanText() 读出来的是字符串） */
+    private static function boolValue(mixed $value, bool $default): bool
+    {
+        if ($value === null || $value === '') {
+            return $default;
+        }
+        if (is_bool($value)) {
+            return $value;
+        }
+        return in_array(strtolower(trim((string)$value, "\"'")), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    /** mihomo 服务是否在跑（configd 只读状态） */
+    private static function serviceRunning(): bool
+    {
+        try {
+            $output = (string)(new \OPNsense\Core\Backend())->configdRun('mihomo status');
+            return str_contains($output, 'is running');
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * TUN 的 DNS 劫持覆盖。
+     *
+     * 优先级：运行态 /configs（mihomo 会补默认值）> config.yaml > 内核默认。
+     * 注意：没有协议前缀的条目按 udp:// 处理（mihomo 文档语义）。
+     */
+    private static function hijackReport(string $yaml, array $tunRuntime): array
+    {
+        $entries = [];
+        $source = 'default';
+        $runtimeEntries = $tunRuntime['dns-hijack'] ?? null;
+        if (is_array($runtimeEntries) && $runtimeEntries !== []) {
+            $entries = array_values(array_filter(array_map('strval', $runtimeEntries)));
+            $source = 'runtime';
+        } else {
+            $fileEntries = self::yamlList($yaml, 'dns-hijack');
+            if ($fileEntries !== null) {
+                $entries = $fileEntries;
+                $source = 'file';
+            }
+        }
+        if ($entries === [] && $source === 'default') {
+            /* mihomo 未写 dns-hijack 时的默认值（实测 /configs 里是 0.0.0.0:53） */
+            $entries = ['0.0.0.0:53'];
+        }
+
+        $udp = false;
+        $tcp = false;
+        $port53 = false;
+        foreach ($entries as $entry) {
+            $proto = 'udp';
+            $value = trim($entry);
+            if (preg_match('@^(tcp|udp)://(.+)$@i', $value, $m)) {
+                $proto = strtolower($m[1]);
+                $value = $m[2];
+            }
+            if (preg_match('@:53$@', trim($value))) {
+                $port53 = true;
+                if ($proto === 'tcp') {
+                    $tcp = true;
+                } else {
+                    $udp = true;
+                }
+            }
+        }
+
+        return [
+            'entries' => $entries,
+            'source' => $source,
+            'udp' => $udp,
+            'tcp' => $tcp,
+            'port53' => $port53,
+            'coverage' => $udp && $tcp ? 'udp+tcp' : ($udp ? 'udp' : ($tcp ? 'tcp' : 'none')),
+        ];
+    }
+
+    /**
+     * 读取 YAML 里某个键的列表。
+     * 返回值：null = 键不存在；[] = 键存在但为空；[...] = 列表项。
+     */
+    private static function yamlList(string $yaml, string $key): ?array
+    {
+        $lines = preg_split("/\r\n|\n|\r/", $yaml) ?: [];
+        $collect = false;
+        $indent = 0;
+        $out = [];
+        foreach ($lines as $line) {
+            if (!$collect) {
+                if (!preg_match('/^(\s*)' . preg_quote($key, '/') . ':\s*(.*)$/', $line, $m)) {
+                    continue;
+                }
+                $indent = strlen($m[1]);
+                $inline = trim(preg_replace('/\s+#.*$/', '', $m[2]));
+                if ($inline === '') {
+                    $collect = true;
+                    continue;
+                }
+                if (preg_match('/^\[(.*)\]$/', $inline, $im)) {
+                    foreach (explode(',', $im[1]) as $item) {
+                        $item = trim(trim($item), "\"'");
+                        if ($item !== '') {
+                            $out[] = $item;
+                        }
+                    }
+                }
+                return $out;
+            }
+
+            if (trim($line) === '' || preg_match('/^\s*#/', $line)) {
+                continue;
+            }
+            $lineIndent = strlen($line) - strlen(ltrim($line));
+            if ($lineIndent <= $indent) {
+                break;
+            }
+            if (preg_match('/^\s*-\s*(.*)$/', $line, $m)) {
+                $item = trim(preg_replace('/\s+#.*$/', '', $m[1]));
+                $item = trim($item, "\"'");
+                if ($item !== '') {
+                    $out[] = $item;
+                }
+            }
+        }
+        return $collect ? $out : null;
+    }
+
+    /** Unbound 是否启用、监听哪些接口（空列表 = 所有接口） */
+    private static function unboundReport(): array
+    {
+        $result = ['enabled' => true, 'all' => true, 'interfaces' => []];
+        try {
+            $cfg = \OPNsense\Core\Config::getInstance()->object();
+            $node = null;
+            /* OPNsense 26.x 把 Unbound 设置放在 <OPNsense><unboundplus>；旧版是 <unbound>。 */
+            foreach ([
+                $cfg->OPNsense->unboundplus ?? null,
+                $cfg->unboundplus ?? null,
+                $cfg->OPNsense->unbound ?? null,
+                $cfg->unbound ?? null,
+            ] as $candidate) {
+                if ($candidate !== null) {
+                    $node = $candidate;
+                    break;
+                }
+            }
+            if ($node === null) {
+                return $result;
+            }
+            $general = isset($node->general) ? $node->general : $node;
+            $enabledRaw = $general->enabled ?? ($node->enabled ?? ($node->enable ?? null));
+            $result['enabled'] = self::boolValue($enabledRaw, true);
+            $raw = trim((string)($general->active_interface ?? ($node->active_interface ?? '')));
+            if ($raw === '') {
+                $result['all'] = true;
+            } else {
+                $result['all'] = false;
+                $result['interfaces'] = array_values(array_filter(array_map('trim', explode(',', $raw))));
+            }
+        } catch (\Throwable $e) {
+            /* 读不到就按默认：Unbound 在跑、监听所有接口 */
+        }
+        return $result;
+    }
+
+    /** 本插件策略行：interface => [target/scope/firewall, ...]（只取已启用） */
+    private static function policyRows(): array
+    {
+        $rows = [];
+        try {
+            $mdl = new Mihomo();
+            foreach ($mdl->policyRouting->rule->iterateItems() as $item) {
+                if ((string)$item->enabled === '0') {
+                    continue;
+                }
+                $iface = trim((string)$item->interface);
+                if ($iface === '') {
+                    continue;
+                }
+                $rows[$iface][] = [
+                    'source' => trim((string)$item->source),
+                    'target' => trim((string)$item->target),
+                    'scope' => trim((string)$item->scope),
+                    'firewall' => trim((string)$item->firewall),
+                ];
+            }
+        } catch (\Throwable $e) {
+            /* 模型不可读时返回空表 */
+        }
+        return $rows;
+    }
+
+    /**
+     * 网络侧已建好策略路由规则的接口（只读）。
+     *
+     * OPNsense 26.x 的浮动规则在 <OPNsense><Firewall><Filter><rules>，
+     * 旧版在 <filter><rule>；两处都认，避免把“已生效”误判成“待同步”。
+     */
+    private static function policyRuleInterfaces(): array
+    {
+        $result = [];
+        try {
+            $cfg = \OPNsense\Core\Config::getInstance()->object();
+            $gatewayExists = false;
+            if (isset($cfg->OPNsense->Gateways)) {
+                foreach ($cfg->OPNsense->Gateways->gateway_item as $item) {
+                    if ((string)$item->name === 'MIHOMO_TUN') {
+                        $gatewayExists = true;
+                        break;
+                    }
+                }
+            }
+            if (!$gatewayExists) {
+                return $result;
+            }
+
+            $scan = function ($rules) use (&$result): void {
+                foreach ($rules as $item) {
+                    if ((string)($item->enabled ?? '1') === '0') {
+                        continue;
+                    }
+                    if ((string)$item->gateway !== 'MIHOMO_TUN') {
+                        continue;
+                    }
+                    $descr = (string)($item->description ?? '');
+                    if ($descr === '') {
+                        $descr = (string)($item->descr ?? '');
+                    }
+                    if (stripos($descr, 'Mihomo policy') === false) {
+                        continue;
+                    }
+                    /* 浮动规则用 source_net 表示来源接口；旧规则可能用 interface。 */
+                    $source = trim((string)($item->source_net ?? ''));
+                    if ($source === '') {
+                        $source = trim((string)($item->interface ?? ''));
+                    }
+                    if ($source !== '') {
+                        $result[$source] = true;
+                    }
+                }
+            };
+
+            if (isset($cfg->OPNsense->Firewall->Filter->rules->rule)) {
+                $scan($cfg->OPNsense->Firewall->Filter->rules->rule);
+            }
+            if (isset($cfg->filter->rule)) {
+                $scan($cfg->filter->rule);
+            }
+        } catch (\Throwable $e) {
+            /* 只读判断失败按未就绪处理 */
+        }
+        return $result;
+    }
+
+    /** 每个 OPNsense 接口的 DNS 去向 */
+    private static function dnsInterfaceRows(
+        array $hijack,
+        array $unbound,
+        bool $tunEnabled,
+        bool $dnsEnabled,
+        bool $serviceRunning
+    ): array {
+        $policy = self::policyRows();
+        $readyRules = self::policyRuleInterfaces();
+        $rows = [];
+        try {
+            $cfg = \OPNsense\Core\Config::getInstance()->object();
+            if (!isset($cfg->interfaces)) {
+                return [];
+            }
+            foreach ($cfg->interfaces->children() as $name => $node) {
+                $device = trim((string)$node->if);
+                if ($device === 'lo0' || (string)$node->internal_dynamic === '1') {
+                    continue;
+                }
+                $ip = trim((string)$node->ipaddr);
+                if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                    continue;
+                }
+                $mask = trim((string)$node->subnet);
+                $address = $ip . (ctype_digit($mask) && $mask !== '' ? '/' . $mask : '');
+                $descr = trim((string)$node->descr);
+                $pr = $policy[$name] ?? [];
+                $bound = $pr !== [];
+                $networkReady = false;
+                $firewall = 'none';
+                $targets = [];
+                foreach ($pr as $item) {
+                    if (isset($readyRules[$name]) || ($item['source'] !== '' && isset($readyRules[$item['source']]))) {
+                        $networkReady = true;
+                    }
+                    if ($item['firewall'] === 'auto') {
+                        $firewall = 'auto';
+                    } elseif ($firewall === 'none') {
+                        $firewall = 'manual';
+                    }
+                    $targets[] = $item['target'] !== '' ? $item['target'] : 'DIRECT';
+                }
+                $targets = array_values(array_unique($targets));
+                $unboundHere = $unbound['enabled'] && ($unbound['all'] || in_array($name, $unbound['interfaces'], true));
+
+                $path = 'none';
+                $state = 'warning';
+                $note = '';
+                if ($bound && $firewall === 'manual') {
+                    $path = 'manual';
+                    $note = gettext('Manual policy routing: verify that pf sends this interface into the TUN device.');
+                } elseif ($bound && $firewall === 'auto' && !$networkReady) {
+                    $path = 'pending';
+                    $note = gettext('Waiting for the OPNsense side: apply the routing policy to create the interface, gateway and firewall rule.');
+                } elseif ($bound && !$tunEnabled) {
+                    $note = gettext('TUN is off: DNS queries cannot reach mihomo.');
+                } elseif ($bound && !$serviceRunning) {
+                    $state = 'danger';
+                    $note = gettext('mihomo is not running: DNS on this interface will fail.');
+                } elseif ($bound && !$dnsEnabled) {
+                    $state = 'danger';
+                    $note = gettext('The DNS module is off: mihomo cannot answer DNS queries.');
+                } elseif ($bound && !$hijack['port53']) {
+                    $note = gettext('No port 53 hijack: DNS queries are not sent to mihomo.');
+                } elseif ($bound) {
+                    $path = 'mihomo';
+                    $state = 'ok';
+                    if ($hijack['udp'] && $hijack['tcp']) {
+                        $note = gettext('UDP and TCP 53 are hijacked.');
+                    } elseif ($hijack['udp']) {
+                        $note = gettext('UDP 53 is hijacked; TCP DNS is not covered.');
+                    } else {
+                        $note = gettext('TCP 53 is hijacked; UDP DNS is not covered.');
+                    }
+                } elseif ($unboundHere) {
+                    $path = 'unbound';
+                    $state = 'muted';
+                    $note = gettext('Not policy-routed: Unbound answers DNS on this interface.');
+                } else {
+                    $note = gettext('No DNS listener: set a DNS server that this interface can reach.');
+                }
+
+                if ($path === 'mihomo' && $unboundHere) {
+                    $note .= ' ' . gettext('Unbound is also listening on this address; the TUN policy normally wins.');
+                }
+
+                $rows[] = [
+                    'interface' => $name,
+                    'device' => $device,
+                    'description' => $descr,
+                    'address' => $address,
+                    'bound' => $bound,
+                    'targets' => $targets,
+                    'firewall' => $firewall,
+                    'unbound' => $unboundHere,
+                    'path' => $path,
+                    'state' => $state,
+                    'note' => $note,
+                ];
+            }
+        } catch (\Throwable $e) {
+            /* 取不到接口就返回空表 */
+        }
+        usort($rows, fn ($a, $b) => strcmp($a['interface'], $b['interface']));
+        return $rows;
+    }
+
+    /** 汇总提示（只读） */
+    private static function dnsWarnings(
+        array $hijack,
+        array $interfaces,
+        bool $tunEnabled,
+        bool $dnsEnabled,
+        bool $serviceRunning,
+        string $yaml
+    ): array {
+        $warnings = [];
+        $bound = array_values(array_filter($interfaces, fn ($row) => $row['bound']));
+        if ($bound === []) {
+            $warnings[] = [
+                'level' => 'info',
+                'text' => gettext('No interface is bound to mihomo: DNS on all interfaces is handled by Unbound or by the clients themselves.'),
+            ];
+            return $warnings;
+        }
+        if (!$tunEnabled) {
+            $warnings[] = ['level' => 'warning', 'text' => gettext('TUN is off: bound interfaces cannot send DNS to mihomo.')];
+        }
+        if (!$serviceRunning) {
+            $warnings[] = ['level' => 'danger', 'text' => gettext('mihomo is not running: DNS on bound interfaces will fail.')];
+        }
+        if (!$dnsEnabled) {
+            $warnings[] = ['level' => 'danger', 'text' => gettext('The DNS module is off: bound interfaces cannot use mihomo DNS.')];
+        }
+        if ($hijack['port53'] && !$hijack['tcp']) {
+            $warnings[] = [
+                'level' => 'warning',
+                'text' => gettext('Only UDP 53 is hijacked. Add tcp://any:53 to also cover TCP DNS.'),
+            ];
+        }
+        if ($hijack['port53'] && !$hijack['udp']) {
+            $warnings[] = [
+                'level' => 'warning',
+                'text' => gettext('Only TCP 53 is hijacked. Add any:53 to also cover UDP DNS.'),
+            ];
+        }
+        if (!$hijack['port53']) {
+            $warnings[] = [
+                'level' => 'warning',
+                'text' => gettext('No port 53 hijack is configured: bound interfaces will not use mihomo DNS.'),
+            ];
+        }
+        $both = [];
+        $manual = [];
+        foreach ($bound as $row) {
+            if ($row['unbound']) {
+                $both[] = $row['interface'];
+            }
+            if ($row['firewall'] === 'manual') {
+                $manual[] = $row['interface'];
+            }
+        }
+        if ($both !== []) {
+            $warnings[] = [
+                'level' => 'warning',
+                'text' => sprintf(
+                    gettext('Unbound is also listening on %s. Keep it off these interfaces, or make sure the TUN policy wins.'),
+                    implode(', ', $both)
+                ),
+            ];
+        }
+        if ($manual !== []) {
+            $warnings[] = [
+                'level' => 'warning',
+                'text' => sprintf(
+                    gettext('Manual policy routing on %s: verify the pf rules yourself.'),
+                    implode(', ', $manual)
+                ),
+            ];
+        }
+        if (preg_match('/^\s{2}nameserver-policy:\s*$/m', $yaml) !== 1) {
+            $warnings[] = [
+                'level' => 'info',
+                'text' => gettext('No nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant.'),
+            ];
+        }
+        return $warnings;
+    }
+
     /** 页面里的值（与 SettingsController::modelPatch() 的键一一对应） */
     private static function modelValues(): array
     {

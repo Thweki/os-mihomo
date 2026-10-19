@@ -46,6 +46,9 @@ msgstr "当前配置无效"
 msgid "Active configuration is valid"
 msgstr "当前配置有效"
 
+msgid "Address"
+msgstr "地址"
+
 msgid "All connections closed."
 msgstr "已关闭全部连接。"
 
@@ -84,6 +87,12 @@ msgstr "清空日志"
 
 msgid "Clear log?"
 msgstr "清空日志？"
+
+msgid "Client DNS"
+msgstr "客户端 DNS"
+
+msgid "Client DNS hijack"
+msgstr "客户端 DNS 劫持"
 
 msgid "Close all"
 msgstr "全部断开"
@@ -160,8 +169,14 @@ msgstr "DNS 监听地址，如 127.0.0.1:1053。"
 msgid "DNS over IPv6"
 msgstr "DNS 返回 IPv6"
 
+msgid "DNS path by interface"
+msgstr "各接口 DNS 去向"
+
 msgid "DNS queries on port 53 are redirected into mihomo while the service runs. If the proxy is broken, name resolution for all clients behind this firewall breaks with it."
 msgstr "服务运行期间，53 端口的 DNS 查询会被重定向到 mihomo。若代理失效，本机后面所有客户端的域名解析也会随之失效。"
+
+msgid "DNS status"
+msgstr "DNS 状态"
 
 msgid "Device MTU."
 msgstr "设备 MTU。"
@@ -253,6 +268,9 @@ msgstr "固定为 tun_mihomo：防火墙规则里是按这个名字写的。"
 msgid "Fixed by the plugin and not editable here — see the help text."
 msgstr "固定值：插件写死，这里改不了（详见帮助）。"
 
+msgid "Follow routing rules"
+msgstr "遵循路由规则"
+
 msgid "Foreign only"
 msgstr "仅国外"
 
@@ -279,6 +297,9 @@ msgstr "导入失败"
 
 msgid "Import from configuration file"
 msgstr "从配置文件导入"
+
+msgid "Interface"
+msgstr "接口"
 
 msgid "Interface \"%s\" has no IPv4 network; set a source explicitly."
 msgstr "接口 \"%s\" 没有 IPv4 网段，请显式填写源。"
@@ -328,6 +349,15 @@ msgstr "日志已清空。"
 msgid "Log verbosity. Use error or silent for long term operation."
 msgstr "日志级别；长期运行建议 error 或 silent。"
 
+msgid "Manual"
+msgstr "手动"
+
+msgid "Manual policy routing on %s: verify the pf rules yourself."
+msgstr "这些接口是手动策略路由：%s。请自行确认 pf 规则。"
+
+msgid "Manual policy routing: verify that pf sends this interface into the TUN device."
+msgstr "手动策略路由：请自行确认 pf 已把这个接口的流量送进 TUN。"
+
 msgid "Manual: make sure the interface is policy routed into the TUN device."
 msgstr "手动模式：请自行确保该接口的策略路由指向 TUN 设备。"
 
@@ -337,20 +367,50 @@ msgstr "内存 / 内核版本"
 msgid "Mihomo"
 msgstr "Mihomo"
 
+msgid "Mihomo (TUN)"
+msgstr "mihomo（TUN）"
+
 msgid "Mixed port"
 msgstr "混合端口"
 
 msgid "Mode switched to %s."
 msgstr "已切换到 %s 模式。"
 
+msgid "No DNS listener: set a DNS server that this interface can reach."
+msgstr "没有 DNS 监听者：请给客户端指定一个能访问到的 DNS 服务器。"
+
+msgid "No interface is bound to mihomo: DNS on all interfaces is handled by Unbound or by the clients themselves."
+msgstr "没有接口绑定到 mihomo：所有接口的 DNS 都由 Unbound 或客户端自己处理。"
+
+msgid "No nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant."
+msgstr "没有配置 nameserver-policy：mihomo 会使用默认上游，未必能防污染。"
+
+msgid "No obvious DNS path problems."
+msgstr "没有发现明显的 DNS 路径问题。"
+
 msgid "No output from the configuration test."
 msgstr "配置校验没有输出。"
+
+msgid "No port 53 hijack is configured: bound interfaces will not use mihomo DNS."
+msgstr "没有配置 53 端口劫持：已绑定接口不会使用 mihomo DNS。"
+
+msgid "No port 53 hijack: DNS queries are not sent to mihomo."
+msgstr "没有 53 端口劫持：DNS 查询不会送给 mihomo。"
 
 msgid "No proxy groups are defined in the configuration."
 msgstr "配置中未定义代理分组。"
 
 msgid "No rule would be generated: every row is disabled, has no source, or has no outbound selected."
 msgstr "不会生成任何规则：所有行要么未启用、要么没有源、要么没有选出站。"
+
+msgid "Not applied"
+msgstr "未应用"
+
+msgid "Not policy-routed: Unbound answers DNS on this interface."
+msgstr "未走策略路由：这个接口的 DNS 由 Unbound 应答。"
+
+msgid "Note"
+msgstr "说明"
 
 msgid "Nothing is bound yet — click Add, pick an interface and a proxy group, then Apply."
 msgstr "还没有绑定接口 —— 点「添加」选择接口与代理组，再点「应用」生效。"
@@ -367,6 +427,12 @@ msgstr "下次重启后 mihomo 一启动就会接管路由。重启前请先确�
 msgid "Only HTTP or HTTPS subscription URLs are allowed."
 msgstr "订阅地址仅允许使用 HTTP 或 HTTPS。"
 
+msgid "Only TCP 53 is hijacked. Add any:53 to also cover UDP DNS."
+msgstr "只劫持了 TCP 53。加上 any:53 才能同时覆盖 UDP DNS。"
+
+msgid "Only UDP 53 is hijacked. Add tcp://any:53 to also cover TCP DNS."
+msgstr "只劫持了 UDP 53。加上 tcp://any:53 才能同时覆盖 TCP DNS。"
+
 msgid "Optional. Empty uses the interface network."
 msgstr "可留空，默认使用接口网段。"
 
@@ -381,6 +447,9 @@ msgstr "检测到占位节点"
 
 msgid "Policy Routing"
 msgstr "路由策略"
+
+msgid "Policy routing"
+msgstr "策略路由"
 
 msgid "Policy routing is active"
 msgstr "策略路由已启用"
@@ -456,6 +525,12 @@ msgstr "规则范围"
 
 msgid "Secret written into the generated configuration."
 msgstr "写入生成配置的密钥。"
+
+msgid "See DNS status for which interface uses mihomo DNS."
+msgstr "哪些接口使用 mihomo DNS，见「DNS 状态」。"
+
+msgid "Service"
+msgstr "服务"
 
 msgid "Service is enabled at boot but not running"
 msgstr "已设置为开机自启，但当前未运行"
@@ -535,6 +610,9 @@ msgstr "订阅更新已开始"
 msgid "Switched \"%s\" to \"%s\"."
 msgstr "已将 \"%s\" 切换到 \"%s\"。"
 
+msgid "TCP 53 is hijacked; UDP DNS is not covered."
+msgstr "只劫持了 TCP 53，UDP DNS 未覆盖。"
+
 msgid "TUN Device"
 msgstr "TUN 设备"
 
@@ -546,6 +624,12 @@ msgstr "TUN 已关闭：规则会写入并通过校验，但暂时没有流量�
 
 msgid "TUN is disabled: traffic does not reach mihomo."
 msgstr "TUN 已关闭：流量不会进入 mihomo。"
+
+msgid "TUN is off: DNS queries cannot reach mihomo."
+msgstr "TUN 未启用：DNS 查询无法到达 mihomo。"
+
+msgid "TUN is off: bound interfaces cannot send DNS to mihomo."
+msgstr "TUN 未启用：已绑定接口无法把 DNS 送给 mihomo。"
 
 msgid "TUN mode is enabled (automatic route takeover off)"
 msgstr "已启用 TUN 模式（未自动接管路由）"
@@ -564,6 +648,12 @@ msgstr "接管默认路由；节点不可用时会断网。"
 
 msgid "Test Active Configuration"
 msgstr "校验当前配置"
+
+msgid "The DNS module is off: bound interfaces cannot use mihomo DNS."
+msgstr "DNS 模块未启用：已绑定接口无法使用 mihomo DNS。"
+
+msgid "The DNS module is off: mihomo cannot answer DNS queries."
+msgstr "DNS 模块未启用：mihomo 无法应答 DNS 查询。"
 
 msgid "The TUN device is guaranteed to win over other default routes while the service runs."
 msgstr "服务运行时，TUN 设备将优先于其它默认路由。"
@@ -619,6 +709,12 @@ msgstr "这些接口的流量会被策略路由进 mihomo 的 TUN 设备：%s。
 msgid "Traffic only enters the TUN device when firewall or policy routing sends it there."
 msgstr "仅当防火墙或策略路由把流量送入 TUN 设备时才会走代理。"
 
+msgid "UDP 53 is hijacked; TCP DNS is not covered."
+msgstr "只劫持了 UDP 53，TCP DNS 未覆盖。"
+
+msgid "UDP and TCP 53 are hijacked."
+msgstr "UDP 与 TCP 53 都已被劫持。"
+
 msgid "Unable to create a staging file in /tmp."
 msgstr "无法在 /tmp 创建临时文件。"
 
@@ -627,6 +723,12 @@ msgstr "无法连接 mihomo 外部控制器。"
 
 msgid "Unable to write the staging file."
 msgstr "无法写入临时文件。"
+
+msgid "Unbound is also listening on %s. Keep it off these interfaces, or make sure the TUN policy wins."
+msgstr "Unbound 也在这些接口上监听：%s。请让它不要监听这些接口，或确认 TUN 策略优先。"
+
+msgid "Unbound is also listening on this address; the TUN policy normally wins."
+msgstr "Unbound 也在这个地址上监听；通常仍是 TUN 策略优先。"
 
 msgid "Undo"
 msgstr "撤销"
@@ -649,6 +751,9 @@ msgstr "按计划更新订阅。"
 msgid "Updating the subscription rebuilds config.yaml from the subscription template, so manual edits are replaced. The current file is backed up as config.yaml.bak.sub_* first."
 msgstr "更新订阅会用订阅模板整份重写 config.yaml，手工改过的内容会被替换；更新前会自动备份成 config.yaml.bak.sub_*。"
 
+msgid "Upstream policy"
+msgstr "上游策略"
+
 msgid "Use %sSettings%s to enable it, then start it from the controls in the page header."
 msgstr "请到 %s设置%s 中启用，然后使用页面右上角的控件启动。"
 
@@ -664,6 +769,9 @@ msgstr "校验未通过"
 msgid "Validation passed"
 msgstr "校验通过"
 
+msgid "Waiting for the OPNsense side: apply the routing policy to create the interface, gateway and firewall rule."
+msgstr "等待同步 OPNsense 网络侧：应用路由策略以创建接口、网关和防火墙规则。"
+
 msgid "Waiting for the OPNsense side: interface, gateway and policy routing rule."
 msgstr "等待同步 OPNsense 网络侧：接口、网关与策略路由规则。"
 
@@ -676,6 +784,9 @@ msgstr "写入 mihomo 配置；需要时在 OPNsense 上创建接口、网关和
 msgid "Written by the plugin: on Apply the value above is written into the file. Click to leave the file alone instead."
 msgstr "由插件写入：点「应用」时按上面的值改配置文件；点一下改为「不修改」。"
 
+msgid "all interfaces"
+msgstr "所有接口"
+
 msgid "apply to take effect"
 msgstr "应用后生效"
 
@@ -684,6 +795,9 @@ msgstr "字节"
 
 msgid "checked by the core"
 msgstr "内核会校验密钥"
+
+msgid "configured"
+msgstr "已配置"
 
 msgid "consistent"
 msgstr "一致"
@@ -712,14 +826,26 @@ msgstr "生效中"
 msgid "leave alone"
 msgstr "不修改"
 
+msgid "mihomo DNS is only used on interfaces whose traffic is policy-routed into the TUN device. Other interfaces keep using Unbound. Plain DNS on port 53 is hijacked; DoH/DoT and IPv6 DNS are not."
+msgstr "只有流量被策略路由进 TUN 的接口才会使用 mihomo DNS；其它接口仍由 Unbound 解析。这里只劫持 53 端口的明文 DNS，DoH/DoT 与 IPv6 DNS 不在其中。"
+
 msgid "mihomo is active and will start again after a reboot."
 msgstr "mihomo 正在运行，并会在重启后自动启动。"
+
+msgid "mihomo is not running: DNS on bound interfaces will fail."
+msgstr "mihomo 未运行：已绑定接口上的 DNS 会失败。"
+
+msgid "mihomo is not running: DNS on this interface will fail."
+msgstr "mihomo 未运行：这个接口上的 DNS 会失败。"
 
 msgid "mihomo rules"
 msgstr "mihomo 规则"
 
 msgid "not checked (no secret)"
 msgstr "没设密钥，内核不校验"
+
+msgid "not configured"
+msgstr "未配置"
 
 msgid "not in file"
 msgstr "文件未写"
@@ -736,8 +862,14 @@ msgstr "规则"
 msgid "rule: follow the routing rules. global: everything through the selected proxy. direct: no proxy."
 msgstr "rule：按规则分流；global：全部走所选节点；direct：全部直连。"
 
+msgid "running"
+msgstr "运行中"
+
 msgid "running only"
 msgstr "仅运行值"
+
+msgid "stopped"
+msgstr "已停止"
 
 msgid "…"
 msgstr "未知"

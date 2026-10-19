@@ -1416,3 +1416,19 @@ log             142611 字节  PHP 报错: 无 ✅
 > "看得见的东西是空的"（横幅）；同时把"配置到底谁说了算"写成了可查、可复现的文档。
 
 ---
+
+## 22. P19：DNS 状态页（只读）
+
+设置页新增第二个标签「DNS 状态」，数据来自 `GET /api/mihomo/settings/dns_status`（只读）：
+
+- 汇总：DNS 模块、监听地址、`enhanced-mode`、IPv6、TUN、服务状态、53 劫持覆盖（UDP/TCP）、Unbound 监听接口、上游策略与 `respect-rules`。
+- 逐接口：策略路由状态、Unbound 是否监听该接口地址、客户端 DNS 去向（mihomo / Unbound / 未应用 / 手动 / —）、具体说明。
+- 告警：只覆盖 UDP 53、TUN/服务/DNS 关闭、Unbound 与绑定接口重叠、手动策略路由、未配置 `nameserver-policy`。
+
+关键结论（设备实测）：LanUS（opt2）的 DNS 到 `192.168.10.1:53` 会被策略路由送进 TUN，
+由 mihomo 的默认 `dns-hijack: 0.0.0.0:53` 回答；LAN/LanDirect 仍由 Unbound 回答。
+当前 `dns-hijack` 只有 UDP，页面会明确提示 **TCP DNS 未覆盖**。
+
+本轮不修改防火墙、NAT、DHCP、Unbound、路由，也不写 `config.yaml`；因此“把 DNS 交给 mihomo”
+的网络侧动作（NAT 53→1053、TCP 覆盖）仍保留为待确认项。
+

@@ -294,6 +294,24 @@ rules:
 | 页面右上角启动/停止/重启 | 进程本身 | 重启才会重新读 `config.yaml` |
 | 服务脚本启动前 | `/usr/local/etc/rc.d/mihomo` | 会先跑 `mihomo -t -d /usr/local/etc/mihomo -f config.yaml`，**校验不过直接不启动**；还会检测 sing-box 冲突、清理残留 TUN |
 
+### 情形 7：客户端 DNS 到底走谁
+
+设置页的「DNS 状态」标签是只读的，它按**接口**列出：
+
+| 列 | 含义 |
+|---|---|
+| 策略路由 | 这个接口是否在路由策略页里绑给了 mihomo |
+| Unbound | Unbound 是否监听这个接口地址（来自 `active_interface`） |
+| 客户端 DNS | `mihomo (TUN)` / `Unbound` / `未应用` / `手动` / `—` |
+| 说明 | 具体原因，以及 UDP/TCP 53 的覆盖情况 |
+
+判定逻辑：
+
+- **绑了策略路由的接口**：pf 会把该接口的 IPv4 流量送进 TUN；客户端把 DNS 设成这个接口地址（或任意地址），53 端口的查询会被 mihomo 的 `dns-hijack` 截获，由 mihomo DNS 回答。**不需要 NAT 重定向**。
+- **没绑的接口**：DNS 到 OPNsense 仍由 Unbound 回答。只把 DNS 指到 mihomo 而不绑接口，会在 `redir-host` 下解析出真实 IP 后直连（等于没代理），在 `fake-ip` 下直接连不上。
+- **TCP DNS**：`dns-hijack` 里只写 `any:53` / `0.0.0.0:53` 时只覆盖 UDP。要同时覆盖 TCP，必须写成 `any:53` + `tcp://any:53`；页面会把“只劫持 UDP”标成警告。
+- **DoH/DoT/IPv6**：53 端口劫持管不到 853/443 的加密 DNS，也管不到 IPv6 DNS。
+
 ---
 
 ## 6. 怎么确认「此刻真实配置」（四步法）
@@ -483,6 +501,9 @@ powershell -File tools/remote.ps1 -Script scripts/config_truth.sh
 
 **Q13：IPv6 会走代理吗？**
 不会。当前是 IPv4-only 的分流：TUN 只有 IPv4 地址，IPv6 流量会按内核正常路由出去（绕过代理）。如果要管 IPv6，得单独设计（属于待办项）。
+
+**Q17：客户端把 DNS 设成 OPNsense，为什么 LanUS 拿到的是 mihomo 的解析？**
+因为 LanUS 绑了策略路由，DNS 包也被 `route-to` 送进 TUN；mihomo 的 TUN 默认带 `dns-hijack: 0.0.0.0:53`，所以由它回答。LAN/LanDirect 没绑策略路由，且 Unbound 监听它们的接口地址，所以仍由 Unbound 回答。设置页「DNS 状态」会把每个接口的归属和 TCP 覆盖情况列出来。
 
 **Q14：日志在哪、怎么看？**
 内核：`/var/log/mihomo.log`（日志页「内核日志」标签），级别由 `log-level` 决定。

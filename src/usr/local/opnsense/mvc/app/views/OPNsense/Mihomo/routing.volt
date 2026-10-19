@@ -311,6 +311,10 @@
 <p class="text-muted">
     <span id="routeState"></span><span id="routeNotes"></span>
 </p>
+<p class="text-muted">
+    <i class="fa fa-info-circle fa-fw"></i>
+    <a href="/ui/mihomo/settings#dnsstatus">{{ lang._('See DNS status for which interface uses mihomo DNS.') }}</a>
+</p>
 
 <div class="content-box __mb">
     <header class="content-box-header">

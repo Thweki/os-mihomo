@@ -20,7 +20,8 @@
 | P11 | 上手试用：安全启动（TUN 关闭）+ 修复服务控制缺陷 | [x] |
 | P12-1 | 路由策略页（原生表格 + 受管区块 + 预览/应用/状态）+ 真实节点实测 | [x] |
 | P12-2 | 路由策略网络侧同步（接口/网关/策略路由 + 弹窗确认 + 回滚） | [x] |
-| P12-3 | 可选：DNS 交给 mihomo（NAT 53→1053）、IPv6、按端口/目标细分 | [ ] |
+| P12-3 | 可选：DNS 交给 mihomo（NAT 53→1053）、IPv6、按端口/目标细分 | [~] |
+| P19 | DNS 状态页（只读）：mihomo DNS / 53 劫持 / 各接口客户端去向 | [x] |
 
 ## 交付结果（2026-10-18）
 
@@ -97,9 +98,22 @@
 - [x] **修正**：策略路由此前写进旧版根 <filter>，被接口默认放行规则抢先（Evaluations=0）→ 改为核心防火墙模块的**浮动规则**（prio_group=200000，先于接口规则）→ 实测 route-to 行号 70 < 默认放行 71 ✅
 - [x] 自检脚本的日志解析同时接受 IP 与域名；弹窗统一 HTML 实体解码
 
+## P19 DNS 状态页（本轮，只读）
+
+- [x] 设置页新增第 2 个标签「DNS 状态」：`GET /api/mihomo/settings/dns_status`
+- [x] 汇总：DNS 模块 / 监听地址 / enhanced-mode / IPv6 / TUN / 服务状态 / 53 劫持覆盖（UDP、TCP）/ Unbound / 上游策略 / respect-rules
+- [x] 逐接口表：接口、地址、策略路由、Unbound 是否监听、客户端 DNS 去向（mihomo / Unbound / 未应用 / 手动 / 无）、说明
+- [x] 告警：只劫持 UDP 53、TUN/服务/DNS 关闭、Unbound 与绑定接口重叠、手动策略路由、未配置 nameserver-policy
+- [x] 设备实测（只读）：`lan/opt1 → Unbound`，`opt2/LanUS → mihomo (TUN)`；当前 `dns-hijack=["0.0.0.0:53"]` → **TCP DNS 未覆盖**
+- [x] 不新增/修改防火墙、NAT、DHCP、Unbound、路由；不写 config.yaml
+- [x] zh_CN 新增 38 条词条（只增不改，核心译文 0 覆盖）
+- [ ] 可选后续：把 `any:53 + tcp://any:53` 写进受管 TUN 配置（需另行确认；本轮只展示）
+
 ## P12-3 可选（待确认）
 
+- [x] DNS 现状可视化：设置页「DNS 状态」（只读，见 P19）
 - [ ] DNS 交给 mihomo：被策略路由接口的 NAT 重定向（53 → 127.0.0.1:1053）——写错会影响整段解析，需单独确认
+- [ ] TCP DNS 覆盖：把 `any:53 + tcp://any:53` 写进受管 TUN 配置（需确认是否让插件改写 config.yaml）
 - [ ] IPv6 的对应处理（TUN v6 + 独立规则）
 - [ ] 按端口/目标的更细粒度分流；把策略路由导出成可审计的 pf 片段
 

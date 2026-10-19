@@ -304,6 +304,18 @@ class SettingsController extends ApiMutableModelControllerBase
     }
 
     /**
+     * 「DNS 状态」：mihomo DNS、53 劫持覆盖、各接口的客户端 DNS 路径（只读）。
+     */
+    public function dnsStatusAction()
+    {
+        try {
+            return Inspector::dnsReport();
+        } catch (\Throwable $e) {
+            return ['status' => 'failed', 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
      * 「配置对照」：页面值 / 文件值 / 运行值 三方对照（只读）。
      */
     public function inspectAction()

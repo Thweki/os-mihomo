@@ -245,6 +245,134 @@
             return $('<div>').text(text === undefined || text === null ? '' : String(text)).html();
         }
 
+        /* ------------------------------------------------------------------ *
+         * DNS 状态：mihomo DNS / 53 劫持 / 各接口的客户端 DNS 去向（只读）
+         * ------------------------------------------------------------------ */
+        function dnsBadge(kind, text) {
+            const map = {
+                'ok': 'label-success',
+                'muted': 'label-default',
+                'warning': 'label-warning',
+                'danger': 'label-danger'
+            };
+            return '<span class="label ' + (map[kind] || 'label-default') + '">' + escapeHtml(text) + '</span>';
+        }
+
+        function dnsBool(value) {
+            return value
+                ? '<span class="label label-success">{{ lang._('Enabled') }}</span>'
+                : '<span class="label label-default">{{ lang._('Disabled') }}</span>';
+        }
+
+        function loadDnsStatus() {
+            $('#dns-summary').html('<tr><td colspan="2" class="text-muted">{{ lang._('Loading …') }}</td></tr>');
+            ajaxGet('/api/mihomo/settings/dns_status', {}, function (data, status) {
+                if (status !== 'success' || !data || data['status'] !== 'ok') {
+                    $('#dns-summary').html('<tr><td colspan="2" class="text-muted">'
+                        + escapeHtml((data && data['message']) || '—') + '</td></tr>');
+                    return;
+                }
+
+                const d = data['dns'] || {};
+                const h = data['hijack'] || {};
+                const u = data['unbound'] || {};
+                const up = data['upstream'] || {};
+
+                let coverage = '—';
+                if (h['coverage'] === 'udp+tcp') {
+                    coverage = 'UDP + TCP 53';
+                } else if (h['coverage'] === 'udp') {
+                    coverage = 'UDP 53';
+                } else if (h['coverage'] === 'tcp') {
+                    coverage = 'TCP 53';
+                }
+                const entries = (h['entries'] || []).join(', ') || '—';
+
+                const summary = [
+                    ['{{ lang._('DNS Module') }}', dnsBool(d['enabled'])],
+                    ['{{ lang._('Listen Address') }}', escapeHtml(d['listen'] || '—')],
+                    ['{{ lang._('Enhanced Mode') }}', escapeHtml(d['mode'] || '—')],
+                    ['{{ lang._('DNS over IPv6') }}', dnsBool(d['ipv6'])],
+                    ['{{ lang._('TUN Mode') }}', dnsBool(d['tun_enabled'])],
+                    ['{{ lang._('Service') }}', d['service_running']
+                        ? '<span class="label label-success">{{ lang._('running') }}</span>'
+                        : '<span class="label label-danger">{{ lang._('stopped') }}</span>'],
+                    ['{{ lang._('Client DNS hijack') }}', escapeHtml(coverage)
+                        + ' <span class="text-muted">(' + escapeHtml(entries) + ')</span>'],
+                    ['Unbound', u['enabled']
+                        ? escapeHtml(u['all'] ? '{{ lang._('all interfaces') }}' : (u['interfaces'] || []).join(', '))
+                        : '{{ lang._('disabled') }}'],
+                    ['{{ lang._('Upstream policy') }}', up['nameserver_policy']
+                        ? '{{ lang._('configured') }}'
+                        : '{{ lang._('not configured') }}'],
+                    ['{{ lang._('Follow routing rules') }}', dnsBool(up['respect_rules'])]
+                ];
+                $('#dns-summary').html(summary.map(function (row) {
+                    return '<tr><th style="width: 30%;">' + row[0] + '</th><td>' + row[1] + '</td></tr>';
+                }).join(''));
+
+                const $warn = $('#dns-warnings').empty();
+                const warnings = data['warnings'] || [];
+                warnings.forEach(function (w) {
+                    const level = w['level'] || 'warning';
+                    const cls = level === 'danger' ? 'alert-danger' : (level === 'info' ? 'alert-info' : 'alert-warning');
+                    const icon = level === 'info' ? 'fa-info-circle' : 'fa-exclamation-triangle';
+                    $warn.append($('<div>').addClass('alert ' + cls).css('margin-bottom', '6px').html(
+                        '<i class="fa ' + icon + ' fa-fw"></i> ' + escapeHtml(w['text'] || '')
+                    ));
+                });
+                if (!warnings.length) {
+                    $warn.append($('<div>').addClass('alert alert-success').css('margin-bottom', '6px')
+                        .html('<i class="fa fa-check-circle fa-fw"></i> '
+                            + '{{ lang._('No obvious DNS path problems.') }}'));
+                }
+
+                const $body = $('#dns-iface-body').empty();
+                const rows = data['interfaces'] || [];
+                rows.forEach(function (r) {
+                    const label = r['description']
+                        ? r['description'] + ' (' + r['interface'] + ')'
+                        : r['interface'];
+                    let pathText = '—';
+                    if (r['path'] === 'mihomo') {
+                        pathText = '{{ lang._('Mihomo (TUN)') }}';
+                    } else if (r['path'] === 'unbound') {
+                        pathText = 'Unbound';
+                    } else if (r['path'] === 'pending') {
+                        pathText = '{{ lang._('Not applied') }}';
+                    } else if (r['path'] === 'manual') {
+                        pathText = '{{ lang._('Manual') }}';
+                    }
+                    const kind = r['state'] === 'ok' ? 'ok'
+                        : (r['state'] === 'danger' ? 'danger'
+                            : (r['state'] === 'warning' ? 'warning' : 'muted'));
+                    const policy = r['bound']
+                        ? escapeHtml((r['targets'] || []).join(', ') || 'DIRECT')
+                            + '<br><span class="text-muted">' + escapeHtml(r['firewall'] || '') + '</span>'
+                        : '—';
+                    $body.append($('<tr>')
+                        .append($('<td>').html('<b>' + escapeHtml(label) + '</b><br>'
+                            + '<span class="text-muted">' + escapeHtml(r['device'] || '') + '</span>'))
+                        .append($('<td>').text(r['address'] || '—'))
+                        .append($('<td>').html(policy))
+                        .append($('<td>').html(r['unbound']
+                            ? '<i class="fa fa-check text-success"></i>'
+                            : '<i class="fa fa-minus text-muted"></i>'))
+                        .append($('<td>').html(dnsBadge(kind, pathText)))
+                        .append($('<td>').addClass('text-muted').text(r['note'] || '')));
+                });
+                if (!rows.length) {
+                    $body.append($('<tr>').append($('<td colspan="6">').addClass('text-muted').text('—')));
+                }
+            });
+        }
+
+        $('#dnsStatusTab').on('shown.bs.tab', loadDnsStatus);
+        $('#dns-refresh').click(loadDnsStatus);
+        if (window.location.hash === '#dnsstatus') {
+            $('#dnsStatusTab').tab('show');
+        }
+
         function renderCompare(data) {
             const $body = $('#compare-body').empty();
 
@@ -359,12 +487,47 @@
 
 <ul class="nav nav-tabs" role="tablist" id="maintabs">
     <li class="active"><a data-toggle="tab" href="#settings">{{ lang._('Settings') }}</a></li>
+    <li><a data-toggle="tab" href="#dnsstatus" id="dnsStatusTab">{{ lang._('DNS status') }}</a></li>
     <li><a data-toggle="tab" href="#config">{{ lang._('Configuration File') }}</a></li>
     <li><a data-toggle="tab" href="#compare" id="compareTab">{{ lang._('Configuration comparison') }}</a></li>
 </ul>
 <div class="tab-content content-box">
     <div id="settings" class="tab-pane fade in active">
         {{ partial("layout_partials/base_form",['fields':formSettings,'id':'frm_Settings'])}}
+    </div>
+    <div id="dnsstatus" class="tab-pane fade in">
+        <div style="padding: 12px 14px;">
+            <div id="dns-warnings"></div>
+
+            <table class="table table-condensed" style="margin-bottom: 0;">
+                <tbody id="dns-summary"></tbody>
+            </table>
+
+            <h4 style="margin-top: 20px;">{{ lang._('DNS path by interface') }}</h4>
+            <table class="table table-condensed table-hover">
+                <thead>
+                <tr>
+                    <th style="width: 22%;">{{ lang._('Interface') }}</th>
+                    <th style="width: 14%;">{{ lang._('Address') }}</th>
+                    <th style="width: 16%;">{{ lang._('Policy routing') }}</th>
+                    <th style="width: 8%;">Unbound</th>
+                    <th style="width: 12%;">{{ lang._('Client DNS') }}</th>
+                    <th>{{ lang._('Note') }}</th>
+                </tr>
+                </thead>
+                <tbody id="dns-iface-body"></tbody>
+            </table>
+
+            <p class="text-muted" style="margin-top: 8px;">
+                {{ lang._('mihomo DNS is only used on interfaces whose traffic is policy-routed into the TUN device. Other interfaces keep using Unbound. Plain DNS on port 53 is hijacked; DoH/DoT and IPv6 DNS are not.') }}
+            </p>
+
+            <div class="text-right">
+                <button class="btn btn-default btn-sm" id="dns-refresh" type="button">
+                    <i class="fa fa-refresh fa-fw"></i> {{ lang._('Refresh') }}
+                </button>
+            </div>
+        </div>
     </div>
     <div id="config" class="tab-pane fade in">
         <div style="padding: 12px 14px;">
