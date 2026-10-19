@@ -19,12 +19,13 @@ python3 - <<'PY'
 import io, re
 # 注意：小锁是 JS 现挂的，静态 HTML 里看不到；这里量的是「服务端渲染出来的清单」
 t = io.open('/tmp/p65-settings.html', encoding='utf-8').read()
-fields = sorted(set(re.findall(r'id="(mihomo\.[A-Za-z.]+)"', t)))
+fields = sorted(set(re.findall(r'id="(mihomo\.[^"]*)"', t)))
 no_switch = re.findall(r"const ALWAYS_OWNED = \('([^']*)'", t)
 no_switch = [f for f in no_switch[0].split(',') if f] if no_switch else []
 fixed = re.findall(r"const FIXED = \{\};[\s\S]{0,140}?\('([^']*)'", t)
 with_lock = [f for f in fields if f not in no_switch]
-print('  表单字段 %d 个；有小锁的 %d 个；没有小锁的 %d 个' % (len(fields), len(with_lock), len(no_switch)))
+print('  表单字段 %d 个；config.yaml 的键 %d 个（成组字段共用一把锁）；没有小锁的 %d 个'
+      % (len(fields), len(with_lock), len(no_switch)))
 print('  没有小锁的字段:', ','.join(no_switch) if no_switch else '(渲染失败)')
 print('  写死的项  :', fixed[0] if fixed else '(渲染失败)')
 print('  小锁样式在:', '是' if '.mihomo-switch' in t else '否')
