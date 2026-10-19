@@ -250,6 +250,9 @@ msgstr "固定为 gvisor：FreeBSD 上验证过的组合。"
 msgid "Fixed (tun_mihomo): the firewall rules refer to this device name by hand."
 msgstr "固定为 tun_mihomo：防火墙规则里是按这个名字写的。"
 
+msgid "Fixed by the plugin and not editable here — see the help text."
+msgstr "固定值：插件写死，这里改不了（详见帮助）。"
+
 msgid "Foreign only"
 msgstr "仅国外"
 
@@ -297,6 +300,9 @@ msgstr "项目"
 
 msgid "Keep the TUN device above other default routes."
 msgstr "保持 TUN 设备优先于其它默认路由。"
+
+msgid "Leave alone: the plugin never writes this item, the file keeps whatever you wrote. Click to let the plugin write it here."
+msgstr "不修改：插件不碰这一项，文件里怎么写就怎么用；点一下改为「由插件写入」。"
 
 msgid "Let local clients use the proxy ports directly."
 msgstr "允许局域网客户端直接使用代理端口。"
@@ -601,12 +607,6 @@ msgstr "更新后会立即重启服务，这会重建 TUN 设备及其路由。�
 msgid "The subscription script is not installed; subscription updates are unavailable."
 msgstr "未安装订阅脚本，无法执行订阅更新。"
 
-msgid "Tick \"leave alone\" = this plugin never writes that item."
-msgstr "勾上「不修改」= 本插件不写这一项。"
-
-msgid "Tick = this plugin never writes this item: the file keeps whatever you wrote. Clear the tick to let the page write it."
-msgstr "勾上 = 本插件完全不写这一项：文件里你怎么写的就怎么用；取消勾选才由页面写入。"
-
 msgid "Total Downloaded / Uploaded"
 msgstr "累计下载 / 上传"
 
@@ -673,6 +673,9 @@ msgstr "页面（设置）"
 msgid "Writes the mihomo configuration and, where needed, creates the interface, gateway and firewall rule on OPNsense. config.xml is backed up first."
 msgstr "写入 mihomo 配置；需要时在 OPNsense 上创建接口、网关和防火墙规则（先备份 config.xml）。"
 
+msgid "Written by the plugin: on Apply the value above is written into the file. Click to leave the file alone instead."
+msgstr "由插件写入：点「应用」时按上面的值改配置文件；点一下改为「不修改」。"
+
 msgid "apply to take effect"
 msgstr "应用后生效"
 
@@ -702,9 +705,6 @@ msgstr "external-controller 绑定在 %s。任何能访问该地址并知道密�
 
 msgid "fake-ip returns synthetic addresses, redir-host returns real ones."
 msgstr "fake-ip 返回合成地址；redir-host 返回真实地址。"
-
-msgid "fixed"
-msgstr "固定"
 
 msgid "in effect"
 msgstr "生效中"

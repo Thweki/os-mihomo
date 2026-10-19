@@ -21,17 +21,17 @@
         }
 
         /* ---------------------------------------------------------------- *
-         * 「设置」标签页 —— 每一项前面的「不修改」开关
+         * 「设置」标签页 —— 每一项标签旁的一把小锁
          *
-         *   勾上（默认）= 不修改：插件完全不碰这一项，config.yaml 里原本怎么写就怎么用；
-         *   取消勾       = 由插件写入（覆盖）。
+         *   合上（淡，默认）= 不修改：插件完全不碰这一项，config.yaml 里原本怎么写就怎么用；
+         *   打开（清楚）    = 由插件写入（点「应用」时按页面上的值覆盖文件）。
          *
          * 存储用反过来的写法：模型里的 mihomo.managed = **允许写入**的字段 id 列表（逗号分隔）。
          * ---------------------------------------------------------------- */
         const MANAGED_INPUT = 'mihomo.managed';
-        /* 同一个 YAML 键由多个输入组成时共用一个开关 */
+        /* 同一个 YAML 键由多个输入组成时共用一把锁 */
         const FIELD_GROUPS = [['mihomo.general.controllerBind', 'mihomo.general.controllerPort']];
-        /* 没有「不修改」开关、始终由插件写的字段（后端 Config::fieldsWithoutSwitch()） */
+        /* 没有小锁、始终由插件写的字段（后端 Config::fieldsWithoutSwitch()） */
         const ALWAYS_OWNED = ('{{ alwaysOwnedFields }}' || '').split(',').filter(Boolean);
         /* 写死的项：页面只读，值固定 */
         const FIXED = {};
@@ -68,14 +68,9 @@
                 return true;
             }
             const group = groupOf(id) || [id];
-            let owned = false;
-            group.forEach(function (field) {
-                const $box = $('[data-managed-for="' + field + '"]');
-                if ($box.length && !$box.prop('checked')) {
-                    owned = true;
-                }
+            return group.some(function (field) {
+                return String($('[data-managed-for="' + field + '"]').attr('data-managed')) === '1';
             });
-            return owned;
         }
 
         function managedFields() {
@@ -91,7 +86,17 @@
             return owned;
         }
 
-        /* 勾上「不修改」的行：控件禁掉、灰掉；写死的项也禁掉（值固定） */
+        /* 小锁的两种样子：合上（灰）= 不修改；打开（蓝）= 由插件写 */
+        function paintSwitch($sw) {
+            const on = String($sw.attr('data-managed')) === '1';
+            $sw.toggleClass('mihomo-on', on)
+                .attr('title', on
+                    ? '{{ lang._('Written by the plugin: on Apply the value above is written into the file. Click to leave the file alone instead.') }}'
+                    : '{{ lang._('Leave alone: the plugin never writes this item, the file keeps whatever you wrote. Click to let the plugin write it here.') }}');
+            $sw.find('i').toggleClass('fa-lock', !on).toggleClass('fa-unlock-alt', on);
+        }
+
+        /* 不写这一项的行：控件禁掉、灰掉；写死的项也禁掉（值固定） */
         function applyLeaveAlone() {
             fieldInputs().forEach(function (id) {
                 const fixed = FIXED[id] !== undefined;
@@ -110,15 +115,18 @@
                     $el.selectpicker('refresh');
                 }
             });
+            $('[data-managed-for]').each(function () {
+                paintSwitch($(this));
+            });
         }
 
-        /* 给每一行装上开关（组内只在第一个输入上装一条）
+        /* 给每一行装上一把小锁（组内只在第一个输入上装一把）
            注意：字段 id 里带点（mihomo.tun.mtu），不能用 $('#xxx') 拼选择器 —— 点会被当成 class。
            一律走 getElementById。 */
         function buildManagedSwitches() {
             fieldInputs().forEach(function (id) {
                 if (ALWAYS_OWNED.indexOf(id) >= 0) {
-                    return;   // 插件自己的状态 / 写死的项：不给「不修改」开关
+                    return;   // 插件自己的状态 / 写死的项：没有小锁
                 }
                 const group = groupOf(id);
                 if (group && group[0] !== id) {
@@ -132,30 +140,31 @@
                 if ($label.find('[data-managed-for]').length) {
                     return;
                 }
-                $('<label>')
-                    .addClass('mihomo-managed-switch')
-                    .attr('title', '{{ lang._('Tick = this plugin never writes this item: the file keeps whatever you wrote. Clear the tick to let the page write it.') }}')
-                    .append($('<input type="checkbox" checked>').attr('data-managed-for', id))
-                    .append($('<span>').text('{{ lang._('leave alone') }}'))
-                    .prependTo($label);
+                const $sw = $('<a href="#">')
+                    .addClass('mihomo-switch')
+                    .attr('data-managed-for', id)
+                    .attr('data-managed', '0')
+                    .append($('<i>').addClass('fa fa-lock'));
+                paintSwitch($sw);
+                $label.append($sw);
             });
         }
 
-        /* 写死的项（设备名/协议栈）：标签旁加一个小灰标，值由插件定死 */
+        /* 写死的项（设备名/协议栈）：图钉一枚，鼠标移上去有说明 */
         function markFixedFields() {
             Object.keys(FIXED).forEach(function (id) {
                 const labelEl = document.getElementById('control_label_' + id);
-                if (!labelEl || $(labelEl).find('.mihomo-fixed-tag').length) {
+                if (!labelEl || $(labelEl).find('.mihomo-fixed-icon').length) {
                     return;
                 }
-                $('<span>')
-                    .addClass('mihomo-fixed-tag')
-                    .text('{{ lang._('fixed') }}')
-                    .prependTo($(labelEl));
+                $('<i>')
+                    .addClass('fa fa-thumb-tack mihomo-fixed-icon')
+                    .attr('title', '{{ lang._('Fixed by the plugin and not editable here — see the help text.') }}')
+                    .appendTo($(labelEl));
             });
         }
 
-        /* 模型 → 开关状态 */
+        /* 模型 → 小锁状态 */
         function applyManagedFromModel() {
             const hidden = document.getElementById(MANAGED_INPUT);
             const owned = String(hidden ? hidden.value : '').split(',');
@@ -165,7 +174,7 @@
                 const isOwned = group.some(function (field) {
                     return owned.indexOf(field) >= 0;
                 });
-                $(this).prop('checked', !isOwned);
+                $(this).attr('data-managed', isOwned ? '1' : '0');
             });
             applyLeaveAlone();
             syncManagedHidden();
@@ -185,7 +194,10 @@
         buildManagedSwitches();
         markFixedFields();
         reloadForm();
-        $(document).on('change', '[data-managed-for]', function () {
+        $(document).on('click', '.mihomo-switch', function (event) {
+            event.preventDefault();
+            const $sw = $(this);
+            $sw.attr('data-managed', String($sw.attr('data-managed')) === '1' ? '0' : '1');
             applyLeaveAlone();
             syncManagedHidden();
         });
@@ -319,37 +331,29 @@
 </script>
 
 <style>
-    /* 「不修改」开关：贴在每一项的标签前面 */
-    .mihomo-managed-switch {
-        font-weight: normal;
-        font-size: 11px;
-        color: #777;
-        margin: 0 8px 0 0;
-        padding: 0 4px;
-        white-space: nowrap;
-        cursor: pointer;
+    /* 每一行标签旁的一把小锁：合上（淡）= 不修改，打开（清楚）= 由插件写。
+       颜色继承主题正文色，只用浓淡区分，浅色/深色主题都合身。 */
+    .mihomo-switch {
+        margin-left: 7px;
+        padding: 1px 4px;
+        border-radius: 3px;
+        color: inherit;
+        opacity: .45;
+        text-decoration: none !important;
     }
-    .mihomo-managed-switch input {
-        margin: 0 3px 0 0;
-        vertical-align: -1px;
+    .mihomo-switch.mihomo-on {
+        opacity: 1;
     }
-    /* 写死的项（设备名/协议栈）：小灰标 */
-    .mihomo-fixed-tag {
-        font-size: 11px;
-        color: #777;
-        background: #f0f0f0;
-        border: 1px solid #ddd;
-        border-radius: 2px;
-        margin: 0 8px 0 0;
-        padding: 0 4px;
-        white-space: nowrap;
+    .mihomo-switch:hover,
+    .mihomo-switch:focus {
+        opacity: 1;
+        background-color: rgba(128, 128, 128, .22);
     }
-    /* 勾了「不修改」的行：控件禁掉并变灰 */
-    .mihomo-leave-alone input,
-    .mihomo-leave-alone select,
-    .mihomo-leave-alone textarea {
-        background-color: #f5f5f5;
-        color: #999;
+    /* 写死的项（设备名 / 协议栈）：图钉一枚，不可点 */
+    .mihomo-fixed-icon {
+        margin-left: 7px;
+        opacity: .6;
+        cursor: default;
     }
 </style>
 
@@ -410,11 +414,6 @@
                     <input type="checkbox" id="restart-after-apply"> {{ lang._('Restart the service after applying') }}
                 </label>
             </div>
-        </div>
-        <div style="margin-top: 10px;">
-            <span class="text-muted" style="font-size: 12px;">
-                {{ lang._('Tick "leave alone" = this plugin never writes that item.') }}
-            </span>
         </div>
     </div>
 </section>

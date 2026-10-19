@@ -200,15 +200,16 @@ TRANSLATIONS: dict[str, str] = {
         'TUN 模式关着：下面的绑定在它打开之前都不会生效。到「设置」里打开再回来。',
     # ---- 「不修改」开关（P18）----
     'leave alone': '不修改',
-    'fixed': '固定',
+    'Written by the plugin: on Apply the value above is written into the file. Click to leave the file alone instead.':
+        '由插件写入：点「应用」时按上面的值改配置文件；点一下改为「不修改」。',
+    'Leave alone: the plugin never writes this item, the file keeps whatever you wrote. Click to let the plugin write it here.':
+        '不修改：插件不碰这一项，文件里怎么写就怎么用；点一下改为「由插件写入」。',
+    'Fixed by the plugin and not editable here — see the help text.':
+        '固定值：插件写死，这里改不了（详见帮助）。',
     'Fixed (tun_mihomo): the firewall rules refer to this device name by hand.':
         '固定为 tun_mihomo：防火墙规则里是按这个名字写的。',
     'Fixed (gvisor): the combination verified on FreeBSD.':
         '固定为 gvisor：FreeBSD 上验证过的组合。',
-    'Tick "leave alone" = this plugin never writes that item.':
-        '勾上「不修改」= 本插件不写这一项。',
-    'Tick = this plugin never writes this item: the file keeps whatever you wrote. Clear the tick to let the page write it.':
-        '勾上 = 本插件完全不写这一项：文件里你怎么写的就怎么用；取消勾选才由页面写入。',
     'Every item is set to "leave alone", so the configuration file was not touched.':
         '所有项都是「不修改」，配置文件保持原样。',
     'The page and the file disagree on %d item(s), but those are still set to "leave alone", so the file keeps its own values: %s — clear "leave alone" on them to write the page values, or press Import to load the file values into the page.':
