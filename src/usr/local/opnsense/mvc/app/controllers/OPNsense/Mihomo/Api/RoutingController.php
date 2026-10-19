@@ -40,7 +40,7 @@ class RoutingController extends ApiMutableModelControllerBase
 
     public function getRuleAction($uuid = null)
     {
-        return $this->getBase('mihomo', 'policyRouting.rule', $uuid);
+        return $this->asDialogChoices($this->getBase('mihomo', 'policyRouting.rule', $uuid));
     }
 
     public function setRuleAction($uuid)
@@ -72,6 +72,18 @@ class RoutingController extends ApiMutableModelControllerBase
      */
     public function optionsAction()
     {
+        return [
+            'status' => 'ok',
+            'interfaces' => $this->interfaceChoices(),
+            'targets' => $this->targetChoices(),
+            'tun_enabled' => Config::bool('tun.enable'),
+            'auto_route' => Config::bool('tun.auto-route'),
+        ];
+    }
+
+    /** 可绑定接口：值 + 友好标签（描述 + 网段） */
+    private function interfaceChoices(): array
+    {
         $subnets = $this->bindableInterfaces();
         $descr = [];
         try {
@@ -85,11 +97,8 @@ class RoutingController extends ApiMutableModelControllerBase
 
         $interfaces = [];
         foreach ($subnets as $name => $cidr) {
-            $label = $name;
-            if (!empty($descr[$name])) {
-                $label = sprintf('%s (%s)', $descr[$name], $name);
-            }
-            $interfaces[] = [
+            $label = !empty($descr[$name]) ? sprintf('%s (%s)', $descr[$name], $name) : $name;
+            $interfaces[$name] = [
                 'value' => $name,
                 'label' => sprintf('%s — %s', $label, $cidr),
                 'subnet' => $cidr,
@@ -97,18 +106,54 @@ class RoutingController extends ApiMutableModelControllerBase
         }
         ksort($interfaces);
 
+        return array_values($interfaces);
+    }
+
+    /** 可选的代理出口：config.yaml 里的代理组 */
+    private function targetChoices(): array
+    {
         $targets = [];
         foreach (Config::policyTargets() as $group) {
             $targets[] = ['value' => $group, 'label' => $group];
         }
+        return $targets;
+    }
 
-        return [
-            'status' => 'ok',
-            'interfaces' => array_values($interfaces),
-            'targets' => $targets,
-            'tun_enabled' => Config::bool('tun.enable'),
-            'auto_route' => Config::bool('tun.auto-route'),
+    /**
+     * 对话框里的下拉要的是「选项字典」形状。
+     *
+     * 框架的 setFormData()（/usr/local/opnsense/www/js/opnsense.js）在 <select> 绑到
+     * **纯字符串**时会抛 `TypeError: Cannot use 'in' operator to search for 'length' in opt2`，
+     * 异常会中断整个对话框的填充 —— 模态框压根不显示，也就是「行编辑打不开」（实测）。
+     * 所以这里只在**返回给对话框的数据**上把 interface / target 转成
+     * {值: {value: 标签, selected: 0|1}}；模型里它们仍是 TextField，校验与存储不变。
+     */
+    private function asDialogChoices(array $result): array
+    {
+        if (!isset($result['mihomo']) || !is_array($result['mihomo'])) {
+            return $result;
+        }
+        $lists = [
+            'interface' => $this->interfaceChoices(),
+            'target' => $this->targetChoices(),
         ];
+        foreach ($lists as $field => $choices) {
+            $current = (string)($result['mihomo'][$field] ?? '');
+            $dict = [];
+            $found = false;
+            foreach ($choices as $item) {
+                $value = (string)$item['value'];
+                $selected = ($current !== '' && $value === $current) ? 1 : 0;
+                $found = $found || $selected === 1;
+                $dict[$value] = ['value' => (string)$item['label'], 'selected' => $selected];
+            }
+            /* 当前值已经不在列表里（接口改名/分组删掉）也要能显示出来，否则编辑会把值丢掉 */
+            if ($current !== '' && !$found) {
+                $dict[$current] = ['value' => $current, 'selected' => 1];
+            }
+            $result['mihomo'][$field] = $dict;
+        }
+        return $result;
     }
 
     /**

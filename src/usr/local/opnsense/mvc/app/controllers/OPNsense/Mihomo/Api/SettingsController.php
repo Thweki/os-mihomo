@@ -116,26 +116,27 @@ class SettingsController extends ApiMutableModelControllerBase
         $mdl = $this->getModel();
         $backend = new Backend();
 
-        /* ---- 0. 应用方式：默认只写"这次改过的项"（避免把文件里没动过的值覆盖掉）---- */
-        $mode = (string)$this->request->getPost('mode', null, 'all');
-        $onlyChanged = $mode === 'changed';
-        $changedRaw = (string)$this->request->getPost('changed', null, '[]');
-        $changedFields = json_decode($changedRaw, true);
-        if (!is_array($changedFields)) {
-            $changedFields = [];
-        }
-        $changedFields = array_map('strval', $changedFields);
+        /* ---- 0. 「不修改」开关：只写用户交给插件的项 ----
+         * 页面上每一项前面都有一条「不修改」勾（默认勾上）：
+         *   勾上   = 插件完全不碰这一项 —— config.yaml / rc.conf.d / 环境文件 / Cron 都不动，
+         *            文件里原本怎么写就怎么用（也不会把已有的键删掉）；
+         *   取消勾 = 这一项由页面负责写入。
+         * 开关状态存在模型的 managed 字段里（逗号分隔的页面字段 id）。
+         */
+        $managedFields = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string)$mdl->managed)
+        )));
+        $touched = fn (string $field): bool => in_array($field, $managedFields, true);
         [$write, $writtenLabels, $skippedLabels] = Config::selectManagedKeys(
             $this->managedKeys(),
-            $changedFields,
-            $onlyChanged,
+            $managedFields,
             Config::scan()
         );
-        $touched = fn (string $field): bool => !$onlyChanged || in_array($field, $changedFields, true);
 
         /* ---- 1. config.yaml ---- */
         if ($write === []) {
-            $result['messages'][] = gettext('Nothing was changed on this page, so the file was left alone.');
+            $result['messages'][] = gettext('Every item is set to "leave alone", so the configuration file was not touched.');
         } else {
             $patch = [];
             foreach ($write as $key => $info) {
@@ -165,7 +166,7 @@ class SettingsController extends ApiMutableModelControllerBase
         }
         if ($skippedLabels !== []) {
             $result['messages'][] = sprintf(
-                gettext('The page and the file disagree on %d item(s), but you did not touch them, so they were left as they are: %s — press Import to use the file values in the page, or pick "takes precedence" to write them.'),
+                gettext('The page and the file disagree on %d item(s), but those are still set to "leave alone", so the file keeps its own values: %s — clear "leave alone" on them to write the page values, or press Import to load the file values into the page.'),
                 count($skippedLabels),
                 implode('、', $skippedLabels)
             );
@@ -283,7 +284,38 @@ class SettingsController extends ApiMutableModelControllerBase
      */
     public function inspectAction()
     {
-        return Inspector::report();
+        $report = Inspector::report();
+
+        /* 标出哪些项现在是「不修改」：对照表要说清楚"页面上的值不会写进文件" */
+        $mdl = $this->getModel();
+        $owned = [];
+        foreach ($this->managedKeys() as $yamlKey => $info) {
+            $isMine = false;
+            foreach ($info['fields'] as $field) {
+                if ($this->isFieldOwned($field)) {
+                    $isMine = true;
+                    break;
+                }
+            }
+            $owned[$yamlKey] = $isMine;
+        }
+        foreach ($report['rows'] as &$row) {
+            /* 不在受管键表里的项（只读的运行值）不算「不修改」 */
+            $row['managed'] = $owned[$row['key']] ?? true;
+        }
+        unset($row);
+
+        return $report;
+    }
+
+    /** 页面字段是否交给插件写（「不修改」没勾上） */
+    private function isFieldOwned(string $field): bool
+    {
+        $managed = (string)$this->getModel()->managed;
+        if ($managed === '') {
+            return false;
+        }
+        return in_array($field, array_map('trim', explode(',', $managed)), true);
     }
 
     /**

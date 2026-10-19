@@ -52,9 +52,6 @@ msgstr "当前配置有效"
 msgid "All connections closed."
 msgstr "已关闭全部连接。"
 
-msgid "All page settings will be written into the file."
-msgstr "将把页面上的全部设置写入文件。"
-
 msgid "Allow LAN"
 msgstr "允许局域网"
 
@@ -190,6 +187,9 @@ msgstr "域名嗅探"
 msgid "Download / Upload"
 msgstr "下载 / 上传"
 
+msgid "Each item has a \"leave alone\" tick (on by default): this plugin then never writes that item — the file keeps whatever you wrote, and what is not in the file stays out. Clear the tick to let the page write it."
+msgstr "每一项前面都有一条「不修改」（默认勾上）：勾着的时候插件完全不碰这一项 —— 文件里你怎么写的就怎么用，文件里没有的也不会被加上；想让它按页面上的值写入，就把勾去掉。"
+
 msgid "Edit Policy Rule"
 msgstr "编辑路由策略"
 
@@ -219,6 +219,12 @@ msgstr "每 12 小时"
 
 msgid "Every 6 hours"
 msgstr "每 6 小时"
+
+msgid "Every item is set to \"leave alone\" — pressing Apply will not touch the configuration file."
+msgstr "所有项都是「不修改」—— 现在点「应用」不会改动配置文件。"
+
+msgid "Every item is set to \"leave alone\", so the configuration file was not touched."
+msgstr "所有项都是「不修改」，配置文件保持原样。"
 
 msgid "External Controller"
 msgstr "外部控制器"
@@ -286,6 +292,9 @@ msgstr "接口 \"%s\" 没有 IPv4 网段，请显式填写源。"
 msgid "Interface whose traffic goes through mihomo."
 msgstr "流量进入 mihomo 的物理接口。"
 
+msgid "Internal list of the page fields this plugin may write."
+msgstr "内部字段：允许本插件写入的页面项清单。"
+
 msgid "Invalid log level."
 msgstr "无效的日志层级。"
 
@@ -309,6 +318,9 @@ msgstr "是否让内核处理 IPv6 流量。"
 
 msgid "Let the core handle IPv6. Off = IPv6 traffic stays on the normal route (current design)."
 msgstr "让内核处理 IPv6 流量。关闭 = IPv6 照常走普通线路（当前设计如此）。"
+
+msgid "Let the page write every item."
+msgstr "让页面负责每一项（全部取消勾选）。"
 
 msgid "Loading …"
 msgstr "加载中 …"
@@ -352,11 +364,11 @@ msgstr "不会生成任何规则：所有行要么未启用、要么没有源、
 msgid "Nothing is bound yet — click Add, pick an interface and a proxy group, then Apply."
 msgstr "还没有绑定接口 —— 点「添加」选择接口与代理组，再点「应用」生效。"
 
+msgid "Nothing is written to any file."
+msgstr "勾上之后什么都不写。"
+
 msgid "Nothing to test: no enabled row requests a firewall rule."
 msgstr "无可自检项：没有启用且要求创建防火墙规则的行。"
-
-msgid "Nothing was changed on this page, so the file was left alone."
-msgstr "本次没有改动任何设置，文件保持原样。"
 
 msgid "OPNsense changes"
 msgstr "OPNsense 变更"
@@ -435,6 +447,9 @@ msgstr "将还原本插件最近一次创建的 config.xml 备份，并重新加
 
 msgid "Route traffic into mihomo through a virtual device."
 msgstr "用虚拟网卡把流量导入 mihomo。"
+
+msgid "Rows marked with a \"leave alone\" tag are items this plugin does not write: whatever you put in the file stays as it is."
+msgstr "带「不修改」标记的项：本插件不会写它 —— 文件里你写的是什么，就还是什么。"
 
 msgid "Running (memory)"
 msgstr "运行中（内存）"
@@ -592,8 +607,8 @@ msgstr "文件里有一段是插件替你维护的规则（来自「路由策略
 msgid "The firewall rules written by this attempt have been removed, so nothing is bound."
 msgstr "本次写入的防火墙规则已撤销，当前没有任何接口被绑定。"
 
-msgid "The page and the file disagree on %d item(s), but you did not touch them, so they were left as they are: %s — press Import to use the file values in the page, or pick \"takes precedence\" to write them."
-msgstr "还有 %d 项页面和文件对不上，但你这次没改，所以文件里没动它们：%s —— 想用文件里的值刷新页面就点「从配置导入」；想以页面为准就选「全部写入文件」。"
+msgid "The page and the file disagree on %d item(s), but those are still set to \"leave alone\", so the file keeps its own values: %s — clear \"leave alone\" on them to write the page values, or press Import to load the file values into the page."
+msgstr "有 %d 项页面和文件对不上，但它们还是「不修改」，所以文件里保持原样：%s —— 想让页面说了算就把它们的勾去掉；想用文件里的值刷新页面就点「从配置导入」。"
 
 msgid "The page and the file disagree on some items: press Apply to write what the page says into the file, or press Import to load what the file says into the page."
 msgstr "有几项页面和文件对不上：点「应用」就是把页面里的值写进文件；点「从配置导入」则相反，用文件里的值刷新页面。"
@@ -624,6 +639,15 @@ msgstr "未安装订阅脚本，无法执行订阅更新。"
 
 msgid "This config.yaml is hand-written, not generated from the subscription template. Updating the subscription replaces the whole file, so your own edits would be gone — do not use it, or take a backup first."
 msgstr "你这份 config.yaml 是自己写的（不是订阅生成的）。点「更新订阅」会把整份文件换成订阅模板的内容，自己写的就没了 —— 想保留就别点它，或者先备份。"
+
+msgid "Tick = this plugin never writes this item: the file keeps whatever you wrote. Clear the tick to let the page write it."
+msgstr "勾上 = 本插件完全不写这一项：文件里你怎么写的就怎么用；取消勾选才由页面写入。"
+
+msgid "Tick everything (leave all alone)"
+msgstr "全部勾上（都不修改）"
+
+msgid "Tick nothing (write all)"
+msgstr "全部取消勾选（都由页面写）"
 
 msgid "Total Downloaded / Uploaded"
 msgstr "累计下载 / 上传"
@@ -691,17 +715,8 @@ msgstr "页面（设置）"
 msgid "Will be written"
 msgstr "将写入"
 
-msgid "Write all page settings into the file"
-msgstr "以页面为准，全部写入文件"
-
-msgid "Write only what I changed (recommended)"
-msgstr "只写入我改过的项（推荐）"
-
 msgid "Writes the mihomo configuration and, where needed, creates the interface, gateway and firewall rule on OPNsense. config.xml is backed up first."
 msgstr "写入 mihomo 配置；需要时在 OPNsense 上创建接口、网关和防火墙规则（先备份 config.xml）。"
-
-msgid "You have not changed anything yet — pressing Apply will not write to the file."
-msgstr "你还没改任何项 —— 现在点「应用」不会写文件。"
 
 msgid "apply to take effect"
 msgstr "应用后生效"
@@ -738,6 +753,9 @@ msgstr "FreeBSD 下建议 gvisor。"
 
 msgid "in effect"
 msgstr "生效中"
+
+msgid "leave alone"
+msgstr "不修改"
 
 msgid "mihomo is active and will start again after a reboot."
 msgstr "mihomo 正在运行，并会在重启后自动启动。"

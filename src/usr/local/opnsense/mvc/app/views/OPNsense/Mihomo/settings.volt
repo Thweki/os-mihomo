@@ -21,102 +21,191 @@
         }
 
         /* ---------------------------------------------------------------- *
-         * 「设置」标签页
+         * 「设置」标签页 —— 每一项前面的「不修改」开关
          *
-         * 「只写入我改过的项」：页面装载时记一份快照，提交时只把动过的字段名列给后端，
-         * 后端据此只改 config.yaml 里对应的那几行 —— 文件里没动过的值不会被顺手覆盖。
+         *   勾上（默认）= 不修改：插件完全不碰这一项，config.yaml 里原本怎么写就怎么用；
+         *   取消勾       = 由插件写入（覆盖）。
+         *
+         * 存储用反过来的写法：模型里的 mihomo.managed = **允许写入**的字段 id 列表（逗号分隔）。
          * ---------------------------------------------------------------- */
-        let formSnapshot = {};
+        const MANAGED_INPUT = 'mihomo.managed';
+        /* 同一个 YAML 键由多个输入组成时共用一个开关 */
+        const FIELD_GROUPS = [['mihomo.general.controllerBind', 'mihomo.general.controllerPort']];
 
-        function fieldValue($el) {
-            return $el.is(':checkbox') ? ($el.prop('checked') ? '1' : '0') : String($el.val() === null ? '' : $el.val());
+        function groupOf(id) {
+            for (let i = 0; i < FIELD_GROUPS.length; i++) {
+                if (FIELD_GROUPS[i].indexOf(id) >= 0) {
+                    return FIELD_GROUPS[i];
+                }
+            }
+            return null;
         }
 
-        function collectForm() {
-            const values = {};
-            $('[id^="mihomo."]').each(function () {
+        function fieldInputs() {
+            const ids = [];
+            $('#frm_Settings [id^="mihomo."]').each(function () {
                 const id = $(this).attr('id');
-                if (id && !Object.prototype.hasOwnProperty.call(values, id)) {
-                    values[id] = fieldValue($(this));
+                if (id && id !== MANAGED_INPUT && ids.indexOf(id) < 0) {
+                    ids.push(id);
                 }
             });
-            return values;
+            return ids;
         }
 
         /* 字段的中文名：优先取表单标签，取不到就用字段 id */
         function fieldLabel(id) {
             let text = '';
-            const $label = $('label[for="' + id + '"]');
-            if ($label.length) {
-                text = $label.first().clone().children().remove().end().text();
+            const ctl = document.getElementById('control_label_' + id);
+            if (ctl) {
+                /* 标签单元格里有我们自己塞的「不修改」开关，取名字时先摘掉它 */
+                const $clone = $(ctl).clone();
+                $clone.find('label.mihomo-managed-switch').remove();
+                text = $clone.text();
             }
             if (!text) {
-                const $ctl = document.getElementById('control_label_' + id);
-                if ($ctl) {
-                    text = $($ctl).clone().children().remove().end().text();
+                const $label = $('label[for="' + id + '"]');
+                if ($label.length) {
+                    text = $label.first().clone().children().remove().end().text();
                 }
             }
             text = String(text || '').replace(/\s+/g, ' ').trim();
             return text || id;
         }
 
-        function changedFields() {
-            const now = collectForm();
-            const changed = [];
-            Object.keys(now).forEach(function (id) {
-                if (formSnapshot[id] !== undefined && formSnapshot[id] !== now[id]) {
-                    changed.push(id);
+        /* 一个字段（或它所在的组）是否交给插件写 */
+        function groupOwned(id) {
+            const group = groupOf(id) || [id];
+            let owned = false;
+            group.forEach(function (field) {
+                const $box = $('[data-managed-for="' + field + '"]');
+                if ($box.length && !$box.prop('checked')) {
+                    owned = true;
                 }
             });
-            return changed;
+            return owned;
         }
 
-        function refreshChangedSummary() {
-            const mode = $('input[name=applymode]:checked').val();
-            const changed = changedFields();
-            let text;
-            if (mode === 'all') {
-                text = '{{ lang._('All page settings will be written into the file.') }}';
-            } else if (changed.length === 0) {
-                text = '{{ lang._('You have not changed anything yet — pressing Apply will not write to the file.') }}';
-            } else {
-                text = '{{ lang._('Will be written') }}: ' + changed.map(fieldLabel).join('、');
+        function managedFields() {
+            return fieldInputs().filter(groupOwned);
+        }
+
+        function syncManagedHidden() {
+            const owned = managedFields();
+            const el = document.getElementById(MANAGED_INPUT);
+            if (el) {
+                el.value = owned.join(',');
             }
-            $('#changed-summary').text(text);
+            return owned;
         }
 
-        function takeSnapshot() {
-            formSnapshot = collectForm();
-            refreshChangedSummary();
+        /* 勾上「不修改」的行：控件禁掉、灰掉，看一眼就知道插件不会动它 */
+        function applyLeaveAlone() {
+            fieldInputs().forEach(function (id) {
+                const off = !groupOwned(id);
+                const el = document.getElementById(id);
+                if (!el) {
+                    return;
+                }
+                const $el = $(el);
+                $el.prop('disabled', off);
+                $el.closest('td').toggleClass('mihomo-leave-alone', off);
+                if ($el.hasClass('selectpicker')) {
+                    $el.selectpicker('refresh');
+                }
+            });
+        }
+
+        function refreshManagedSummary() {
+            const owned = syncManagedHidden();
+            $('#changed-summary').text(owned.length === 0
+                ? '{{ lang._('Every item is set to "leave alone" — pressing Apply will not touch the configuration file.') }}'
+                : '{{ lang._('Will be written') }}: ' + owned.map(fieldLabel).join('、'));
+        }
+
+        /* 给每一行装上开关（组内只在第一个输入上装一条）
+           注意：字段 id 里带点（mihomo.tun.mtu），不能用 $('#xxx') 拼选择器 —— 点会被当成 class。
+           一律走 getElementById。 */
+        function buildManagedSwitches() {
+            fieldInputs().forEach(function (id) {
+                const group = groupOf(id);
+                if (group && group[0] !== id) {
+                    return;
+                }
+                const labelEl = document.getElementById('control_label_' + id);
+                if (!labelEl) {
+                    return;
+                }
+                const $label = $(labelEl);
+                if ($label.find('[data-managed-for]').length) {
+                    return;
+                }
+                $('<label>')
+                    .addClass('mihomo-managed-switch')
+                    .attr('title', '{{ lang._('Tick = this plugin never writes this item: the file keeps whatever you wrote. Clear the tick to let the page write it.') }}')
+                    .append($('<input type="checkbox" checked>').attr('data-managed-for', id))
+                    .append($('<span>').text('{{ lang._('leave alone') }}'))
+                    .prependTo($label);
+            });
+        }
+
+        /* 模型 → 开关状态 */
+        function applyManagedFromModel() {
+            const hidden = document.getElementById(MANAGED_INPUT);
+            const owned = String(hidden ? hidden.value : '').split(',');
+            $('[data-managed-for]').each(function () {
+                const id = String($(this).data('managed-for'));
+                const group = groupOf(id) || [id];
+                const isOwned = group.some(function (field) {
+                    return owned.indexOf(field) >= 0;
+                });
+                $(this).prop('checked', !isOwned);
+            });
+            applyLeaveAlone();
+            refreshManagedSummary();
         }
 
         function reloadForm() {
             return mapDataToFormUI({ 'frm_Settings': '/api/mihomo/settings/get' }).done(function () {
                 formatTokenizersUI();
                 $('.selectpicker').selectpicker('refresh');
-                takeSnapshot();
+                applyManagedFromModel();
             });
         }
 
+        /* 开关状态通过这个隐藏字段随表单一起提交（模型里的 mihomo.managed） */
+        $('<input type="hidden">').attr('id', MANAGED_INPUT).appendTo('#frm_Settings');
+
+        buildManagedSwitches();
         reloadForm();
-        $(document).on('change input', '[id^="mihomo."]', refreshChangedSummary);
-        $('input[name=applymode]').on('change', refreshChangedSummary);
+        $(document).on('change', '[data-managed-for]', function () {
+            applyLeaveAlone();
+            refreshManagedSummary();
+        });
+        $('[id^="mihomo."]').on('change input', refreshManagedSummary);
+        $('#managedAllAct').click(function () {
+            $('[data-managed-for]').prop('checked', false);
+            applyLeaveAlone();
+            refreshManagedSummary();
+        });
+        $('#managedNoneAct').click(function () {
+            $('[data-managed-for]').prop('checked', true);
+            applyLeaveAlone();
+            refreshManagedSummary();
+        });
 
         $('#applyAct').click(function () {
             const $btn = $(this);
             $btn.prop('disabled', true);
-            const changed = changedFields();
+            syncManagedHidden();
             saveFormToEndpoint('/api/mihomo/settings/set', 'frm_Settings', function () {
                 ajaxCall('/api/mihomo/settings/apply', {
-                    'restart': $('#restart-after-apply').prop('checked') ? 1 : 0,
-                    'mode': $('input[name=applymode]:checked').val(),
-                    'changed': JSON.stringify(changed)
+                    'restart': $('#restart-after-apply').prop('checked') ? 1 : 0
                 }, function (data) {
                     $btn.prop('disabled', false);
                     if (data['status'] === 'ok') {
                         showResult('{{ lang._('Settings applied') }}', (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_SUCCESS);
                         loadRawConfig();
-                        takeSnapshot();
+                        reloadForm();
                     } else {
                         showResult('{{ lang._('Apply failed') }}', data['message'] || '', BootstrapDialog.TYPE_DANGER);
                     }
@@ -174,7 +263,10 @@
                 }
                 $('<tr>')
                     .append($('<td>').html('<b>' + escapeHtml(row['label']) + '</b> ' + badge))
-                    .append($('<td>').text(row['model'] || '—'))
+                    .append($('<td>').html(escapeHtml(row['model'] || '—')
+                        + (row['managed'] === false
+                            ? ' <span class="label label-default">{{ lang._('leave alone') }}</span>'
+                            : '')))
                     .append($('<td>').text(row['file'] || '—'))
                     .append($('<td>').text(row['runtime'] || '—'))
                     .appendTo($body);
@@ -240,6 +332,30 @@
     });
 </script>
 
+<style>
+    /* 「不修改」开关：贴在每一项的标签前面 */
+    .mihomo-managed-switch {
+        font-weight: normal;
+        font-size: 11px;
+        color: #777;
+        margin: 0 8px 0 0;
+        padding: 0 4px;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+    .mihomo-managed-switch input {
+        margin: 0 3px 0 0;
+        vertical-align: -1px;
+    }
+    /* 勾了「不修改」的行：控件禁掉并变灰 */
+    .mihomo-leave-alone input,
+    .mihomo-leave-alone select,
+    .mihomo-leave-alone textarea {
+        background-color: #f5f5f5;
+        color: #999;
+    }
+</style>
+
 <ul class="nav nav-tabs" role="tablist" id="maintabs">
     <li class="active"><a data-toggle="tab" href="#settings">{{ lang._('Settings') }}</a></li>
     <li><a data-toggle="tab" href="#config">{{ lang._('Configuration File') }}</a></li>
@@ -269,6 +385,7 @@
         <div style="padding: 12px 14px;">
             <p class="text-muted" style="margin-bottom: 10px;">
                 {{ lang._('The same setting can live in three places. This table shows all three: what the WebGUI remembers, what the file says, and what the running core actually uses.') }}
+                {{ lang._('Rows marked with a "leave alone" tag are items this plugin does not write: whatever you put in the file stays as it is.') }}
             </p>
             <div id="compare-notes"></div>
             <table class="table table-condensed table-hover" id="compare-table">
@@ -303,14 +420,15 @@
             </div>
         </div>
         <div style="margin-top: 10px;">
-            <label class="radio-inline">
-                <input type="radio" name="applymode" value="changed" checked>
-                {{ lang._('Write only what I changed (recommended)') }}
-            </label>
-            <label class="radio-inline" style="margin-left: 14px;">
-                <input type="radio" name="applymode" value="all">
-                {{ lang._('Write all page settings into the file') }}
-            </label>
+            <span class="text-muted" style="font-size: 12px;">
+                {{ lang._('Each item has a "leave alone" tick (on by default): this plugin then never writes that item — the file keeps whatever you wrote, and what is not in the file stays out. Clear the tick to let the page write it.') }}
+            </span>
+        </div>
+        <div style="margin-top: 6px;">
+            <button class="btn btn-xs btn-default __mr" id="managedAllAct" type="button"
+                    title="{{ lang._('Let the page write every item.') }}">{{ lang._('Tick nothing (write all)') }}</button>
+            <button class="btn btn-xs btn-default" id="managedNoneAct" type="button"
+                    title="{{ lang._('Nothing is written to any file.') }}">{{ lang._('Tick everything (leave all alone)') }}</button>
         </div>
         <div id="changed-summary" class="text-muted" style="margin-top: 8px; font-size: 12px;"></div>
     </div>

@@ -344,7 +344,7 @@ check('对照：密钥不外泄', ($byKey['secret']['file'] ?? '') !== '"abc123"
     && ($byKey['secret']['model'] ?? '') !== 'abc123', (string)($byKey['secret']['file'] ?? '?'));
 check('对照：密钥被识别为已设置', ($byKey['secret']['state'] ?? '') === Inspector::STATE_MATCH);
 
-echo "\n=== 15. 设置应用方式：只写入改动过的项 ===\n";
+echo "\n=== 15. 设置项「不修改」开关 ===\n";
 $managed = [
     'log-level' => ['value' => 'info', 'fields' => ['mihomo.general.logLevel'], 'label' => 'Log Level'],
     'tun.mtu' => ['value' => 1500, 'fields' => ['mihomo.tun.mtu'], 'label' => 'MTU'],
@@ -352,32 +352,43 @@ $managed = [
 ];
 $current = ['log-level' => 'info', 'tun.mtu' => '1400', 'tun.auto-route' => 'true'];
 
-[$write, $written, $skipped] = Config::selectManagedKeys($managed, ['mihomo.tun.mtu'], true, $current);
-check('只写改动过的项', array_keys($write) === ['tun.mtu'], implode(',', array_keys($write)));
-check('写入项的显示名', $written === ['MTU'], implode(',', $written));
-check('跳过的是"文件有差别但没改"的项', $skipped === ['Automatic Route'], implode(',', $skipped));
-check('本来就一致的不算跳过', !in_array('Log Level', $skipped, true), implode(',', $skipped));
+/* (1) 全都不修改（默认）→ 一个都不写，但"文件里有差别"的要提示出来 */
+[$w1, $l1, $s1] = Config::selectManagedKeys($managed, [], $current);
+check('全是"不修改" → 一个都不写', $w1 === [], (string)count($w1));
+check('"不修改"但文件有差别的项会提示', $s1 === ['MTU', 'Automatic Route'], implode(',', $s1));
+check('本来就一致的不提', !in_array('Log Level', $s1, true), implode(',', $s1));
 
-[$write2, , ] = Config::selectManagedKeys($managed, [], true, $current);
-check('什么都没改 → 一个都不写', $write2 === [], (string)count($write2));
+/* (2) 只有 MTU 交给插件 → 只写它 */
+[$w2, $l2, $s2] = Config::selectManagedKeys($managed, ['mihomo.tun.mtu'], $current);
+check('只写交给插件的那一项', array_keys($w2) === ['tun.mtu'], implode(',', array_keys($w2)));
+check('写入项的显示名', $l2 === ['MTU'], implode(',', $l2));
+check('其余"不修改"的照旧提示', $s2 === ['Automatic Route'], implode(',', $s2));
 
-[$write3, , $skipped3] = Config::selectManagedKeys($managed, [], false, $current);
-check('以页面为准 → 全部写', count($write3) === 3 && $skipped3 === [], (string)count($write3));
+/* (3) 一个 YAML 键对应多个页面字段：任一字段交给插件就写 */
+$pair = ['external-controller' => [
+    'value' => '127.0.0.1:9090',
+    'fields' => ['mihomo.general.controllerBind', 'mihomo.general.controllerPort'],
+    'label' => 'External Controller',
+]];
+[$w3, , ] = Config::selectManagedKeys($pair, ['mihomo.general.controllerPort'], []);
+check('一键多字段：任一字段就触发', array_keys($w3) === ['external-controller'], implode(',', array_keys($w3)));
 
-$managedBool = [
-    'allow-lan' => ['value' => false, 'fields' => ['mihomo.general.allowLan'], 'label' => 'Allow LAN'],
-];
-[, , $skipped4] = Config::selectManagedKeys($managedBool, [], true, ['allow-lan' => 'false']);
-check('写法不同但语义相同 → 不提', $skipped4 === [], implode(',', $skipped4));
-
-/* 同时改了两个字段 → 两项都写（含"一个字段对应多个键"的情形） */
-[$write5, $written5, ] = Config::selectManagedKeys(
+/* (4) 全部交给插件 → 全写，且没有"跳过"提示 */
+[$w4, $l4, $s4] = Config::selectManagedKeys(
     $managed,
-    ['mihomo.tun.mtu', 'mihomo.tun.autoRoute'],
-    true,
+    ['mihomo.general.logLevel', 'mihomo.tun.mtu', 'mihomo.tun.autoRoute'],
     $current
 );
-check('多字段改动', count($write5) === 2 && $written5 === ['MTU', 'Automatic Route'], implode(',', $written5));
+check('全部交给插件 → 全写', count($w4) === 3 && $s4 === [], (string)count($w4));
+check('显示名齐全', $l4 === ['Log Level', 'MTU', 'Automatic Route'], implode(',', $l4));
+
+/* (5) 一个页面字段管一组 YAML 键（嗅探）：勾上就整组都写 */
+$sniffer = [
+    'sniffer.enable' => ['value' => true, 'fields' => ['mihomo.general.sniffer'], 'label' => 'Domain sniffing'],
+    'sniffer.sniff' => ['value' => true, 'fields' => ['mihomo.general.sniffer'], 'label' => 'Domain sniffing'],
+];
+[$w5, $l5, ] = Config::selectManagedKeys($sniffer, ['mihomo.general.sniffer'], []);
+check('一组键共用一个开关', count($w5) === 2 && $l5 === ['Domain sniffing'], implode(',', array_keys($w5)));
 
 echo "\n=== 汇总: {$failures} 个失败 ===\n";
 exit($failures === 0 ? 0 : 1);

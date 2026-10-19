@@ -379,42 +379,37 @@ class Config
     }
 
     /**
-     * 「只写入改动过的项」：从完整键表里挑出本次真正要写的键。
+     * 「不修改」开关：从完整键表里挑出**用户交给插件**的键。
+     *
+     * 页面每一项前面都有一条「不修改」勾（默认勾上）：
+     *   勾上   = 插件完全不碰这一项 —— 文件里原本怎么写就怎么用，也不会把已有键删掉；
+     *   取消勾 = 这一项由页面负责写入。
      *
      * @param array $managed       yamlKey => ['value' => mixed, 'fields' => [字段 id...], 'label' => 显示名]
-     * @param array $changedFields 页面上本次改动过的字段 id
-     * @param bool  $onlyChanged   true = 只写改动过的项（页面默认）；false = 全部写（以页面为准）
-     * @param array $current       文件里现在的值（Config::scan()），用于判断"跳过的项到底有没有差别"
-     * @return array{0: array, 1: array, 2: array}  [要写的键表, 写了的显示名, 跳过且有差别的显示名]
+     * @param array $ownedFields   「不修改」没勾上的字段 id（= 允许写入）
+     * @param array $current       文件里现在的值（Config::scan()），用于说明"没写但有差别"的项
+     * @return array{0: array, 1: array, 2: array}  [要写的键表, 写了的显示名, 没写但有差别的显示名]
      */
-    public static function selectManagedKeys(
-        array $managed,
-        array $changedFields,
-        bool $onlyChanged,
-        array $current = []
-    ): array {
-        if (!$onlyChanged) {
-            return [$managed, self::labels($managed), []];
-        }
-
-        $changed = array_flip(array_map('strval', $changedFields));
+    public static function selectManagedKeys(array $managed, array $ownedFields, array $current = []): array
+    {
+        $owned = array_flip(array_map('strval', $ownedFields));
         $write = [];
         $written = [];
         $skipped = [];
         foreach ($managed as $yamlKey => $info) {
-            $touched = false;
-            foreach ($info['fields'] as $field) {
-                if (isset($changed[$field])) {
-                    $touched = true;
+            $mine = false;
+            foreach ((array)$info['fields'] as $field) {
+                if (isset($owned[$field])) {
+                    $mine = true;
                     break;
                 }
             }
-            if ($touched) {
+            if ($mine) {
                 $write[$yamlKey] = $info;
                 $written[] = $info['label'];
                 continue;
             }
-            /* 没改过的项：只有"文件里现在和页面不一样"才值得提一句（否则本来就不用动） */
+            /* 不修改的项：只有"文件里现在和页面不一样"才值得提一句（否则本来就不用动） */
             if (array_key_exists($yamlKey, $current) && !self::valuesEqual($current[$yamlKey], $info['value'])) {
                 $skipped[] = $info['label'];
             }

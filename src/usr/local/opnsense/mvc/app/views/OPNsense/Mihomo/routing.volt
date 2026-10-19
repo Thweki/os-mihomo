@@ -40,49 +40,17 @@
             return '{{ lang._('Manual') }}';
         }
 
-        /* 下拉数据：bootstrap-select（selectpicker）会隐藏原生 select，
-           往里面加选项后必须 refresh，否则界面上看不到、也选不了 */
-        let optionCache = { interfaces: [], targets: [] };
+        /* 下拉选项由接口在返回行数据时一并给出（见 get_rule 的 asDialogChoices）：
+           框架的 setFormData 需要「选项字典」形状，纯字符串会让它抛异常、对话框打不开。 */
 
-        function fillSelect(el, items, keep) {
-            if (!el) {
-                return;
-            }
-            const $el = $(el);
-            const previous = keep || $el.val();
-            $el.empty();
-            items.forEach(function (item) {
-                $el.append($('<option>').val(item.value).text(item.label));
-            });
-            if (previous) {
-                $el.append($('<option>').val(previous).text(previous + ' *'));
-                $el.val(previous);
-            }
-            if ($el.hasClass('selectpicker')) {
-                $el.selectpicker('refresh');
-            }
-        }
-
-        function refreshSelects(keepCurrent) {
-            fillSelect(document.getElementById('mihomo.interface'), optionCache.interfaces, keepCurrent);
-            fillSelect(document.getElementById('mihomo.target'), optionCache.targets, keepCurrent);
-        }
-
+        /* TUN 没开时在页面上提醒一句 */
         ajaxGet('/api/mihomo/routing/options', {}, function (data, status) {
             if (status !== 'success') {
                 return;
             }
-            optionCache.interfaces = data.interfaces || [];
-            optionCache.targets = data.targets || [];
-            refreshSelects();
             if (!data.tun_enabled) {
                 $('#policyTunHint').removeClass('hidden');
             }
-        });
-
-        /* 打开行编辑对话框时，按该行当前值补齐选项（否则已有值会显示为空） */
-        $(document).on('show.bs.modal', '#{{formGridPolicy['edit_dialog_id']}}', function () {
-            refreshSelects();
         });
 
         /* 一行状态：绑定关系 + 网络侧 */
@@ -110,14 +78,6 @@
             add: '/api/mihomo/routing/add_rule/',
             del: '/api/mihomo/routing/del_rule/',
             toggle: '/api/mihomo/routing/toggle_rule/'
-        });
-
-        ajaxGet('/api/mihomo/routing/options', {}, function (data, status) {
-            if (status !== 'success') {
-                return;
-            }
-            fillSelect(document.getElementById('mihomo.interface'), data.interfaces || []);
-            fillSelect(document.getElementById('mihomo.target'), data.targets || []);
         });
 
         /* 预览：mihomo 规则 + OPNsense 变更 */

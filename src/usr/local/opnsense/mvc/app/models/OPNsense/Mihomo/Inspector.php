@@ -462,6 +462,8 @@ class Inspector
             'dns.enable' => $flag($mdl->dns->enabled) ? 'true' : 'false',
             'dns.listen' => (string)$mdl->dns->listen,
             'dns.enhanced-mode' => (string)$mdl->dns->enhancedMode,
+            'dns.ipv6' => $flag($mdl->dns->ipv6) ? 'true' : 'false',
+            'ipv6' => $flag($mdl->general->ipv6) ? 'true' : 'false',
             'sniffer.enable' => $flag($mdl->general->sniffer) ? 'true' : 'false',
         ];
     }

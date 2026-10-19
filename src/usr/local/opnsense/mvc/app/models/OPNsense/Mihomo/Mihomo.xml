@@ -196,5 +196,14 @@
                 </descr>
             </rule>
         </policyRouting>
+        <!--
+          「不修改」开关：逗号分隔的页面字段 id，列出**允许本插件写入**的项。
+          空 = 每一项都不修改（默认）：插件只读文件，不改写任何设置。
+          由设置页的复选框维护，见 Api\SettingsController::applyAction()。
+        -->
+        <managed type="TextField">
+            <Mask>/^[a-zA-Z0-9_.,:-]{0,1500}$/</Mask>
+            <ValidationMessage>Internal list of the page fields this plugin may write.</ValidationMessage>
+        </managed>
     </items>
 </model>
