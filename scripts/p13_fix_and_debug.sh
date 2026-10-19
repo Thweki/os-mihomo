@@ -1,10 +1,13 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 1) 撤回误还原（用还原动作自己产生的 190901 备份）
 # 2) 排查自检脚本的报错
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/fix_jar.txt
-PASS='${OPN_PW}'
 CFG=/usr/local/etc/mihomo/config.yaml
 rm -f "$JAR"
 

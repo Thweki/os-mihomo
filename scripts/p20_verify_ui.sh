@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 验证：① 体检横幅在“只有 info”时整块消失 ② 路由页空状态提示 ③ 新增行能在表格里出现
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/p20_jar.txt
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 LP=$(curl -sk -c "$JAR" "$BASE/index.php")

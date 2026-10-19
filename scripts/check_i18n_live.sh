@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 用已登录会话抓取页面，确认插件词条已生效（中文）
 set -u
 BASE=https://127.0.0.1
@@ -8,7 +12,7 @@ rm -f "$JAR"
 LOGIN_PAGE=$(curl -sk -c "$JAR" "$BASE/index.php")
 NAME=$(printf '%s' "$LOGIN_PAGE" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\1/p' | head -1)
 VALUE=$(printf '%s' "$LOGIN_PAGE" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\2/p' | head -1)
-curl -sk -b "$JAR" -c "$JAR" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${OPN_PW}&$NAME=$VALUE" "$BASE/index.php"
+curl -sk -b "$JAR" -c "$JAR" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${PASS}&$NAME=$VALUE" "$BASE/index.php"
 
 echo "=== 各页面命中插件中文词条的情况 ==="
 check() {

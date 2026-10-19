@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 实测：TUN 开启但 auto-route 关闭时，mihomo 在这台 FreeBSD 上做了什么
 #   · 会创建什么接口、什么地址（决定 pf 策略路由的网关）
 #   · 是否动默认路由/防火墙/DNS（必须一动不动）
@@ -7,7 +11,6 @@ set -u
 
 BASE=https://127.0.0.1
 JAR=/tmp/tun_measure_jar.txt
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 API() {

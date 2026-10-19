@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 验收「配置对照」：API 返回 + 设置页第三个标签 + 体检里的 IPv6 提示
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/p27_jar.txt
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 LP=$(curl -sk -c "$JAR" "$BASE/index.php")

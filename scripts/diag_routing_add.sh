@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 诊断：ArrayField 声明方式 + add_rule 报错的真实原因
 set -u
 
@@ -21,6 +25,6 @@ KH=/tmp/rt_jar.txt
 LP=$(curl -sk -c "$KH" https://127.0.0.1/index.php)
 N=$(printf '%s' "$LP" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\1/p' | head -1)
 V=$(printf '%s' "$LP" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\2/p' | head -1)
-curl -sk -b "$KH" -c "$KH" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${OPN_PW}&$N=$V" https://127.0.0.1/index.php
+curl -sk -b "$KH" -c "$KH" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${PASS}&$N=$V" https://127.0.0.1/index.php
 curl -sk -b "$KH" https://127.0.0.1/ui/mihomo/routing | grep -n -A6 'content-box __mb' | sed -n '1,40p'
 rm -f "$KH"

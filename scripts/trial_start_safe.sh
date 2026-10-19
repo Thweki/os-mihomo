@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 安全模式启动试用：只把 tun.enable 改一行（走插件自己的 Apply 通道），然后启动服务
 #
 # 安全前提（脚本会逐条验证）：
@@ -11,7 +15,6 @@ set -u
 BASE=https://127.0.0.1
 JAR=/tmp/trial_jar.txt
 CFG=/usr/local/etc/mihomo/config.yaml
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 say() { printf '\n########## %s ##########\n' "$1"; }

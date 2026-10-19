@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 诊断：国旗 emoji 到底是哪一层被改写的
 set -u
 CFG=/conf/config.xml
@@ -28,7 +32,7 @@ echo "########## 3. API 返回的原始字节（status / search） ##########"
 LP=$(curl -sk -c "$JAR" "$BASE/index.php")
 N=$(printf '%s' "$LP" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\1/p' | head -1)
 V=$(printf '%s' "$LP" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\2/p' | head -1)
-curl -sk -b "$JAR" -c "$JAR" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${OPN_PW}&$N=$V" "$BASE/index.php"
+curl -sk -b "$JAR" -c "$JAR" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${PASS}&$N=$V" "$BASE/index.php"
 echo "--- /search_rule 原始输出（前 300 字节）---"
 curl -sk -b "$JAR" "$BASE/api/mihomo/routing/search_rule" | head -c 300 | sed 's/^/    /'
 echo

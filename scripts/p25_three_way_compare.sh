@@ -1,10 +1,13 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 三方对照：config.xml 模型值 / config.yaml 文件值 / mihomo 运行态值
 set -u
 CFG=/usr/local/etc/mihomo/config.yaml
 BASE=https://127.0.0.1
 JAR=/tmp/cmp_jar.txt
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 echo "########## 1. mihomo 相关 configd 动作 ##########"

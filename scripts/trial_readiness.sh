@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 交付验收：插件现在在目标机上到底是什么状态
 set -u
 BASE=https://127.0.0.1
@@ -39,7 +43,7 @@ echo "########## 4. WebGUI 页面（登录后） ##########"
 LP=$(curl -sk -c "$JAR" "$BASE/index.php")
 N=$(printf '%s' "$LP" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\1/p' | head -1)
 V=$(printf '%s' "$LP" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\2/p' | head -1)
-curl -sk -b "$JAR" -c "$JAR" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${OPN_PW}&$N=$V" "$BASE/index.php"
+curl -sk -b "$JAR" -c "$JAR" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${PASS}&$N=$V" "$BASE/index.php"
 for p in /ui/mihomo /ui/mihomo/settings /ui/mihomo/subscription /ui/mihomo/log /mihomo.php; do
     printf '  %-28s %s\n' "$p" "$(curl -sk -b "$JAR" -o /dev/null -w '%{http_code}' "$BASE$p")"
 done

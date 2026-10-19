@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 复核（终）：浮动规则幂等 + pf 顺序（route-to 必须在默认放行之前）
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/p14l_jar.txt
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 LP=$(curl -sk -c "$JAR" "$BASE/index.php")

@@ -1,10 +1,13 @@
 ﻿#!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 应用完整 sniffer → 重启 → 自检（期望命中 AND 规则 → 🇺🇸 United States）
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/sniff3_jar.txt
 CFG=/usr/local/etc/mihomo/config.yaml
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 LP=$(curl -sk -c "$JAR" "$BASE/index.php")

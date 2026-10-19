@@ -1,9 +1,12 @@
 ﻿#!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # CRUD + 应用 + 状态（写 config.yaml 与订阅模板；mihomo -t 校验）
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/routing_jar2.txt
-PASS='${OPN_PW}'
 CFG=/usr/local/etc/mihomo/config.yaml
 TPL=/usr/local/etc/mihomo/sub/template_config.yaml
 rm -f "$JAR"

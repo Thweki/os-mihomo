@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 功能测试 · A2：用合法的 staging 路径装入真实节点配置 → 应用设置 → 应用策略 → 重启
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/func_jar2.txt
-PASS='${OPN_PW}'
 CFG=/usr/local/etc/mihomo/config.yaml
 rm -f "$JAR"
 

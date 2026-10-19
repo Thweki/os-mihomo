@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 复核：④ cron 任务（正确的路径）+ ② 的 pf 规则
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/p14b_jar.txt
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 echo "########## 0. Cron 模板渲染到哪个文件 ##########"

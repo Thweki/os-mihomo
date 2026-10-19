@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # P12-2 · 清理重复 + 用修好的代码重新应用 + 完整核对
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/p122_clean_jar.txt
-PASS='${OPN_PW}'
 X=/conf/config.xml
 CLEAN=/conf/config.xml.mihomo-bak.20261018_180459
 rm -f "$JAR"

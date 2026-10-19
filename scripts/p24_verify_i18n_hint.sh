@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 确认 .mo 路径与已装翻译、以及空状态提示在页面里的最终文本
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/p24_jar.txt
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 echo "########## 1. 已安装的中文语言包位置 ##########"

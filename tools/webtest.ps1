@@ -10,7 +10,8 @@ param(
 )
 $ErrorActionPreference = 'Continue'
 $user = 'root'
-$pass = '$env:OPN_PW'
+$pass = $env:OPN_PW
+if (-not $pass) { Write-Host "缺少 WebGUI 口令：$env:OPN_PW=..." -ForegroundColor Red; exit 2 }
 $jar = Join-Path $env:TEMP ('opn_jar_' + [guid]::NewGuid().ToString('N') + '.txt')
 
 function CallCurl([string[]]$argsList) {

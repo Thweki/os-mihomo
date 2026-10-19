@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 一致性收敛：表里已无策略行 → 网络侧也应当全部撤掉（浮动规则/网关/接口）
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/p15d_jar.txt
-PASS='${OPN_PW}'
 rm -f "$JAR"
 
 echo "########## 0. 现状：浮动规则是否还在 ##########"

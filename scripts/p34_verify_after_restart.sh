@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 让内核加载当前配置（文件比进程新则重启），并复核 pf 顺序 + 自检
 set -u
 CFG=/usr/local/etc/mihomo/config.yaml
@@ -57,7 +61,7 @@ for r in rules[:6]:
 
 echo
 echo "########## 5. 端到端：自检（应命中受管规则） ##########"
-JAR=/tmp/p34_jar.txt; PASS='${OPN_PW}'; BASE=https://127.0.0.1
+JAR=/tmp/p34_jar.txt; BASE=https://127.0.0.1
 rm -f "$JAR"
 LP=$(curl -sk -c "$JAR" "$BASE/index.php")
 N=$(printf '%s' "$LP" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\1/p' | head -1)

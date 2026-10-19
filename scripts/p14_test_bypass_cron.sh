@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # ② 内网直达规则 + ④ 订阅自动更新（Cron）功能验证
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/p14_jar.txt
-PASS='${OPN_PW}'
 CFG=/usr/local/etc/mihomo/config.yaml
 XCFG=/conf/config.xml
 rm -f "$JAR"

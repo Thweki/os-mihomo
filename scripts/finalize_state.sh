@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 交付前最终清理与复位
 set -u
 
@@ -15,7 +19,7 @@ opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), url
 
 page = opener.open(BASE + '/index.php', timeout=20).read().decode('utf-8', 'replace')
 m = re.search(r'<input type="hidden" name="([^"]+)" value="([^"]+)"', page)
-form = {'login': '1', 'usernamefld': 'root', 'passwordfld': '${OPN_PW}'}
+form = {'login': '1', 'usernamefld': 'root', 'passwordfld': __import__('os').environ.get('OPN_PW', '')}
 if m:
     form[m.group(1)] = m.group(2)
 opener.open(BASE + '/index.php', urllib.parse.urlencode(form).encode(), timeout=20).read()

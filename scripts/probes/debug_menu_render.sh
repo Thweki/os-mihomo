@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 用本地 curl 登录并抓取左侧菜单 HTML，确认 Proxy Suite 是否渲染出来
 set -u
 BASE=https://127.0.0.1
@@ -12,7 +16,7 @@ VALUE=$(printf '%s' "$LOGIN_PAGE" | sed -n 's/.*<input type="hidden" name="\([^"
 echo "csrf field: $NAME"
 
 # 2. 登录
-curl -sk -b "$JAR" -c "$JAR" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${OPN_PW}&$NAME=$VALUE" "$BASE/index.php"
+curl -sk -b "$JAR" -c "$JAR" -o /dev/null -d "login=1&usernamefld=root&passwordfld=${PASS}&$NAME=$VALUE" "$BASE/index.php"
 
 # 3. 抓页面
 curl -sk -b "$JAR" "$BASE/ui/mihomo" -o /tmp/menu_page.html

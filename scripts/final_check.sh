@@ -1,4 +1,8 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # 收工前的最终安全检查（只读）
 set -u
 echo "=============== 设备最终状态 ==============="
@@ -26,7 +30,6 @@ echo " PHP 报错(尾部): $(tail -1 /var/lib/php/tmp/PHP_errors.log 2>/dev/null
 echo
 echo "=============== 五个页面 ==============="
 JAR=/tmp/final_jar.txt
-PASS='${OPN_PW}'
 rm -f "$JAR"
 LP=$(curl -sk -c "$JAR" "https://127.0.0.1/index.php")
 N=$(printf '%s' "$LP" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value="\([^"]*\)".*/\1/p' | head -1)

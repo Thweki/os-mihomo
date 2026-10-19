@@ -1,9 +1,12 @@
 #!/bin/sh
+
+PASS="${OPN_PW:-${1:-}}"
+if [ -z "$PASS" ]; then echo "缺少 WebGUI 口令：export OPN_PW=... 或 tools/remote.ps1 -ScriptArgs '<口令>'"; exit 2; fi
+export OPN_PW="${PASS}"
 # P12-2 · 端到端：同步 OPNsense 网络侧（仅 lan）→ 验证 → 证明 LanDirect 未受影响
 set -u
 BASE=https://127.0.0.1
 JAR=/tmp/p122_apply_jar.txt
-PASS='${OPN_PW}'
 CFG=/usr/local/etc/mihomo/config.yaml
 XCFG=/conf/config.xml
 rm -f "$JAR"
