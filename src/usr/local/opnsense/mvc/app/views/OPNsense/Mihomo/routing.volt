@@ -297,6 +297,10 @@
 </script>
 
 <div class="content-box __mb">
+    <div id="policyTunHint" class="alert alert-warning hidden" style="margin-bottom:10px;">
+        <i class="fa fa-exclamation-triangle fa-fw"></i>
+        {{ lang._('TUN mode is off: the bindings below stay inactive until it is on. Enable it in Settings.') }}
+    </div>
     <div id="policyEmptyHint" class="alert alert-info hidden" style="margin-bottom:0;">
         <i class="fa fa-info-circle fa-fw"></i>
         {{ lang._('Nothing is bound yet — click Add, pick an interface and a proxy group, then Apply.') }}

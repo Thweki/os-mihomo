@@ -568,6 +568,9 @@ msgstr "TUN 已关闭：流量不会进入 mihomo。"
 msgid "TUN mode is enabled (automatic route takeover off)"
 msgstr "已启用 TUN 模式（未自动接管路由）"
 
+msgid "TUN mode is off: the bindings below stay inactive until it is on. Enable it in Settings."
+msgstr "TUN 模式关着：下面的绑定在它打开之前都不会生效。到「设置」里打开再回来。"
+
 msgid "TUN off"
 msgstr "TUN 未启用"
 

@@ -214,6 +214,8 @@ TRANSLATIONS: dict[str, str] = {
     'not checked (no secret)': '没设密钥，内核不校验',
     '%s (answering)': '%s（有应答）',
     '%s (no answer)': '%s（没应答）',
+    'TUN mode is off: the bindings below stay inactive until it is on. Enable it in Settings.':
+        'TUN 模式关着：下面的绑定在它打开之前都不会生效。到「设置」里打开再回来。',
     # ---- 「不修改」开关（P18）----
     'leave alone': '不修改',
     'Tick = this plugin never writes this item: the file keeps whatever you wrote. Clear the tick to let the page write it.':
