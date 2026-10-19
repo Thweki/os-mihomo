@@ -14,17 +14,21 @@ V=$(printf '%s' "$LP" | sed -n 's/.*<input type="hidden" name="\([^"]*\)" value=
 curl -sk -b "$JAR" -c "$JAR" -o /dev/null -d "login=1&usernamefld=root&passwordfld=$PASS&$N=$V" "$BASE/index.php"
 curl -sk -b "$JAR" "$BASE/ui/mihomo/settings" -o /tmp/p65-settings.html
 
-echo "########## 1. 页面里不带勾的项（应为插件状态 + 写死项） ##########"
+echo "########## 1. 页面里每行的小锁（config.yaml 的键才有） ##########"
 python3 - <<'PY'
 import io, re
 t = io.open('/tmp/p65-settings.html', encoding='utf-8').read()
 fields = re.findall(r'id="(mihomo\.[A-Za-z.]+)"', t)
 no_switch = re.findall(r"const ALWAYS_OWNED = \('([^']*)'", t)
-fixed = re.findall(r"const FIXED = \{\};[\s\S]{0,120}?\('([^']*)'", t)
+fixed = re.findall(r"const FIXED = \{\};[\s\S]{0,140}?\('([^']*)'", t)
+locks = len(re.findall(r'class="mihomo-switch"', t))
+pins = len(re.findall(r'mihomo-fixed-icon', t))
+boxes = len(re.findall(r'data-managed-for="[^"]*"><input type="checkbox"', t))
 print('  表单字段 %d 个' % len(set(fields)))
-print('  不给勾的项:', no_switch[0] if no_switch else '(渲染失败)')
+print('  小锁 %d 把（每行 config.yaml 的键一把）、图钉 %d 枚、旧复选框 %d 个' % (locks, pins, boxes))
+print('  没有锁的字段:', no_switch[0] if no_switch else '(渲染失败)')
 print('  写死的项  :', fixed[0] if fixed else '(渲染失败)')
-print('  「固定」标记 CSS 在:', '是' if '.mihomo-fixed-tag' in t else '否')
+print('  小锁 CSS 在:', '是' if '.mihomo-switch' in t else '否')
 PY
 
 echo
