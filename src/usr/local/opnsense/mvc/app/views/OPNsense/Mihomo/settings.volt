@@ -199,18 +199,7 @@
         }
 
         function renderCompare(data) {
-            const $notes = $('#compare-notes').empty();
             const $body = $('#compare-body').empty();
-
-            (data['notes'] || []).forEach(function (note) {
-                const warn = note['level'] === 'warning';
-                $('<div>')
-                    .addClass('alert ' + (warn ? 'alert-warning' : 'alert-info'))
-                    .css({ 'margin-bottom': '8px' })
-                    .html('<i class="fa ' + (warn ? 'fa-exclamation-triangle' : 'fa-info-circle') + ' fa-fw"></i> '
-                        + escapeHtml(note['text']))
-                    .appendTo($notes);
-            });
 
             (data['rows'] || []).forEach(function (row) {
                 let badge;
@@ -345,11 +334,6 @@
     </div>
     <div id="compare" class="tab-pane fade in">
         <div style="padding: 12px 14px;">
-            <p class="text-muted" style="margin-bottom: 10px;">
-                {{ lang._('The same setting can live in three places. This table shows all three: what the WebGUI remembers, what the file says, and what the running core actually uses.') }}
-                {{ lang._('Rows marked with a "leave alone" tag are items this plugin does not write: whatever you put in the file stays as it is.') }}
-            </p>
-            <div id="compare-notes"></div>
             <table class="table table-condensed table-hover" id="compare-table">
                 <thead>
                 <tr>

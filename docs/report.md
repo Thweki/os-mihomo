@@ -1187,6 +1187,21 @@ setFormData('frm_dialog_policy_rule', {mihomo:{interface:'opt2'}})
 * `Config::selectManagedKeys($keys, $ownedFields, $fileValues)` 重写为按这个清单挑选要写的键，
   并回报"没写、但文件里和页面不一样"的项。
 
+### 23.4 后续（同日晚）：对照页只留表格
+
+用户看过界面后要求去掉对照页的文字：
+
+* 删掉表格上方那段说明（"同一个设置可能同时存在于三个地方……"）；
+* 删掉表格前面的提示框（「运行中」那一列的说明、内核不报告的项、手写配置警告、受管区块说明、IPv6 提示等）；
+* 后端 `Inspector::report()` 同步不再生成 `notes`（接口现在只返回 `rows` / `differs` / `missing` / `runtime`），
+  10 条相关词条一并清掉；`html`/"不修改"标记与表格本身保留。
+
+> 这些信息本来就分散在别处：手写配置的覆盖风险在**订阅页**有警告横幅、IPv6 绕过代理在**概览页体检**里会提示、
+> 页面与文件不一致在表格的状态标签上一眼可见。要一次性看全，用命令 `config_truth.sh`。
+
+实测：8 个应消失的元素/文案在页面里全部为 0；`compare-table` / `compare-body` / 刷新按钮都在；
+`/api/mihomo/settings/inspect` 返回 19 行、不再有 `notes` 字段；五个页面 0 PHP 报错；回归测试 0 失败。
+
 ### 23.3 实测
 
 ```

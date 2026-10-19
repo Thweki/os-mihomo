@@ -362,7 +362,7 @@ class Inspector
      * ===================================================================== */
 
     /**
-     * @return array{status: string, rows: array, notes: array, differs: int, missing: int, runtime: bool}
+     * @return array{status: string, rows: array, differs: int, missing: int, runtime: bool}
      */
     public static function report(): array
     {
@@ -385,52 +385,9 @@ class Inspector
             }
         }
 
-        $notes = [];
-        if (!$runtime) {
-            $notes[] = [
-                'level' => 'info',
-                'text' => gettext('The running service cannot be read right now (stopped, or the secret does not match), so only the page and the file are compared here.'),
-            ];
-        } else {
-            $notes[] = [
-                'level' => 'info',
-                'text' => gettext('The "Running" column is what the core is using right now. Change the file and you still have to restart the service before it shows up here.'),
-            ];
-            $notes[] = [
-                'level' => 'info',
-                'text' => gettext('A few items are not reported by the core at all (strict route, DNS mode, ...), so their "Running" cell stays empty — only the file and the core log can tell.'),
-            ];
-        }
-        if ($differs > 0) {
-            $notes[] = [
-                'level' => 'warning',
-                'text' => gettext('The page and the file disagree on some items: press Apply to write what the page says into the file, or press Import to load what the file says into the page.'),
-            ];
-        }
-        if (self::looksHandwritten($yaml)) {
-            $notes[] = [
-                'level' => 'warning',
-                'text' => gettext('This config.yaml is hand-written, not generated from the subscription template. Updating the subscription replaces the whole file, so your own edits would be gone — do not use it, or take a backup first.'),
-            ];
-        }
-        $notes[] = self::hasManagedBlock($yaml) ? [
-            'level' => 'info',
-            'text' => gettext('The file contains a block of rules that the plugin keeps up to date (from the Policy Routing page). Do not edit inside that block: it gets replaced as a whole.'),
-        ] : [
-            'level' => 'info',
-            'text' => gettext('No interface is bound to mihomo right now, so the file contains no plugin-managed rules.'),
-        ];
-        if (self::ipv6Allowed($yaml)) {
-            $notes[] = [
-                'level' => 'warning',
-                'text' => gettext('IPv6 traffic does not go through the proxy: the mihomo tunnel only handles IPv4. Add ipv6: false in the configuration if you want IPv6 handled by the normal route, or ignore this.'),
-            ];
-        }
-
         return [
             'status' => 'ok',
             'rows' => $rows,
-            'notes' => $notes,
             'differs' => $differs,
             'missing' => $missing,
             'runtime' => $runtime,
