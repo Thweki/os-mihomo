@@ -404,8 +404,8 @@ TRANSLATIONS: dict[str, str] = {
         'Unbound 也在这些接口上监听：%s。请让它不要监听这些接口，或确认 TUN 策略优先。',
     'Manual policy routing on %s: verify the pf rules yourself.':
         '这些接口是手动策略路由：%s。请自行确认 pf 规则。',
-    'No nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant.':
-        '没有配置 nameserver-policy：mihomo 会使用默认上游，未必能防污染。',
+    'No nameserver or nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant.':
+        '没有配置 nameserver 或 nameserver-policy：mihomo 会使用默认上游，未必能防污染。',
     # ---- DNS 上游表单（P19）----
     'DNS upstream (YAML)': 'DNS 上游（YAML）',
     'DNS upstream': 'DNS 上游',

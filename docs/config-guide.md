@@ -316,20 +316,36 @@ rules:
 
 设置页的 DNS 区新增了一个多行文本框（字段 `mihomo.dns.upstream`），用来写：
 
+当前设备应用的「全局 DNS 走代理、不按 geosite 分流」配置：
+
 ```yaml
 default-nameserver:
-  - 223.5.5.5
+  - 1.1.1.1
+  - 8.8.8.8
 nameserver:
-  - https://dns.alidns.com/dns-query
+  - https://1.1.1.1/dns-query#RULES
+  - https://1.0.0.1/dns-query#RULES
 proxy-server-nameserver:
-  - 223.5.5.5
-nameserver-policy:
-  "geosite:private,cn":
-    - https://dns.alidns.com/dns-query
-  "geosite:gfw,geolocation-!cn":
-    - "https://dns.google/dns-query#RULES"
+  - https://1.12.12.12/dns-query
+  - https://120.53.53.53/dns-query
 respect-rules: true
 ```
+
+含义与取舍：
+
+- `nameserver` 的客户端查询全部走 Cloudflare DoH；`#RULES` 让 DNS 连接按路由规则走，
+  当前规则最终是 `MATCH → 代理组`，所以 DNS 不直连、也不按国内/国外分。
+- **没有 `nameserver-policy`**：不按 geosite/距离选择解析器，国内外都走同一组 DoH。
+- `proxy-server-nameserver` 用 DNSPod 的 **DoH（IP 直连）**，只用于解析代理节点域名。
+  这是整份配置里唯一的“直连 DNS”，因为实测本机直连 1.1.1.1/8.8.8.8 的 DoH 会超时，
+  没有它代理起不来；DNSPod 是加密查询，不经过明文 53。
+- `default-nameserver` 是外国 IP，只用于解析 DNS 服务器主机名；本配置的服务器全是 IP，
+  实际不会被查询，也不会用国内解析器。
+- 注意：`#RULES` 依赖最后一条 `MATCH` 指向代理组。如果以后把 `MATCH` 改成 `DIRECT`，
+  DNS 会跟着直连；要保持“全局走代理”，就别把兜底规则改成直连。
+- 客户端如果开了 DoT/DoH（Android Private DNS、浏览器 Secure DNS），会绕过 mihomo 的
+  `nameserver`；这些流量仍会被策略路由送进代理，但不是由 mihomo 解析。要统一走 mihomo
+  DNS，需在客户端关掉加密 DNS。
 
 规则：
 

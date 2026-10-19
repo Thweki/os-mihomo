@@ -116,7 +116,18 @@
 - [x] 「填入推荐值」按钮：填入仓库模板同款 DoH 策略并解锁，点「应用」才落盘；默认仍是「不修改」
 - [x] `GET /api/mihomo/settings/dns_upstream` 首次填充；「从配置导入」也会读回当前块
 - [x] 纯函数测试：抽取 / 替换 / 二次应用幂等 / 清空 / 缩进规整 / `mihomo -t`（合成配置与真实配置各一次）全部通过
-- [ ] 尚未替用户选定上游；需要用户在页面里填/点推荐值后点「应用」
+- [x] **已应用全局 DNS 走代理配置**（2026-10-20）：
+      `nameserver = Cloudflare DoH #RULES`（1.1.1.1 / 1.0.0.1），
+      `proxy-server-nameserver = DNSPod DoH IP`（1.12.12.12 / 120.53.53.53，仅 bootstrap），
+      `respect-rules: true`；**无 nameserver-policy**（不按 geosite/距离分）
+- [x] 同步订阅模板 `template_config.yaml`（备份 `template_config.yaml.bak.20261020_003814`），
+      订阅更新不会再退回旧的分流 DNS
+- [x] 同步 WebUI 模型 `mihomo.dns.upstream`（config.xml 备份 `model-sync-20261020_003815/config.xml`），
+      页面显示实际配置，避免误点「应用」写回旧值
+- [x] 验证：`mihomo -t` 通过；mihomo DNS 返回正确 Google 段；日志显示
+      `mihomo --> 1.1.1.1:443 ... US-EXIT`；默认路由未变
+- [ ] 注意：`#RULES` 依赖最后一条 `MATCH` 指向代理组；客户端 DoT/DoH 会绕过 mihomo DNS
+- [ ] P12-3 的「NAT 53→1053」仍未做（只影响未绑定策略路由的接口）
 
 ## P12-3 可选（待确认）
 

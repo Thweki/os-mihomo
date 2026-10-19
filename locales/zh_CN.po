@@ -400,8 +400,8 @@ msgstr "没有 DNS 监听者：请给客户端指定一个能访问到的 DNS �
 msgid "No interface is bound to mihomo: DNS on all interfaces is handled by Unbound or by the clients themselves."
 msgstr "没有接口绑定到 mihomo：所有接口的 DNS 都由 Unbound 或客户端自己处理。"
 
-msgid "No nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant."
-msgstr "没有配置 nameserver-policy：mihomo 会使用默认上游，未必能防污染。"
+msgid "No nameserver or nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant."
+msgstr "没有配置 nameserver 或 nameserver-policy：mihomo 会使用默认上游，未必能防污染。"
 
 msgid "No obvious DNS path problems."
 msgstr "没有发现明显的 DNS 路径问题。"

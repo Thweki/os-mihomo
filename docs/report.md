@@ -1442,5 +1442,37 @@ log             142611 字节  PHP 报错: 无 ✅
 （`# >>> os-mihomo:dns-upstream`）。写入前会移除同名旧键，避免 YAML 重复键；
 留空 = 删除这些键；默认仍是「不修改」，「填入推荐值」只填内容并解锁，点「应用」才落盘。
 纯函数测试覆盖了抽取 / 替换 / 幂等 / 清空 / 缩进规整，并用合成配置与真实配置各跑了一次
-`mihomo -t`。尚未替用户选定上游，也仍未做 P12-3 的 “NAT 53→1053”。
+`mihomo -t`。
+
+### 22.1 已应用的全局 DNS 配置（2026-10-20）
+
+按用户要求“全局 DNS 走代理、不按距离/geosite 分流、尽量不用国内解析器”，应用为：
+
+```yaml
+default-nameserver: [1.1.1.1, 8.8.8.8]
+nameserver:
+  - https://1.1.1.1/dns-query#RULES
+  - https://1.0.0.1/dns-query#RULES
+proxy-server-nameserver:
+  - https://1.12.12.12/dns-query      # DNSPod DoH，仅 bootstrap
+  - https://120.53.53.53/dns-query
+respect-rules: true
+```
+
+- 没有 `nameserver-policy`：客户端查询不分国内外，全部按规则走 Cloudflare DoH；
+  当前最后一条规则是 `MATCH,US-EXIT`，所以 DNS 连接也走代理组。
+- 实测直连 1.1.1.1/8.8.8.8 的 DoH 超时，但通过代理访问正常；因此
+  `proxy-server-nameserver` 用 DNSPod 的 **IP 直连 DoH** 解析代理节点域名，
+  这是唯一的直连 DNS，且是加密查询。
+- `default-nameserver` 是外国 IP，只用于 DNS 服务器主机名；本配置全是 IP，实际不查询。
+- 备份：`config.yaml.bak.20261020_003752`、`template_config.yaml.bak.20261020_003814`、
+  `model-sync-20261020_003815/config.xml`。
+- 订阅模板与 WebUI 模型均已同步；不会因订阅更新或页面「应用」退回旧的分流配置。
+- 验证：`mihomo -t` 通过；`drill -p 1053 @127.0.0.1 www.google.com` 返回
+  `142.251.x`（正确 Google 段），`www.baidu.com` 返回海外 CNAME/边缘 IP（符合“不分距离”）；
+  日志出现 `mihomo --> 1.1.1.1:443 ... US-EXIT`。
+- 注意：`#RULES` 依赖最后一条 `MATCH` 指向代理组；若改成 `DIRECT`，DNS 会直连。
+  客户端若开 DoT/DoH（如 Android Private DNS），会绕过 mihomo 的 `nameserver`，
+  但流量仍被策略路由送进代理。
+- 仍未做 P12-3 的 “NAT 53→1053”（让未绑定策略路由的接口也强制用 mihomo DNS）。
 

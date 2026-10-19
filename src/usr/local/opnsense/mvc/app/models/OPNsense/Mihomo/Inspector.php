@@ -887,10 +887,12 @@ class Inspector
                 ),
             ];
         }
-        if (preg_match('/^\s+nameserver-policy:\s*(?:$|\{)/m', $yaml) !== 1) {
+        $hasNameserver = preg_match('/^\s+nameserver:\s*(?:$|\[)/m', $yaml) === 1;
+        $hasPolicy = preg_match('/^\s+nameserver-policy:\s*(?:$|\{)/m', $yaml) === 1;
+        if (!$hasNameserver && !$hasPolicy) {
             $warnings[] = [
                 'level' => 'info',
-                'text' => gettext('No nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant.'),
+                'text' => gettext('No nameserver or nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant.'),
             ];
         }
         return $warnings;

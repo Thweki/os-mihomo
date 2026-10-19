@@ -421,7 +421,7 @@ class Config
         if ($dnsLine === null) {
             return '';
         }
-        $dnsEnd = self::findBlockEnd($lines, $dnsLine, count($lines), 0);
+        $dnsEnd = self::dnsSectionEnd($lines, $dnsLine, self::findBlockEnd($lines, $dnsLine, count($lines), 0));
         $ranges = [];
         foreach (self::DNS_UPSTREAM_KEYS as $key) {
             $line = self::findKeyLine($lines, $dnsLine + 1, $dnsEnd, 2, $key);
@@ -479,7 +479,7 @@ class Config
         $removeKeys = array_values(array_unique($removeKeys));
 
         $dnsLine = self::findKeyLine($lines, 0, count($lines), 0, 'dns');
-        $dnsEnd = self::findBlockEnd($lines, $dnsLine, count($lines), 0);
+        $dnsEnd = self::dnsSectionEnd($lines, $dnsLine, self::findBlockEnd($lines, $dnsLine, count($lines), 0));
         $remove = [];
         for ($i = $dnsLine + 1; $i < $dnsEnd;) {
             if (self::isContentLine($lines[$i]) && self::lineIndent($lines[$i]) === 2) {
@@ -508,7 +508,7 @@ class Config
 
         if ($fragmentLines !== []) {
             $dnsLine = self::findKeyLine($lines, 0, count($lines), 0, 'dns');
-            $dnsEnd = self::findBlockEnd($lines, $dnsLine, count($lines), 0);
+            $dnsEnd = self::dnsSectionEnd($lines, $dnsLine, self::findBlockEnd($lines, $dnsLine, count($lines), 0));
             $block = ['  ' . self::DNS_UPSTREAM_MARK_BEGIN];
             foreach ($fragmentLines as $line) {
                 $block[] = $line === '' ? '' : '  ' . $line;
@@ -533,6 +533,21 @@ class Config
             }
         }
         return [$start, $end];
+    }
+
+    /**
+     * 订阅模板用 `# __MIHOMO_PROXIES__` 占位代替 proxies: 段；
+     * 注释不算 YAML 结构行，findBlockEnd() 会一直找到 proxy-groups:。
+     * 这里把该占位当作 dns: 块的结束边界，避免 DNS 键被写到 proxies 占位之后。
+     */
+    private static function dnsSectionEnd(array $lines, int $dnsLine, int $dnsEnd): int
+    {
+        for ($i = $dnsLine + 1; $i < $dnsEnd; $i++) {
+            if (trim($lines[$i]) === '# __MIHOMO_PROXIES__') {
+                return $i;
+            }
+        }
+        return $dnsEnd;
     }
 
     /** 去掉固定缩进，返回 YAML 片段字符串 */
