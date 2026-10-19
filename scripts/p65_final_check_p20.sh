@@ -17,18 +17,17 @@ curl -sk -b "$JAR" "$BASE/ui/mihomo/settings" -o /tmp/p65-settings.html
 echo "########## 1. 页面里每行的小锁（config.yaml 的键才有） ##########"
 python3 - <<'PY'
 import io, re
+# 注意：小锁是 JS 现挂的，静态 HTML 里看不到；这里量的是「服务端渲染出来的清单」
 t = io.open('/tmp/p65-settings.html', encoding='utf-8').read()
-fields = re.findall(r'id="(mihomo\.[A-Za-z.]+)"', t)
+fields = sorted(set(re.findall(r'id="(mihomo\.[A-Za-z.]+)"', t)))
 no_switch = re.findall(r"const ALWAYS_OWNED = \('([^']*)'", t)
+no_switch = [f for f in no_switch[0].split(',') if f] if no_switch else []
 fixed = re.findall(r"const FIXED = \{\};[\s\S]{0,140}?\('([^']*)'", t)
-locks = len(re.findall(r'class="mihomo-switch"', t))
-pins = len(re.findall(r'mihomo-fixed-icon', t))
-boxes = len(re.findall(r'data-managed-for="[^"]*"><input type="checkbox"', t))
-print('  表单字段 %d 个' % len(set(fields)))
-print('  小锁 %d 把（每行 config.yaml 的键一把）、图钉 %d 枚、旧复选框 %d 个' % (locks, pins, boxes))
-print('  没有锁的字段:', no_switch[0] if no_switch else '(渲染失败)')
+with_lock = [f for f in fields if f not in no_switch]
+print('  表单字段 %d 个；有小锁的 %d 个；没有小锁的 %d 个' % (len(fields), len(with_lock), len(no_switch)))
+print('  没有小锁的字段:', ','.join(no_switch) if no_switch else '(渲染失败)')
 print('  写死的项  :', fixed[0] if fixed else '(渲染失败)')
-print('  小锁 CSS 在:', '是' if '.mihomo-switch' in t else '否')
+print('  小锁样式在:', '是' if '.mihomo-switch' in t else '否')
 PY
 
 echo
