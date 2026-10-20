@@ -295,6 +295,9 @@ msgstr "仅国外"
 msgid "Foreign: domestic traffic stays direct. All: everything through the proxy group."
 msgstr "仅国外：国内直连，国外走所选出口；全部：所有流量都走所选出口。"
 
+msgid "General"
+msgstr "常规"
+
 msgid "Group and member are required."
 msgstr "需要提供分组与节点名称。"
 
@@ -340,6 +343,9 @@ msgstr "项目"
 msgid "Keep the TUN device above other default routes."
 msgstr "保持 TUN 设备优先于其它默认路由。"
 
+msgid "Leave alone: the page value is not written to the file."
+msgstr "不修改：页面上的值不会写入文件。"
+
 msgid "Leave alone: the plugin never writes this item, the file keeps whatever you wrote. Click to let the plugin write it here."
 msgstr "不修改：插件不碰这一项，文件里怎么写就怎么用；点一下改为「由插件写入」。"
 
@@ -354,6 +360,9 @@ msgstr "是否让内核处理 IPv6 流量。"
 
 msgid "Let the core handle IPv6. Off = IPv6 traffic stays on the normal route (current design)."
 msgstr "让内核处理 IPv6 流量。关闭 = IPv6 照常走普通线路（当前设计如此）。"
+
+msgid "Listening ports"
+msgstr "监听端口"
 
 msgid "Loading …"
 msgstr "加载中 …"
@@ -396,6 +405,9 @@ msgstr "已切换到 %s 模式。"
 
 msgid "No DNS listener: set a DNS server that this interface can reach."
 msgstr "没有 DNS 监听者：请给客户端指定一个能访问到的 DNS 服务器。"
+
+msgid "No differences: the page matches the configuration file."
+msgstr "没有差异：页面与配置文件一致。"
 
 msgid "No interface is bound to mihomo: DNS on all interfaces is handled by Unbound or by the clients themselves."
 msgstr "没有接口绑定到 mihomo：所有接口的 DNS 都由 Unbound 或客户端自己处理。"
@@ -457,8 +469,17 @@ msgstr "只劫持了 UDP 53。加上 tcp://any:53 才能同时覆盖 TCP DNS。"
 msgid "Optional. Empty uses the interface network."
 msgstr "可留空，默认使用接口网段。"
 
+msgid "Other"
+msgstr "其他"
+
 msgid "POST required."
 msgstr "需要 POST 请求。"
+
+msgid "Page and file differ."
+msgstr "页面与文件不一致。"
+
+msgid "Page and file match."
+msgstr "页面与文件一致。"
 
 msgid "Pick an interface, e.g. lan or opt2."
 msgstr "请选择接口，例如 lan 或 opt2。"
@@ -586,6 +607,9 @@ msgstr "已从当前配置导入设置。"
 msgid "Settings saved"
 msgstr "设置已保存"
 
+msgid "Show differences only"
+msgstr "只看差异"
+
 msgid "Stack"
 msgstr "协议栈"
 
@@ -597,6 +621,9 @@ msgstr "开机时启动服务。"
 
 msgid "Starting the service will insert routes for all IPv4 traffic into the TUN device. If the proxy nodes are not reachable or not configured, every device behind this firewall loses Internet access."
 msgstr "启动服务会把所有 IPv4 流量的路由指向 TUN 设备。若节点不可达或尚未配置，本机后面所有设备都会失去网络。"
+
+msgid "Status"
+msgstr "状态"
 
 msgid "Strict Route"
 msgstr "严格路由"
@@ -705,6 +732,9 @@ msgstr "控制器只监听 127.0.0.1，网络侧访问不到；只有把它绑�
 
 msgid "The firewall rules written by this attempt have been removed, so nothing is bound."
 msgstr "本次写入的防火墙规则已撤销，当前没有任何接口被绑定。"
+
+msgid "The key is missing from the file; the core uses its default value."
+msgstr "文件里没有这个键，内核使用默认值。"
 
 msgid "The page and the file disagree on %d item(s), but those are still set to \"leave alone\", so the file keeps its own values: %s — clear \"leave alone\" on them to write the page values, or press Import to load the file values into the page."
 msgstr "有 %d 项页面和文件对不上，但它们还是「不修改」，所以文件里保持原样：%s —— 想让页面说了算就把它们的勾去掉；想用文件里的值刷新页面就点「从配置导入」。"
@@ -855,9 +885,6 @@ msgstr "fake-ip 返回合成地址；redir-host 返回真实地址。"
 
 msgid "in effect"
 msgstr "生效中"
-
-msgid "leave alone"
-msgstr "不修改"
 
 msgid "mihomo DNS is only used on interfaces whose traffic is policy-routed into the TUN device. Other interfaces keep using Unbound. Plain DNS on port 53 is hijacked; DoH/DoT and IPv6 DNS are not."
 msgstr "只有流量被策略路由进 TUN 的接口才会使用 mihomo DNS；其它接口仍由 Unbound 解析。这里只劫持 53 端口的明文 DNS，DoH/DoT 与 IPv6 DNS 不在其中。"

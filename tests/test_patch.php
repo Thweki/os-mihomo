@@ -343,6 +343,9 @@ check('对照：tun 子对象运行值', ($byKey['tun.enable']['runtime'] ?? '')
 check('对照：密钥不外泄', ($byKey['secret']['file'] ?? '') !== '"abc123"'
     && ($byKey['secret']['model'] ?? '') !== 'abc123', (string)($byKey['secret']['file'] ?? '?'));
 check('对照：密钥被识别为已设置', ($byKey['secret']['state'] ?? '') === Inspector::STATE_MATCH);
+check('对照：分组键', ($byKey['tun.enable']['group'] ?? '') === 'tun'
+    && ($byKey['mixed-port']['group'] ?? '') === 'ports', (string)($byKey['tun.enable']['group'] ?? '?'));
+check('对照：分组标题', ($byKey['dns.enable']['group_label'] ?? '') !== '');
 
 echo "\n=== 15. 设置项「不修改」开关 ===\n";
 $managed = [

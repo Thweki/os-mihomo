@@ -199,7 +199,6 @@ TRANSLATIONS: dict[str, str] = {
     'TUN mode is off: the bindings below stay inactive until it is on. Enable it in Settings.':
         'TUN 模式关着：下面的绑定在它打开之前都不会生效。到「设置」里打开再回来。',
     # ---- 「不修改」开关（P18）----
-    'leave alone': '不修改',
     'Written by the plugin: on Apply the value above is written into the file. Click to leave the file alone instead.':
         '由插件写入：点「应用」时按上面的值改配置文件；点一下改为「不修改」。',
     'Leave alone: the plugin never writes this item, the file keeps whatever you wrote. Click to let the plugin write it here.':
@@ -233,6 +232,16 @@ TRANSLATIONS: dict[str, str] = {
     'different': '不一致',
     'not in file': '文件未写',
     'running only': '仅运行值',
+    'General': '常规',
+    'Other': '其他',
+    'Listening ports': '监听端口',
+    'Status': '状态',
+    'Show differences only': '只看差异',
+    'Page and file match.': '页面与文件一致。',
+    'Page and file differ.': '页面与文件不一致。',
+    'The key is missing from the file; the core uses its default value.': '文件里没有这个键，内核使用默认值。',
+    'Leave alone: the page value is not written to the file.': '不修改：页面上的值不会写入文件。',
+    'No differences: the page matches the configuration file.': '没有差异：页面与配置文件一致。',
     'Mixed port': '混合端口',
     'SOCKS port': 'SOCKS 端口',
     '(set, hidden)': '（已设置）',

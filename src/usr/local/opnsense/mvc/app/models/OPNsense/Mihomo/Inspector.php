@@ -43,10 +43,23 @@ class Inspector
         'external-ui-url',
     ];
 
+    /** 对照分组：机器键 => 界面标题（运行期取 gettext，跟随当前语言） */
+    private static function groups(): array
+    {
+        return [
+            'general' => gettext('General'),
+            'tun' => 'TUN',
+            'dns' => 'DNS',
+            'other' => gettext('Other'),
+            'ports' => gettext('Listening ports'),
+        ];
+    }
+
     /** 对照项定义。
      *
      * key   = YAML 里的路径（点号分层）
      * label = 界面上的名字（与设置页表单标签保持一致，直接复用已有译文）
+     * group = 界面分组（groups() 的键）
      * secret= 该行是敏感值，只显示"已设置/空"
      * run   = 运行值（内核 /configs）的取法：
      *         ['flat', 键] 顶层字段；['tun', 键] tun 子对象；['probe', 说明] 用探针推断
@@ -55,23 +68,23 @@ class Inspector
     private static function items(): array
     {
         return [
-            ['key' => 'log-level', 'label' => gettext('Log Level'), 'run' => ['flat', 'log-level']],
-            ['key' => 'mode', 'label' => gettext('Mode'), 'run' => ['flat', 'mode']],
-            ['key' => 'allow-lan', 'label' => gettext('Allow LAN'), 'run' => ['flat', 'allow-lan']],
-            ['key' => 'external-controller', 'label' => gettext('External Controller'), 'run' => ['controller', '']],
-            ['key' => 'secret', 'label' => gettext('Secret'), 'secret' => true, 'run' => ['auth', '']],
-            ['key' => 'tun.enable', 'label' => gettext('TUN Mode'), 'run' => ['tun', 'enable']],
-            ['key' => 'tun.device', 'label' => gettext('Device Name'), 'run' => ['tun', 'device']],
-            ['key' => 'tun.stack', 'label' => gettext('Stack'), 'run' => ['tun', 'stack']],
-            ['key' => 'tun.auto-route', 'label' => gettext('Automatic Route'), 'run' => ['tun', 'auto-route']],
-            ['key' => 'tun.strict-route', 'label' => gettext('Strict Route')],
-            ['key' => 'tun.mtu', 'label' => gettext('MTU'), 'run' => ['tun', 'mtu']],
-            ['key' => 'dns.enable', 'label' => gettext('DNS Module'), 'run' => ['dns-probe', 'enable']],
-            ['key' => 'dns.listen', 'label' => gettext('Listen Address'), 'run' => ['dns-probe', 'listen']],
-            ['key' => 'dns.enhanced-mode', 'label' => gettext('Enhanced Mode')],
-            ['key' => 'dns.ipv6', 'label' => gettext('DNS over IPv6')],
-            ['key' => 'ipv6', 'label' => gettext('IPv6 handling'), 'run' => ['flat', 'ipv6']],
-            ['key' => 'sniffer.enable', 'label' => gettext('Domain sniffing'), 'run' => ['flat', 'sniffing']],
+            ['key' => 'log-level', 'label' => gettext('Log Level'), 'group' => 'general', 'run' => ['flat', 'log-level']],
+            ['key' => 'mode', 'label' => gettext('Mode'), 'group' => 'general', 'run' => ['flat', 'mode']],
+            ['key' => 'allow-lan', 'label' => gettext('Allow LAN'), 'group' => 'general', 'run' => ['flat', 'allow-lan']],
+            ['key' => 'external-controller', 'label' => gettext('External Controller'), 'group' => 'general', 'run' => ['controller', '']],
+            ['key' => 'secret', 'label' => gettext('Secret'), 'group' => 'general', 'secret' => true, 'run' => ['auth', '']],
+            ['key' => 'tun.enable', 'label' => gettext('TUN Mode'), 'group' => 'tun', 'run' => ['tun', 'enable']],
+            ['key' => 'tun.device', 'label' => gettext('Device Name'), 'group' => 'tun', 'run' => ['tun', 'device']],
+            ['key' => 'tun.stack', 'label' => gettext('Stack'), 'group' => 'tun', 'run' => ['tun', 'stack']],
+            ['key' => 'tun.auto-route', 'label' => gettext('Automatic Route'), 'group' => 'tun', 'run' => ['tun', 'auto-route']],
+            ['key' => 'tun.strict-route', 'label' => gettext('Strict Route'), 'group' => 'tun'],
+            ['key' => 'tun.mtu', 'label' => gettext('MTU'), 'group' => 'tun', 'run' => ['tun', 'mtu']],
+            ['key' => 'dns.enable', 'label' => gettext('DNS Module'), 'group' => 'dns', 'run' => ['dns-probe', 'enable']],
+            ['key' => 'dns.listen', 'label' => gettext('Listen Address'), 'group' => 'dns', 'run' => ['dns-probe', 'listen']],
+            ['key' => 'dns.enhanced-mode', 'label' => gettext('Enhanced Mode'), 'group' => 'dns'],
+            ['key' => 'dns.ipv6', 'label' => gettext('DNS over IPv6'), 'group' => 'dns'],
+            ['key' => 'ipv6', 'label' => gettext('IPv6 handling'), 'group' => 'other', 'run' => ['flat', 'ipv6']],
+            ['key' => 'sniffer.enable', 'label' => gettext('Domain sniffing'), 'group' => 'other', 'run' => ['flat', 'sniffing']],
         ];
     }
 
@@ -79,8 +92,8 @@ class Inspector
     private static function runtimeOnlyItems(): array
     {
         return [
-            ['key' => 'mixed-port', 'label' => gettext('Mixed port'), 'run' => ['flat', 'mixed-port']],
-            ['key' => 'socks-port', 'label' => gettext('SOCKS port'), 'run' => ['flat', 'socks-port']],
+            ['key' => 'mixed-port', 'label' => gettext('Mixed port'), 'group' => 'ports', 'run' => ['flat', 'mixed-port']],
+            ['key' => 'socks-port', 'label' => gettext('SOCKS port'), 'group' => 'ports', 'run' => ['flat', 'socks-port']],
         ];
     }
 
@@ -302,6 +315,8 @@ class Inspector
     {
         $key = $item['key'];
         $secret = (bool)($item['secret'] ?? false);
+        $groupKey = (string)($item['group'] ?? 'other');
+        $groups = self::groups();
 
         /* 只在运行态出现的键（mixed-port / ipv6…）：页面管不到，不参与"页面 vs 文件"判定 */
         $modelValue = array_key_exists($key, $model) ? (string)$model[$key] : null;
@@ -348,6 +363,8 @@ class Inspector
         return [
             'key' => $key,
             'label' => $item['label'],
+            'group' => $groupKey,
+            'group_label' => $groups[$groupKey] ?? $groups['other'],
             'model' => $modelValue === null ? '' : (string)$modelValue,
             'file' => $fileValue === null ? gettext('(not set in the file)') : (string)$fileValue,
             'runtime' => $runtimeValue === null ? '' : (string)$runtimeValue,
@@ -377,17 +394,21 @@ class Inspector
 
         $differs = 0;
         $missing = 0;
+        $match = 0;
         foreach ($rows as $row) {
             if ($row['state'] === self::STATE_DIFFERS) {
                 $differs++;
             } elseif ($row['state'] === self::STATE_MISSING) {
                 $missing++;
+            } elseif ($row['state'] === self::STATE_MATCH) {
+                $match++;
             }
         }
 
         return [
             'status' => 'ok',
             'rows' => $rows,
+            'match' => $match,
             'differs' => $differs,
             'missing' => $missing,
             'runtime' => $runtime,

@@ -280,19 +280,13 @@
             });
         });
 
-        /* ---------------------------------------------------------------- *
-         * 「配置文件」标签页
-         * ---------------------------------------------------------------- */
         /* ------------------------------------------------------------------ *
-         * 配置对照：页面值 / 文件值 / 运行值（只读）
+         * DNS 状态：mihomo DNS / 53 劫持 / 各接口的客户端 DNS 去向（只读）
          * ------------------------------------------------------------------ */
         function escapeHtml(text) {
             return $('<div>').text(text === undefined || text === null ? '' : String(text)).html();
         }
 
-        /* ------------------------------------------------------------------ *
-         * DNS 状态：mihomo DNS / 53 劫持 / 各接口的客户端 DNS 去向（只读）
-         * ------------------------------------------------------------------ */
         function dnsBadge(kind, text) {
             const map = {
                 'ok': 'label-success',
@@ -421,38 +415,158 @@
             $('#dnsStatusTab').tab('show');
         }
 
-        function renderCompare(data) {
-            const $body = $('#compare-body').empty();
+        /* ------------------------------------------------------------------ *
+         * 配置对照：页面值 / 文件值 / 运行值（只读，按组排列）
+         * ------------------------------------------------------------------ */
+        const COMPARE_GROUP_ICONS = {
+            'general': 'fa-sliders',
+            'tun': 'fa-exchange',
+            'dns': 'fa-globe',
+            'other': 'fa-ellipsis-h',
+            'ports': 'fa-server'
+        };
+        let compareCache = null;
+        let compareCacheStatus = 'success';
 
-            (data['rows'] || []).forEach(function (row) {
-                let badge;
-                if (row['runtime_only']) {
-                    badge = '<span class="label label-default">{{ lang._('running only') }}</span>';
-                } else if (row['state'] === 'differs') {
-                    badge = '<span class="label label-warning">{{ lang._('different') }}</span>';
-                } else if (row['state'] === 'missing') {
-                    badge = '<span class="label label-default">{{ lang._('not in file') }}</span>';
-                } else {
-                    badge = '<span class="label label-success">{{ lang._('consistent') }}</span>';
+        function compareState(row) {
+            if (row['runtime_only']) {
+                return { kind: 'runtime', icon: 'fa-circle-o', label: '{{ lang._('running only') }}' };
+            }
+            if (row['state'] === 'differs') {
+                return { kind: 'differs', icon: 'fa-exclamation-circle text-warning', label: '{{ lang._('different') }}' };
+            }
+            if (row['state'] === 'missing') {
+                return { kind: 'missing', icon: 'fa-minus-circle text-muted', label: '{{ lang._('not in file') }}' };
+            }
+            return { kind: 'match', icon: 'fa-check-circle text-success', label: '{{ lang._('consistent') }}' };
+        }
+
+        function compareValueCell(value) {
+            const $cell = $('<td>').addClass('mihomo-compare-cell');
+            if (value === undefined || value === null || value === '') {
+                $cell.append($('<span>').addClass('text-muted').text('—'));
+            } else {
+                $cell.append($('<span>').addClass('mihomo-compare-value').text(value));
+            }
+            return $cell;
+        }
+
+        function setCompareCount(kind, value) {
+            $('#compare-count-' + kind).text(value);
+            $('#compare-count-' + kind).closest('.mihomo-compare-stat').toggleClass('is-zero', value === 0);
+        }
+
+        function renderCompare(data, status) {
+            compareCache = data;
+            compareCacheStatus = status;
+
+            const $body = $('#compare-body').empty();
+            const rows = (data && data['rows']) || [];
+            const ok = status === 'success' && data && data['status'] === 'ok';
+
+            if (!ok) {
+                $('#compare-count-match, #compare-count-differs, #compare-count-missing').text('—');
+                $body.append($('<tr>').addClass('mihomo-compare-empty').append(
+                    $('<td>').attr('colspan', 5).text((data && data['message']) || '—')
+                ));
+                return;
+            }
+
+            const counts = { 'match': 0, 'differs': 0, 'missing': 0 };
+            rows.forEach(function (row) {
+                if (!row['runtime_only'] && counts[row['state']] !== undefined) {
+                    counts[row['state']]++;
                 }
-                $('<tr>')
-                    .append($('<td>').html('<b>' + escapeHtml(row['label']) + '</b> ' + badge))
-                    .append($('<td>').html(escapeHtml(row['model'] || '—')
-                        + (row['managed'] === false
-                            ? ' <span class="label label-default">{{ lang._('leave alone') }}</span>'
-                            : '')))
-                    .append($('<td>').text(row['file'] || '—'))
-                    .append($('<td>').text(row['runtime'] || '—'))
-                    .appendTo($body);
             });
+            setCompareCount('match', counts.match);
+            setCompareCount('differs', counts.differs);
+            setCompareCount('missing', counts.missing);
+
+            $('#compare-runtime-dot')
+                .removeClass('fa-circle fa-circle-o text-success text-muted')
+                .addClass(data['runtime'] ? 'fa-circle text-success' : 'fa-circle-o text-muted')
+                .attr('title', data['runtime'] ? '{{ lang._('running') }}' : '{{ lang._('not running') }}');
+
+            const diffOnly = $('#compare-diff-only').prop('checked');
+            let visible = 0;
+            let group = null;
+
+            rows.forEach(function (row) {
+                if (diffOnly && (row['runtime_only'] || row['state'] === 'match')) {
+                    return;
+                }
+                const groupKey = row['group'] || 'other';
+                if (groupKey !== group) {
+                    group = groupKey;
+                    $body.append(
+                        $('<tr>').addClass('mihomo-compare-group').append(
+                            $('<td>').attr('colspan', 5)
+                                .append($('<i>').addClass('fa ' + (COMPARE_GROUP_ICONS[groupKey] || 'fa-th-large') + ' fa-fw').attr('aria-hidden', 'true'))
+                                .append($('<span>').text(row['group_label'] || '{{ lang._('Other') }}'))
+                        )
+                    );
+                }
+
+                const state = compareState(row);
+                const $tr = $('<tr>').addClass('mihomo-compare-row mihomo-compare-' + state.kind);
+                $tr.append(
+                    $('<td>').addClass('mihomo-compare-status')
+                        .attr('title', state.label)
+                        .html('<i class="fa ' + state.icon + ' fa-fw" aria-hidden="true"></i>')
+                );
+                $tr.append($('<td>').addClass('mihomo-compare-item').text(row['label']));
+
+                const $page = compareValueCell(row['model']);
+                if (row['managed'] === false) {
+                    $page.append(
+                        $('<i>').addClass('fa fa-lock mihomo-compare-lock')
+                            .attr('title', '{{ lang._('Leave alone: the page value is not written to the file.') }}')
+                            .attr('aria-hidden', 'true')
+                    );
+                }
+                $tr.append($page);
+                $tr.append(compareValueCell(row['file']));
+                $tr.append(compareValueCell(row['runtime']));
+                $body.append($tr);
+                visible++;
+            });
+
+            if (visible === 0) {
+                const emptyText = diffOnly
+                    ? '{{ lang._('No differences: the page matches the configuration file.') }}'
+                    : '—';
+                $body.append($('<tr>').addClass('mihomo-compare-empty').append(
+                    $('<td>').attr('colspan', 5).text(emptyText)
+                ));
+            }
         }
 
         function loadCompare() {
-            ajaxGet('/api/mihomo/settings/inspect', {}, renderCompare);
+            const $btn = $('#compare-refresh');
+            $btn.prop('disabled', true).find('i').addClass('fa-spin');
+            $('#compare-body').html(
+                '<tr class="mihomo-compare-empty"><td colspan="5">'
+                + '<i class="fa fa-spinner fa-spin fa-fw"></i> {{ lang._('Loading …') }}'
+                + '</td></tr>'
+            );
+            ajaxGet('/api/mihomo/settings/inspect', {}, function (data, status) {
+                $btn.prop('disabled', false).find('i').removeClass('fa-spin');
+                renderCompare(data, status);
+            });
         }
 
+        $('#compare-diff-only').change(function () {
+            if (compareCache !== null) {
+                renderCompare(compareCache, compareCacheStatus);
+            } else {
+                loadCompare();
+            }
+        });
         $('#compare-refresh').click(loadCompare);
         $('#compareTab').on('shown.bs.tab', loadCompare);
+        if (window.location.hash === '#compare') {
+            $('#compareTab').tab('show');
+        }
 
         /* ------------------------------------------------------------------ *
          * 原始配置编辑器
@@ -542,6 +656,171 @@
         overflow-wrap: normal;
         resize: vertical;
     }
+
+    /* ------------------------------------------------------------------ *
+     * 配置对照：固定列宽 + 分组 + 左侧状态色条
+     * 不画竖线，只保留极淡的横线；差异项才加色，避免整页都是彩色标签。
+     * ------------------------------------------------------------------ */
+    .mihomo-compare-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px;
+    }
+    .mihomo-compare-summary {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 0 -7px;
+    }
+    .mihomo-compare-stat {
+        display: inline-flex;
+        align-items: center;
+        margin: 0 7px;
+        font-size: 12px;
+        line-height: 20px;
+        white-space: nowrap;
+        opacity: .95;
+    }
+    .mihomo-compare-stat > i {
+        margin-right: 5px;
+    }
+    .mihomo-compare-stat b {
+        margin-left: 5px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+    .mihomo-compare-stat.is-zero {
+        opacity: .4;
+    }
+    .mihomo-compare-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 0 -6px;
+    }
+    .mihomo-compare-actions > * {
+        margin: 0 6px;
+    }
+    .mihomo-compare-actions .btn {
+        padding-top: 4px;
+        padding-bottom: 4px;
+    }
+    .mihomo-compare-filter {
+        font-weight: normal;
+        margin-bottom: 0;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+    .mihomo-compare-filter input {
+        margin: 0 4px 0 0;
+        vertical-align: -2px;
+    }
+    .mihomo-compare-table {
+        width: 100%;
+        min-width: 720px;
+        table-layout: fixed;
+        margin-bottom: 0;
+        border-bottom: 0;
+    }
+    .mihomo-compare-table > thead > tr > th {
+        padding: 8px 10px;
+        background-color: rgba(128, 128, 128, .045);
+        border-bottom: 1px solid rgba(128, 128, 128, .28);
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+    .mihomo-compare-table > thead > tr > th > i {
+        opacity: .5;
+    }
+    .mihomo-compare-table > tbody > tr > td {
+        padding: 8px 10px;
+        border-top: 1px solid rgba(128, 128, 128, .13);
+        vertical-align: top;
+        line-height: 1.5;
+    }
+    .mihomo-compare-col-state { width: 34px; }
+    .mihomo-compare-col-item { width: 21%; }
+    .mihomo-compare-col-page { width: 24%; }
+    .mihomo-compare-col-file { width: 24%; }
+    .mihomo-compare-state-col,
+    .mihomo-compare-status {
+        text-align: center;
+    }
+    .mihomo-compare-status i {
+        font-size: 13px;
+        opacity: .85;
+    }
+    .mihomo-compare-match .mihomo-compare-status i {
+        opacity: .38;
+    }
+    .mihomo-compare-item {
+        font-weight: 600;
+    }
+    .mihomo-compare-value {
+        font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+    .mihomo-compare-lock {
+        margin-left: 6px;
+        opacity: .45;
+        cursor: help;
+    }
+    .mihomo-compare-row:hover .mihomo-compare-lock {
+        opacity: .7;
+    }
+    .mihomo-compare-differs > td {
+        background-color: rgba(240, 173, 78, .065);
+    }
+    .mihomo-compare-differs > td:first-child {
+        box-shadow: inset 3px 0 0 #f0ad4e;
+    }
+    .mihomo-compare-missing > td:first-child {
+        box-shadow: inset 3px 0 0 rgba(128, 128, 128, .55);
+    }
+    .mihomo-compare-group > td {
+        padding: 8px 10px;
+        background-color: rgba(128, 128, 128, .105);
+        border-top: 1px solid rgba(128, 128, 128, .18);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: .02em;
+        opacity: .9;
+    }
+    .mihomo-compare-group:first-child > td {
+        border-top: 0;
+    }
+    .mihomo-compare-table > tbody > tr.mihomo-compare-group:hover > td {
+        background-color: rgba(128, 128, 128, .105);
+    }
+    .mihomo-compare-group i {
+        margin-right: 6px;
+        opacity: .7;
+    }
+    .mihomo-compare-empty > td {
+        padding: 30px 10px !important;
+        text-align: center;
+        color: #999;
+    }
+    .mihomo-compare-runtime-dot {
+        margin-left: 4px;
+        font-size: 7px;
+        vertical-align: 1px;
+    }
+    @media (max-width: 767px) {
+        .mihomo-compare-toolbar {
+            display: block;
+        }
+        .mihomo-compare-actions {
+            margin-top: 8px;
+        }
+    }
 </style>
 
 <ul class="nav nav-tabs" role="tablist" id="maintabs">
@@ -605,22 +884,50 @@
         </div>
     </div>
     <div id="compare" class="tab-pane fade in">
-        <div style="padding: 12px 14px;">
-            <table class="table table-condensed table-hover" id="compare-table">
-                <thead>
-                <tr>
-                    <th style="width: 22%;">{{ lang._('Item') }}</th>
-                    <th style="width: 26%;">{{ lang._('WebGUI') }}</th>
-                    <th style="width: 26%;">{{ lang._('File (config.yaml)') }}</th>
-                    <th style="width: 26%;">{{ lang._('Running (memory)') }}</th>
-                </tr>
-                </thead>
-                <tbody id="compare-body"></tbody>
-            </table>
-            <div class="text-right">
-                <button class="btn btn-default btn-sm" id="compare-refresh" type="button">
-                    <i class="fa fa-refresh fa-fw"></i> {{ lang._('Refresh') }}
-                </button>
+        <div class="mihomo-compare">
+            <div class="mihomo-compare-toolbar">
+                <div class="mihomo-compare-summary">
+                    <span class="mihomo-compare-stat" title="{{ lang._('Page and file match.') }}">
+                        <i class="fa fa-check-circle text-success" aria-hidden="true"></i>{{ lang._('consistent') }}<b id="compare-count-match">—</b>
+                    </span>
+                    <span class="mihomo-compare-stat" title="{{ lang._('Page and file differ.') }}">
+                        <i class="fa fa-exclamation-circle text-warning" aria-hidden="true"></i>{{ lang._('different') }}<b id="compare-count-differs">—</b>
+                    </span>
+                    <span class="mihomo-compare-stat" title="{{ lang._('The key is missing from the file; the core uses its default value.') }}">
+                        <i class="fa fa-minus-circle text-muted" aria-hidden="true"></i>{{ lang._('not in file') }}<b id="compare-count-missing">—</b>
+                    </span>
+                </div>
+                <div class="mihomo-compare-actions">
+                    <label class="mihomo-compare-filter">
+                        <input type="checkbox" id="compare-diff-only"> {{ lang._('Show differences only') }}
+                    </label>
+                    <button class="btn btn-default btn-sm" id="compare-refresh" type="button">
+                        <i class="fa fa-refresh fa-fw"></i> {{ lang._('Refresh') }}
+                    </button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mihomo-compare-table" id="compare-table">
+                    <colgroup>
+                        <col class="mihomo-compare-col-state">
+                        <col class="mihomo-compare-col-item">
+                        <col class="mihomo-compare-col-page">
+                        <col class="mihomo-compare-col-file">
+                    </colgroup>
+                    <thead>
+                    <tr>
+                        <th class="mihomo-compare-state-col" scope="col" aria-label="{{ lang._('Status') }}"></th>
+                        <th scope="col">{{ lang._('Item') }}</th>
+                        <th scope="col"><i class="fa fa-desktop fa-fw" aria-hidden="true"></i> {{ lang._('WebGUI') }}</th>
+                        <th scope="col"><i class="fa fa-file-text-o fa-fw" aria-hidden="true"></i> {{ lang._('File (config.yaml)') }}</th>
+                        <th scope="col"><i class="fa fa-play-circle fa-fw" aria-hidden="true"></i> {{ lang._('Running (memory)') }}
+                            <span id="compare-runtime-dot" class="fa fa-circle-o text-muted mihomo-compare-runtime-dot"
+                                  title="{{ lang._('not running') }}" aria-hidden="true"></span>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody id="compare-body"></tbody>
+                </table>
             </div>
         </div>
     </div>
