@@ -192,19 +192,16 @@
         const RECOMMENDED_DNS_UPSTREAM = 'default-nameserver:\n  - 223.5.5.5\n  - 119.29.29.29\nnameserver:\n  - https://dns.alidns.com/dns-query\n  - https://doh.pub/dns-query\nproxy-server-nameserver:\n  - 223.5.5.5\n  - 119.29.29.29\nnameserver-policy:\n  "geosite:private,cn":\n    - https://dns.alidns.com/dns-query\n    - https://doh.pub/dns-query\n  "geosite:gfw,geolocation-!cn":\n    - "https://dns.google/dns-query#RULES"\n    - "https://cloudflare-dns.com/dns-query#RULES"\nrespect-rules: true';
 
         /* DNS 上游文本框首次填充：模型里为空时，从当前 config.yaml 读取受管区块 */
-        function loadDnsUpstreamIntoForm() {
+        function loadDnsUpstreamIntoForm(done) {
             const el = document.getElementById('mihomo.dns.upstream');
-            if (!el) {
-                return;
-            }
+            if (!el) { done(); return; }
             el.placeholder = RECOMMENDED_DNS_UPSTREAM;
-            if (el.value) {
-                return;
-            }
+            if (el.value) { done(); return; }
             ajaxGet('/api/mihomo/settings/dns_upstream', {}, function (data, status) {
                 if (status === 'success' && data['status'] === 'ok' && !el.value) {
-                    el.value = data['content'] || '';
+                    el.value = MihomoUI.decodeApiText(data['content']);
                 }
+                done();
             });
         }
 
@@ -224,6 +221,7 @@
                     $sw.attr('data-managed', '1');
                     applyLeaveAlone();
                     syncManagedHidden();
+                    updatePendingSettings();
                 });
             $(el).after($btn).after(
                 $('<div class="text-muted">').css('margin-top', '4px')
@@ -231,12 +229,59 @@
             );
         }
 
+        let formBaseline = null;
+        function formValues() {
+            const values = {};
+            $('#frm_Settings').find('input[id], select[id], textarea[id]').each(function () {
+                if (this.type === 'button' || this.type === 'submit' || this.type === 'search') { return; }
+                values[this.id] = this.type === 'checkbox' ? this.checked : $(this).val();
+            });
+            return values;
+        }
+        function formChanges() {
+            if (!formBaseline) { return []; }
+            const values = formValues();
+            return Object.keys(values).filter(key => JSON.stringify(values[key]) !== JSON.stringify(formBaseline[key]));
+        }
+        function updatePendingSettings() {
+            const changes = formChanges();
+            $('#settings-apply-group').toggleClass('hidden', !changes.length);
+            $('#reapplyAct').toggleClass('hidden', !!changes.length);
+            $('#applyAct, #reapplyAct').prop('disabled', formBaseline === null);
+            $('#settings-pending-count').text(String(changes.length));
+        }
+        function captureFormBaseline() { formBaseline = formValues(); updatePendingSettings(); }
+        $('#frm_Settings').on('input change', 'input, select, textarea', updatePendingSettings);
+        $('#discard-settings').click(function () { formBaseline = null; reloadForm(); });
+        $('#applyAct, #reapplyAct').click(function () {
+            if (!formBaseline) { return; }
+            const changes = formChanges();
+            const $preview = $('<div>');
+            if (changes.length) { $preview.append($('<p>').text({{ lang._('Apply writes all unlocked fields and plugin settings. Review the changed fields below before continuing.') | json_encode }})); }
+            if (!changes.length) {
+                $preview.append($('<p>').text({{ lang._('Reapply the saved settings to retry an incomplete apply. All unlocked fields and plugin settings will be written again.') | json_encode }}));
+            }
+            const $list = $('<ul>');
+            changes.forEach(function (id) {
+                const label = id === MANAGED_INPUT ? {{ lang._('Write locks') | json_encode }}
+                    : $(document.getElementById(id)).closest('tr').find('.control-label').text().trim().replace(/\s+/g, ' ') || id;
+                $list.append($('<li>').text(label));
+            });
+            $preview.append($list);
+            if (changes.length && $('#restart-after-apply').prop('checked')) { $preview.append($('<p>').text({{ lang._('The service will restart after applying these settings.') | json_encode }})); }
+            BootstrapDialog.show({title: {{ lang._('Review changes') | json_encode }}, message: $preview, buttons: [
+                {label: {{ lang._('Cancel') | json_encode }}, action: dialog => dialog.close()},
+                {label: {{ lang._('Apply') | json_encode }}, cssClass: 'btn-primary', action: function (dialog) { dialog.close(); applySettings(); }}
+            ]});
+        });
+
         function reloadForm() {
+            $('#applyAct, #reapplyAct').prop('disabled', true);
             return mapDataToFormUI({ 'frm_Settings': '/api/mihomo/settings/get' }).done(function () {
                 formatTokenizersUI();
                 $('.selectpicker').selectpicker('refresh');
                 applyManagedFromModel();
-                loadDnsUpstreamIntoForm();
+                loadDnsUpstreamIntoForm(captureFormBaseline);
                 addDnsUpstreamTools();
             });
         }
@@ -253,29 +298,30 @@
             $sw.attr('data-managed', String($sw.attr('data-managed')) === '1' ? '0' : '1');
             applyLeaveAlone();
             syncManagedHidden();
+            updatePendingSettings();
         });
 
-        $('#applyAct').click(function () {
-            const $btn = $(this);
+        function applySettings() {
+            const $btn = $('#applyAct, #reapplyAct');
             $btn.prop('disabled', true);
             syncManagedHidden();
             saveFormToEndpoint('/api/mihomo/settings/set', 'frm_Settings', function () {
                 ajaxCall('/api/mihomo/settings/apply', {
-                    'restart': $('#restart-after-apply').prop('checked') ? 1 : 0
+                    'restart': formChanges().length && $('#restart-after-apply').prop('checked') ? 1 : 0
                 }, function (data) {
                     $btn.prop('disabled', false);
-                    if (data['status'] === 'ok') {
+                    if (data && data['status'] === 'ok') {
                         showResult(({{ lang._('Settings applied') | json_encode }}), (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_SUCCESS);
                         loadRawConfig();
                         reloadForm();
                     } else {
-                        showResult(({{ lang._('Apply failed') | json_encode }}), data['message'] || '', BootstrapDialog.TYPE_DANGER);
+                        showResult(({{ lang._('Apply failed') | json_encode }}), (data || {})['message'] || '', BootstrapDialog.TYPE_DANGER);
                     }
                 });
             }, true, function () {
                 $btn.prop('disabled', false);
             });
-        });
+        }
 
         $('#importAct').click(function () {
             ajaxCall('/api/mihomo/settings/import', {}, function (data) {
@@ -652,7 +698,7 @@
             ]});
         });
         window.addEventListener('beforeunload', function (event) {
-            if (rawLoaded && $('#config-editor').val() !== rawOriginal) { event.preventDefault(); event.returnValue = ''; }
+            if (formChanges().length || rawLoaded && $('#config-editor').val() !== rawOriginal) { event.preventDefault(); event.returnValue = ''; }
         });
 
         $('#config-test').click(function () {
@@ -986,11 +1032,16 @@
     <div class="alert content-box" style="margin-bottom: 0;">
         <div class="clearfix">
             <div class="pull-left">
+                <span id="settings-apply-group" class="hidden">
+                <span class="text-muted">{{ lang._('Changed fields') }}: <b id="settings-pending-count">0</b></span>
+                <button class="btn btn-default __mr" id="discard-settings" type="button">{{ lang._('Discard changes') }}</button>
                 <button class="btn btn-primary __mr" id="applyAct" type="button"><b>{{ lang._('Apply') }}</b></button>
-                <button class="btn btn-default __mr" id="importAct" type="button"><i class="fa fa-download fa-fw"></i> {{ lang._('Import from configuration file') }}</button>
                 <label style="font-weight: normal; margin: 0 10px 0 4px;">
                     <input type="checkbox" id="restart-after-apply"> {{ lang._('Restart the service after applying') }}
                 </label>
+                </span>
+                <button class="btn btn-default __mr" id="reapplyAct" type="button" disabled>{{ lang._('Reapply saved settings') }}</button>
+                <button class="btn btn-default __mr" id="importAct" type="button"><i class="fa fa-download fa-fw"></i> {{ lang._('Import from configuration file') }}</button>
             </div>
         </div>
     </div>

@@ -24,6 +24,13 @@ class DashboardController extends ApiControllerBase
 {
     use RequestParamsTrait;
 
+    public function runtimeStatusAction()
+    {
+        $raw = (new \OPNsense\Core\Backend())->configdRun('mihomo runtime-status');
+        $data = json_decode((string)$raw, true);
+        return is_array($data) ? $data : ['status' => 'failed'];
+    }
+
     /** 概览卡片 + 运行态摘要 */
     public function overviewAction()
     {

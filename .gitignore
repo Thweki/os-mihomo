@@ -39,6 +39,7 @@ images/
 /tests/*
 !/tests/test_patch.php
 !/tests/test_ui.js
+!/tests/test_runtime.php
 
 # Local configuration, credentials, captures and build outputs
 *.local.yaml

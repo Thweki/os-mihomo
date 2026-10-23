@@ -8,6 +8,17 @@
  # All rights reserved. 详见 models/OPNsense/Mihomo/Config.php 头部的 BSD 许可条款。
  #}
 {% set lang = mihomoLang %}
+<script src="{{ cache_safe('/js/mihomo/ui.js') }}"></script>
+<ul class="nav nav-tabs" id="routing-tabs" role="tablist">
+    <li class="active"><a href="#routing-current" data-toggle="tab">{{ lang._('Current forwarding') }}</a></li>
+    <li><a href="#routing-configuration" data-toggle="tab">{{ lang._('Policy configuration') }}</a></li>
+</ul>
+<div class="tab-content">
+    <div id="routing-current" class="tab-pane active">
+        {{ partial('OPNsense/Mihomo/network_status', ['network_id':'routing-network']) }}
+    </div>
+    <div id="routing-configuration" class="tab-pane">
+
 
 
 <script>
@@ -200,6 +211,10 @@
         });
 
         $('#refreshPolicyAct').click(loadState);
+        if (window.location.hash === '#routing-configuration') { $('#routing-tabs a[href="#routing-configuration"]').tab('show'); }
+        $('#routing-tabs a').on('shown.bs.tab', function (event) {
+            if ($(event.target).attr('href') === '#routing-configuration') { $(window).trigger('resize'); }
+        });
         loadState();
 
         /* ------------------------------------------------------------------ *
@@ -348,3 +363,6 @@
 </section>
 
 {{ partial("layout_partials/base_dialog",['fields':formDialogPolicyRule,'id':formGridPolicy['edit_dialog_id'],'label':lang._('Edit Policy Rule')])}}
+
+    </div>
+</div>

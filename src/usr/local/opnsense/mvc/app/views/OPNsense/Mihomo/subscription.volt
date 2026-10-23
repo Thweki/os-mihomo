@@ -19,10 +19,39 @@
             });
         }
 
+        let savedUrl = '', savedSecret = '', taskRunning = false, taskKnown = false;
+        function updateSubmitState() {
+            const changed = $('[id="mihomo.subscription.url"]').val() !== savedUrl || $('[id="mihomo.subscription.secret"]').val() !== savedSecret;
+            $('#saveAct').prop('disabled', !changed);
+            $('#runAct').prop('disabled', !taskKnown || taskRunning || changed || !savedUrl);
+            $('#subscription-edit-state').text(changed ? {{ lang._('Save subscription settings before submitting an update.') | json_encode }}
+                : !savedUrl ? {{ lang._('Set a subscription URL in Settings to enable updates.') | json_encode }} : '');
+        }
+        function refreshTask() {
+            ajaxGet('/api/mihomo/dashboard/runtime_status', {}, function (data, status) {
+                if (status !== 'success' || !data || data.status !== 'ok') { taskKnown = false; updateSubmitState(); $('#subscription-task-state').text({{ lang._('Status unavailable') | json_encode }}); return; }
+                taskKnown = true;
+                const task = data.subscription || {};
+                const states = {running: {{ lang._('Updating') | json_encode }}, success: {{ lang._('Last update succeeded') | json_encode }},
+                    failed: {{ lang._('Last update failed') | json_encode }}, incomplete: {{ lang._('Completion not recorded') | json_encode }},
+                    idle: {{ lang._('No task recorded') | json_encode }}, unknown: {{ lang._('No structured task record') | json_encode }}};
+                taskRunning = task.state === 'running';
+                $('#subscription-task-state').text(states[task.state] || {{ lang._('Status unavailable') | json_encode }});
+                $('#subscription-last-success').text(task.last_success || '—');
+                $('#subscription-last-finish').text(task.finished || '—');
+                $('#subscription-exit').text(task.exit_code === null || task.exit_code === undefined ? '—' : task.exit_code);
+                updateSubmitState();
+            });
+        }
+        $('[id="mihomo.subscription.url"], [id="mihomo.subscription.secret"]').on('input change', updateSubmitState);
+
         function loadSettings() {
             ajaxGet('/api/mihomo/subscription/get', {}, function (data) {
                 $('[id="mihomo.subscription.url"]').val(MihomoUI.decodeApiText(data['url']));
                 $('[id="mihomo.subscription.secret"]').val(MihomoUI.decodeApiText(data['secret']));
+                savedUrl = MihomoUI.decodeApiText(data['url']);
+                savedSecret = MihomoUI.decodeApiText(data['secret']);
+                updateSubmitState();
                 $('#env-file').text(data['envFile'] || '');
                 if (!data['scriptAvailable']) {
                     $('#sub-unavailable').show();
@@ -79,7 +108,8 @@
                         data['message'] || '',
                         data['status'] === 'ok' ? BootstrapDialog.TYPE_INFO : BootstrapDialog.TYPE_DANGER
                     );
-                    setTimeout(function () { refreshLogs(true); }, 1500);
+                    refreshTask();
+                    setTimeout(function () { refreshLogs(true); refreshTask(); }, 1500);
                 });
             };
 
@@ -105,11 +135,22 @@
         $('#refreshLogAct').click(function () { refreshLogs(true); });
 
         loadSettings();
+        refreshTask();
         refreshLogs(true);
-        setInterval(function () { refreshLogs(false); }, 5000);
+        setInterval(function () { if (!document.hidden) { refreshLogs(false); refreshTask(); } }, 5000);
     });
 </script>
 
+<div class="row"><section class="col-xs-12"><div class="content-box" style="padding:14px; margin-bottom:15px;">
+    <h4>{{ lang._('Subscription task') }}</h4>
+    <dl class="dl-horizontal" style="margin-bottom:10px;">
+        <dt>{{ lang._('Status') }}</dt><dd id="subscription-task-state" role="status">{{ lang._('Loading …') }}</dd>
+        <dt>{{ lang._('Last successful update') }}</dt><dd id="subscription-last-success">—</dd>
+        <dt>{{ lang._('Last completion') }}</dt><dd id="subscription-last-finish">—</dd>
+        <dt>{{ lang._('Exit code') }}</dt><dd id="subscription-exit">—</dd>
+    </dl>
+    <p class="text-muted">{{ lang._('Times use the device time zone. Results come from the retained task log; older records may have been rotated.') }}</p>
+</div></section></div>
 <div class="row">
     <section class="col-xs-12">
         <div id="sub-unavailable" class="alert alert-warning" style="display: none;">
@@ -147,9 +188,10 @@
                         <input type="password" id="mihomo.subscription.secret" class="form-control" size="30" autocomplete="off"
                                placeholder="{{ lang._('Enter dashboard access secret') }}">
                     </div>
+                    <p id="subscription-edit-state" class="text-muted" role="status" style="margin-top:10px;"></p>
                     <div style="margin-top: 12px;">
-                        <button type="button" class="btn btn-primary" id="saveAct"><i class="fa fa-save fa-fw"></i> {{ lang._('Save Settings') }}</button>
-                        <button type="button" class="btn btn-success" id="runAct"><i class="fa fa-refresh fa-fw"></i> {{ lang._('Update subscription') }}</button>
+                        <button type="button" class="btn btn-primary" id="saveAct" disabled><i class="fa fa-save fa-fw"></i> {{ lang._('Save Settings') }}</button>
+                        <button type="button" class="btn btn-success" id="runAct" disabled><i class="fa fa-refresh fa-fw"></i> {{ lang._('Update subscription') }}</button>
                         <label style="font-weight: normal; margin-left: 12px;">
                             <input type="checkbox" id="restart-after-update"> {{ lang._('Restart service after a successful update') }}
                         </label>

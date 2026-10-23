@@ -24,7 +24,7 @@ log() { printf '%s\n' "$*"; }
 [ -d "$STAGE" ] || { echo "staging tree missing: $STAGE" >&2; exit 2; }
 
 # UI-only deployment never touches runtime configuration, actions or services.
-if [ "${1:-}" = "--ui-only" ]; then
+if [ "${1:-}" = "--ui-only" ] || [ "${1:-}" = "--ui-readonly-status" ]; then
     mkdir -p "$BAK"
     LIST="$BAK/ui-files.txt"
     : > "$LIST"
@@ -36,6 +36,10 @@ if [ "${1:-}" = "--ui-only" ]; then
         [ -d "$STAGE/$tree" ] || { echo "missing UI tree: $tree" >&2; exit 2; }
         (cd "$STAGE" && find "$tree" -type f) >> "$LIST"
     done
+    if [ "${1:-}" = "--ui-readonly-status" ]; then
+        printf '%s\n' usr/local/opnsense/scripts/mihomo/runtime_status.php \
+            usr/local/opnsense/service/conf/actions.d/actions_mihomo.conf >> "$LIST"
+    fi
     while IFS= read -r rel; do
         case "$rel" in *.php) php -l "$STAGE/$rel" >/dev/null ;; esac
     done < "$LIST"
@@ -64,6 +68,13 @@ if [ "${1:-}" = "--ui-only" ]; then
             restore_ui; exit 1
         fi
     done < "$LIST"
+    if [ "${1:-}" = "--ui-readonly-status" ]; then
+        if ! service configd restart >/dev/null 2>&1; then
+            restore_ui
+            service configd restart >/dev/null 2>&1 || true
+            exit 1
+        fi
+    fi
     trap - 1 2 3 15
     echo "UI deployment complete; rollback backup: $BAK"
     exit 0
@@ -124,6 +135,7 @@ for rel in \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Logs.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Translator.php \
+    usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/RuntimeStatus.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/RequestParamsTrait.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Safety.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Subscription.php \
@@ -147,6 +159,7 @@ for rel in \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt \
+    usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt \
     usr/local/www/mihomo.php \
     usr/local/www/mihomo_sub.php \
     usr/local/www/mihomo_logs.php \
@@ -177,6 +190,7 @@ for rel in \
     usr/local/opnsense/scripts/mihomo/env.php \
     usr/local/opnsense/scripts/mihomo/logclear.php \
     usr/local/opnsense/scripts/mihomo/logtail.php \
+    usr/local/opnsense/scripts/mihomo/runtime_status.php \
     usr/local/opnsense/scripts/mihomo/service_enable.php \
     usr/local/opnsense/scripts/mihomo/setup_unbound.php \
     usr/local/opnsense/scripts/mihomo/subscription_run.sh \

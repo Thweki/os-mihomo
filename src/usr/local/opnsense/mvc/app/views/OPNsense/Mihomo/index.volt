@@ -87,6 +87,11 @@
          * 运行态概览
          * ------------------------------------------------------------------ */
         let gTrafficChart = null;
+        let processMemory = null;
+        $(document).on('mihomo:runtime', function (event, data) {
+            processMemory = data.process && data.process.rss > 0 ? data.process.rss : null;
+            $('#stat-memory').text(processMemory !== null ? fmtBytes(processMemory) : {{ lang._('Unavailable') | json_encode }});
+        });
         let storedHistory = [];
         try { storedHistory = JSON.parse(sessionStorage.getItem('mihomo.traffic.v1') || '[]'); } catch (error) { /* Optional cache. */ }
         const trafficHistory = new MihomoUI.TrafficHistory(storedHistory);
@@ -121,7 +126,7 @@
             $('#stat-connections').text(fmtCount(runtime['connections']));
             $('#stat-download').text(fmtBytes(runtime['downloadTotal']));
             $('#stat-upload').text(fmtBytes(runtime['uploadTotal']));
-            $('#stat-memory').text(runtime['memory'] > 0 ? fmtBytes(runtime['memory']) : {{ lang._('Unavailable') | json_encode }});
+            $('#stat-memory').text(processMemory !== null ? fmtBytes(processMemory) : {{ lang._('Unavailable') | json_encode }});
 
             if (controller['alive']) {
                 $('#mihomo-version').text(controller['version'] || '—');
@@ -421,7 +426,7 @@
         <div id="stat-rate-up" style="font-size:22px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere;">—</div>
     </div></div>
     <div class="col-sm-6 col-lg-3"><div class="content-box" style="padding:16px; min-height:100px; margin-bottom:15px;">
-        <div class="text-muted">{{ lang._('Memory') }}</div>
+        <div class="text-muted">{{ lang._('Process memory (RSS)') }}</div>
         <div id="stat-memory" style="font-size:22px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere;">—</div>
     </div></div>
 </div>
@@ -462,6 +467,8 @@
         </div>
     </section>
 </div>
+
+<div class="row"><section class="col-xs-12">{{ partial('OPNsense/Mihomo/network_status', ['network_id':'overview-network']) }}</section></div>
 
 <div class="row">
     <section class="col-xs-12">

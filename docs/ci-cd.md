@@ -2,7 +2,7 @@
 
 Every push, pull request and manual run executes `.github/workflows/ci.yml`:
 
-1. Check the publication file list, sample credentials, PHP syntax, XML, translation catalogs, JavaScript encoding, traffic calculations and maintained shell scripts.
+1. Check the publication file list, sample credentials, PHP syntax, XML, translation catalogs, JavaScript encoding, traffic calculations, read-only runtime parsers and maintained shell scripts.
 2. Build and inspect the package in an isolated FreeBSD 15.1 amd64 VM. Package hooks are not executed.
 3. Upload `os-mihomo.pkg`, `os-mihomo-repository.tar.gz`, `SHA256SUMS` and `package-files.txt`. Artifacts are retained for 14 days.
 

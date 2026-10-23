@@ -15,13 +15,15 @@ Open **VPN → Proxy Suite** after installation.
 
 | Page | Capabilities |
 | --- | --- |
-| Mihomo overview | Live rates, traffic totals, active connections, proxy group selection, latency tests, runtime mode and service status |
-| Settings | Native forms, per-field write controls, advanced options, YAML editing and validation, configuration comparison and DNS status |
-| Policy Routing | Interface-based scopes and proxy groups, change previews, network bindings, configuration history and restore |
-| Subscription | Submit subscription updates and follow their logs |
-| Log File | View, download and clear core or subscription logs |
+| Mihomo overview | Live rates, traffic totals, active connections, process memory, current forwarding, proxy groups, latency tests, runtime mode and service status |
+| Settings | Native forms, write locks, change previews and discard, reapply, advanced options, YAML editing and validation, configuration comparison and DNS status |
+| Policy Routing | Current forwarding and rule details; interface policies, change previews, network bindings, configuration history and restore |
+| Subscription | Submit updates; view task state, last success, exit code and execution logs |
+| Log File | Filter loaded lines, pause refresh, switch sources and line counts, download or clear logs |
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
+
+Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 

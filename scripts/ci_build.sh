@@ -13,7 +13,7 @@ VERSION="$version" sh scripts/make_repo.sh
 # Inspect archive without executing package hooks.
 pkg info -F dist/os-mihomo.pkg
 pkg info -F dist/os-mihomo.pkg -l > dist/package-files.txt
-for expected in Translator.php os-mihomo.mo ui.js config.yaml.sample mihomo.sample; do
+for expected in Translator.php RuntimeStatus.php runtime_status.php network_status.volt os-mihomo.mo ui.js config.yaml.sample mihomo.sample; do
     grep -q "$expected" dist/package-files.txt || { echo "Missing package file: $expected" >&2; exit 1; }
 done
 if grep -Eq '/(config.yaml|sub/env|sub/template_config.yaml|rc.conf.d/mihomo)$' dist/package-files.txt; then

@@ -74,6 +74,10 @@ msgstr ""
 msgid "All connections closed."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "All destination ports"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SettingsController.php src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
 msgid "Allow LAN"
 msgstr ""
@@ -86,12 +90,24 @@ msgstr ""
 msgid "Answer AAAA records. Turn off if the tunnel only carries IPv4."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Any direction"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Apply"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Apply failed"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Apply writes all unlocked fields and plugin settings. Review the changed fields below before continuing."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Auto refresh"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml
@@ -118,6 +134,10 @@ msgstr ""
 msgid "Chain"
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Changed fields"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
 msgid "Clear Log"
 msgstr ""
@@ -142,7 +162,11 @@ msgstr ""
 msgid "Close all"
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Completion not recorded"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Configuration comparison"
 msgstr ""
 
@@ -176,6 +200,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Safety.php
 msgid "Configuration syntax is valid"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Configured DNS path"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/DashboardController.php
@@ -228,6 +256,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/policy_rule.xml
 msgid "Create: the plugin creates the interface, gateway and firewall rule for this interface. Keep: you route the traffic yourself."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt
+msgid "Current forwarding"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml
@@ -290,6 +322,14 @@ msgstr ""
 msgid "Description"
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Destination and conditions"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Device"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml
 msgid "Device MTU."
 msgstr ""
@@ -308,6 +348,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Disabled"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Discard changes"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
@@ -398,6 +442,10 @@ msgstr ""
 msgid "Every item is set to \"leave alone\", so the configuration file was not touched."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Exit code"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SettingsController.php src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
 msgid "External Controller"
 msgstr ""
@@ -428,6 +476,14 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Fill recommended values"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Filter log"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Filter the loaded lines"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/policy_rule.xml
@@ -514,7 +570,11 @@ msgstr ""
 msgid "Import from configuration file"
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/policy_rule.xml src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Incoming"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/policy_rule.xml src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Interface"
 msgstr ""
 
@@ -558,12 +618,32 @@ msgstr ""
 msgid "Last 5 minutes"
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Last completion"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Last hour"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Last minute"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Last read"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Last successful update"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Last update failed"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Last update succeeded"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
@@ -602,7 +682,11 @@ msgstr ""
 msgid "Listening ports"
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Loaded PF rules are shown here. Rule order, exceptions and core policies still affect traffic. DNS paths describe the configuration, not a client query test."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
 msgid "Loading …"
 msgstr ""
 
@@ -634,7 +718,7 @@ msgstr ""
 msgid "Log source"
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
 msgid "Log updated"
 msgstr ""
 
@@ -646,7 +730,7 @@ msgstr ""
 msgid "MTU"
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Manual"
 msgstr ""
 
@@ -660,10 +744,6 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/RoutingController.php
 msgid "Manual: make sure the interface is policy routed into the TUN device."
-msgstr ""
-
-#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
-msgid "Memory"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Menu/Menu.xml
@@ -690,12 +770,28 @@ msgstr ""
 msgid "Network"
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Next hop"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
 msgid "No DNS listener: set a DNS server that this interface can reach."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "No TUN forwarding rules were observed in the loaded PF ruleset."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "No TUN rule observed"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "No differences: the page matches the configuration file."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "No interface data available."
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
@@ -704,6 +800,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
 msgid "No log entries yet."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "No matching log entries."
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
@@ -734,8 +834,20 @@ msgstr ""
 msgid "No rule would be generated: every row is disabled, has no source, or has no outbound selected."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "No structured task record"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "No task recorded"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Not applied"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Not confirmed"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
@@ -786,6 +898,14 @@ msgstr ""
 msgid "Other"
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Other rule scopes"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Outgoing"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/DashboardController.php src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/LogController.php src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/RoutingController.php src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SettingsController.php src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SubscriptionController.php
 msgid "POST required."
 msgstr ""
@@ -808,6 +928,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Menu/Menu.xml
 msgid "Policy Routing"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt
+msgid "Policy configuration"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
@@ -835,6 +959,14 @@ msgid "Preview limited to 100 lines per version."
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Process memory (RSS)"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Protocol"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Proxy Groups"
 msgstr ""
 
@@ -854,6 +986,18 @@ msgstr ""
 msgid "Proxy group name."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Read failed. The last result is retained."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Reapply saved settings"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Reapply the saved settings to retry an incomplete apply. All unlocked fields and plugin settings will be written again."
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Mihomo.xml
 msgid "Recover domains from TLS SNI, required for domain based rules on routed traffic."
 msgstr ""
@@ -862,7 +1006,7 @@ msgstr ""
 msgid "Recover domains from TLS SNI. Required for domain based rules on routed traffic."
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
 msgid "Refresh"
 msgstr ""
 
@@ -914,6 +1058,10 @@ msgstr ""
 msgid "Rule"
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Rule details"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Rule-based"
 msgstr ""
@@ -932,6 +1080,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
 msgid "Save failed"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Save subscription settings before submitting an update."
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SettingsController.php
@@ -998,6 +1150,10 @@ msgstr ""
 msgid "Set a subscription URL before starting an update."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Set a subscription URL in Settings to enable updates."
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Menu/Menu.xml src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Settings"
 msgstr ""
@@ -1026,7 +1182,7 @@ msgstr ""
 msgid "Size"
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/policy_rule.xml src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+#: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/policy_rule.xml src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
 msgid "Source"
 msgstr ""
 
@@ -1046,8 +1202,12 @@ msgstr ""
 msgid "Starting the service will insert routes for all IPv4 traffic into the TUN device. If the proxy nodes are not reachable or not configured, every device behind this firewall loses Internet access."
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
 msgid "Status"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Status unavailable"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SettingsController.php src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
@@ -1080,6 +1240,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SubscriptionController.php
 msgid "Subscription settings saved."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Subscription task"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SubscriptionController.php
@@ -1202,6 +1366,10 @@ msgstr ""
 msgid "The key is missing from the file; the core uses its default value."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "The loaded PF ruleset could not be read."
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SettingsController.php
 msgid "The page and the file disagree on %d item(s), but those are still set to \"leave alone\", so the file keeps its own values: %s — clear \"leave alone\" on them to write the page values, or press Import to load the file values into the page."
 msgstr ""
@@ -1226,6 +1394,10 @@ msgstr ""
 msgid "The service will be restarted right after the update, which rebuilds the TUN device and its routes. Make sure the new nodes work, otherwise clients behind this firewall may lose connectivity."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "The service will restart after applying these settings."
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
 msgid "The subscription script is not installed; subscription updates are unavailable."
 msgstr ""
@@ -1236,6 +1408,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Time range"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Times use the device time zone. Results come from the retained task log; older records may have been rotated."
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
@@ -1278,7 +1454,7 @@ msgstr ""
 msgid "Unable to write the staging file."
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
 msgid "Unavailable"
 msgstr ""
 
@@ -1320,6 +1496,14 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Mihomo.xml
 msgid "Update the subscription on a schedule."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Updated"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
+msgid "Updating"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
@@ -1380,6 +1564,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "WebGUI"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Write locks"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt
@@ -1573,4 +1761,3 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "…"
 msgstr ""
-

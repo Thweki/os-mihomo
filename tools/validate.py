@@ -37,11 +37,17 @@ def main():
             for script in re.findall(r'<script[^>]*>(.*?)</script>', text, re.S):
                 # Exercise quotes, Unicode, backslashes and line breaks in every JS translation.
                 script = re.sub(r'\{\{.*?\}\}', lambda match: json.dumps("L'été \"中文\" \\ line\nnext") if 'lang._' in match.group() else 'example', script, flags=re.S)
-                with tempfile.TemporaryDirectory() as directory:
+                scratch = (ROOT / 'work' / 'checks').resolve()
+                assert scratch.is_relative_to(ROOT.resolve())
+                scratch.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(dir=scratch) as directory:
+                    assert Path(directory).resolve().is_relative_to(scratch)
                     target = Path(directory) / 'view.js'
                     target.write_text(script, encoding='utf-8')
                     subprocess.run(['node', '--check', str(target)], check=True)
     subprocess.run(['node', str(ROOT / 'tests/test_ui.js')], check=True)
+    if not frontend:
+        subprocess.run(['php', str(ROOT / 'tests/test_runtime.php')], check=True)
     for path in [*(ROOT / name for name in ['build.sh', 'scripts/deploy.sh', 'scripts/rollback.sh', 'scripts/ci_build.sh', 'scripts/make_repo.sh']), *sorted((ROOT / 'packaging/freebsd').glob('+*INSTALL'))]:
         shell = shutil.which('sh') or ('C:/Program Files/Git/usr/bin/sh.exe' if sys.platform == 'win32' else 'sh')
         subprocess.run([shell, '-n', str(path)], check=True)

@@ -51,8 +51,14 @@ msgstr "高级配置"
 msgid "Age"
 msgstr "持续时间"
 
+msgid "All"
+msgstr ""
+
 msgid "All connections closed."
 msgstr "已关闭全部连接。"
+
+msgid "All destination ports"
+msgstr "全部目标端口"
 
 msgid "Allow LAN"
 msgstr "允许局域网"
@@ -63,11 +69,20 @@ msgstr "是否同时回答 AAAA（IPv6）解析。"
 msgid "Answer AAAA records. Turn off if the tunnel only carries IPv4."
 msgstr "是否回答 AAAA（IPv6）解析。隧道只有 IPv4 时建议关闭。"
 
+msgid "Any direction"
+msgstr "不限方向"
+
 msgid "Apply"
 msgstr "应用"
 
 msgid "Apply failed"
 msgstr "应用失败"
+
+msgid "Apply writes all unlocked fields and plugin settings. Review the changed fields below before continuing."
+msgstr "应用时会写入全部已解锁项和插件设置，请先核对以下改动。"
+
+msgid "Auto refresh"
+msgstr "自动刷新"
 
 msgid "Auto update"
 msgstr "自动更新"
@@ -87,8 +102,8 @@ msgstr "取消"
 msgid "Chain"
 msgstr "链路"
 
-msgid "Check these before starting the service"
-msgstr "启动服务前请先确认以下事项"
+msgid "Changed fields"
+msgstr "已改动项"
 
 msgid "Clear Log"
 msgstr "清空日志"
@@ -108,8 +123,8 @@ msgstr "关闭"
 msgid "Close all"
 msgstr "全部断开"
 
-msgid "Configuration File"
-msgstr "配置文件"
+msgid "Completion not recorded"
+msgstr "未记录完成结果"
 
 msgid "Configuration comparison"
 msgstr "配置对照"
@@ -122,9 +137,6 @@ msgstr "配置文件 %s 不存在，请先安装插件。"
 
 msgid "Configuration file is missing"
 msgstr "配置文件缺失"
-
-msgid "Configuration file not found."
-msgstr "未找到配置文件。"
 
 msgid "Configuration file updated: %d item(s) written — %s"
 msgstr "配置文件已更新，写入了 %d 项：%s"
@@ -141,6 +153,9 @@ msgstr "配置语法无效"
 msgid "Configuration syntax is valid"
 msgstr "配置语法有效"
 
+msgid "Configured DNS path"
+msgstr "DNS 配置路径"
+
 msgid "Connection closed."
 msgstr "连接已断开。"
 
@@ -156,11 +171,17 @@ msgstr "控制器端口。"
 msgid "Controller responded with HTTP code %s."
 msgstr "控制器返回 HTTP 状态码 %s。"
 
+msgid "Controller secret"
+msgstr "控制器密钥"
+
 msgid "Core log"
 msgstr "内核日志"
 
 msgid "Core version"
 msgstr "内核版本"
+
+msgid "Could not load the configuration. Try again."
+msgstr "配置读取失败，请重试。"
 
 msgid "Could not read the log. Try refreshing."
 msgstr "日志读取失败，请刷新重试。"
@@ -173,6 +194,12 @@ msgstr "创建定时任务执行订阅更新。"
 
 msgid "Create: the plugin creates the interface, gateway and firewall rule for this interface. Keep: you route the traffic yourself."
 msgstr "创建：由插件创建该接口对应的接口、网关与防火墙规则；不创建：路由由你自己处理。"
+
+msgid "Current forwarding"
+msgstr "当前转发"
+
+msgid "DNS"
+msgstr ""
 
 msgid "DNS Module"
 msgstr "DNS 模块"
@@ -210,8 +237,23 @@ msgstr "DNS 上游 YAML 只能用空格缩进，不能用制表符。"
 msgid "DNS upstream options"
 msgstr "DNS 上游选项"
 
+msgid "Daily"
+msgstr ""
+
+msgid "Description"
+msgstr ""
+
+msgid "Destination and conditions"
+msgstr "目标与条件"
+
+msgid "Device"
+msgstr "设备"
+
 msgid "Device MTU."
 msgstr "设备 MTU。"
+
+msgid "Device Name"
+msgstr ""
 
 msgid "Diff"
 msgstr "差异"
@@ -221,6 +263,9 @@ msgstr "直连"
 
 msgid "Disabled"
 msgstr "已禁用"
+
+msgid "Discard changes"
+msgstr "放弃更改"
 
 msgid "Discard the unsaved YAML changes?"
 msgstr "放弃尚未保存的 YAML 更改？"
@@ -236,9 +281,6 @@ msgstr "域名嗅探"
 
 msgid "Download"
 msgstr "下载"
-
-msgid "Download / Upload"
-msgstr "下载 / 上传"
 
 msgid "Download and upload rates"
 msgstr "下载与上传速率"
@@ -260,9 +302,6 @@ msgstr "编辑 YAML"
 
 msgid "Edit the full configuration here. DNS upstream options are available in the advanced form."
 msgstr "在此编辑完整配置；DNS 上游选项也可在高级表单中设置。"
-
-msgid "Enable mihomo"
-msgstr "启用 mihomo"
 
 msgid "Enabled"
 msgstr "启用"
@@ -294,6 +333,9 @@ msgstr "每 6 小时"
 msgid "Every item is set to \"leave alone\", so the configuration file was not touched."
 msgstr "所有项都是「不修改」，配置文件保持原样。"
 
+msgid "Exit code"
+msgstr "退出码"
+
 msgid "External Controller"
 msgstr "外部控制器"
 
@@ -318,14 +360,17 @@ msgstr "文件（config.yaml）"
 msgid "Fill recommended values"
 msgstr "填入推荐值"
 
+msgid "Filter log"
+msgstr "筛选日志"
+
+msgid "Filter the loaded lines"
+msgstr "在已读取的日志中查找"
+
 msgid "Firewall rule"
 msgstr "防火墙规则"
 
 msgid "Firewall rules could not be updated: %s"
 msgstr "防火墙规则未能更新：%s"
-
-msgid "Fix these before starting the service"
-msgstr "启动服务前请先修正以下问题"
 
 msgid "Fixed (gvisor): the combination verified on FreeBSD."
 msgstr "固定为 gvisor：FreeBSD 上验证过的组合。"
@@ -366,6 +411,9 @@ msgstr "定时任务的执行频率。"
 msgid "ID"
 msgstr "标识"
 
+msgid "IPv6"
+msgstr ""
+
 msgid "IPv6 handling"
 msgstr "IPv6 处理"
 
@@ -381,6 +429,9 @@ msgstr "导入失败"
 msgid "Import from configuration file"
 msgstr "从配置文件导入"
 
+msgid "Incoming"
+msgstr "入站"
+
 msgid "Interface"
 msgstr "接口"
 
@@ -392,6 +443,9 @@ msgstr "流量进入 mihomo 的物理接口。"
 
 msgid "Internal list of the page fields this plugin may write."
 msgstr "内部字段：允许本插件写入的页面项清单。"
+
+msgid "Interval"
+msgstr ""
 
 msgid "Invalid log level."
 msgstr "无效的日志层级。"
@@ -411,11 +465,26 @@ msgstr "最近 15 分钟"
 msgid "Last 5 minutes"
 msgstr "最近 5 分钟"
 
+msgid "Last completion"
+msgstr "最近完成时间"
+
 msgid "Last hour"
 msgstr "最近 1 小时"
 
 msgid "Last minute"
 msgstr "最近 1 分钟"
+
+msgid "Last read"
+msgstr "最近读取"
+
+msgid "Last successful update"
+msgstr "最近成功时间"
+
+msgid "Last update failed"
+msgstr "最近更新失败"
+
+msgid "Last update succeeded"
+msgstr "最近更新成功"
 
 msgid "Leave alone: the page value is not written to the file."
 msgstr "不修改：页面上的值不会写入文件。"
@@ -444,6 +513,9 @@ msgstr "监听地址"
 msgid "Listening ports"
 msgstr "监听端口"
 
+msgid "Loaded PF rules are shown here. Rule order, exceptions and core policies still affect traffic. DNS paths describe the configuration, not a client query test."
+msgstr "此处展示已加载的 PF 规则，流量仍受规则顺序、例外条件和内核策略影响。DNS 路径来自当前配置，实际结果以客户端查询为准。"
+
 msgid "Loading …"
 msgstr "加载中 …"
 
@@ -452,6 +524,9 @@ msgstr "日志"
 
 msgid "Log File"
 msgstr "日志文件"
+
+msgid "Log Level"
+msgstr ""
 
 msgid "Log Viewer"
 msgstr "日志视图"
@@ -471,6 +546,9 @@ msgstr "日志已更新"
 msgid "Log verbosity. Use error or silent for long term operation."
 msgstr "日志级别；长期运行建议 error 或 silent。"
 
+msgid "MTU"
+msgstr ""
+
 msgid "Manual"
 msgstr "手动"
 
@@ -482,12 +560,6 @@ msgstr "手动策略路由：请自行确认 pf 已把这个接口的流量送�
 
 msgid "Manual: make sure the interface is policy routed into the TUN device."
 msgstr "手动模式：请自行确保该接口的策略路由指向 TUN 设备。"
-
-msgid "Memory"
-msgstr "内存占用"
-
-msgid "Memory / Core Version"
-msgstr "内存 / 内核版本"
 
 msgid "Mihomo"
 msgstr "Mihomo"
@@ -507,17 +579,32 @@ msgstr "已切换到 %s 模式。"
 msgid "Network"
 msgstr "网络"
 
+msgid "Next hop"
+msgstr "下一跳"
+
 msgid "No DNS listener: set a DNS server that this interface can reach."
 msgstr "没有 DNS 监听者：请给客户端指定一个能访问到的 DNS 服务器。"
 
+msgid "No TUN forwarding rules were observed in the loaded PF ruleset."
+msgstr "已加载的 PF 规则中未见 TUN 转发规则。"
+
+msgid "No TUN rule observed"
+msgstr "未见 TUN 规则"
+
 msgid "No differences: the page matches the configuration file."
 msgstr "没有差异：页面与配置文件一致。"
+
+msgid "No interface data available."
+msgstr "暂无接口数据。"
 
 msgid "No interface is bound to mihomo: DNS on all interfaces is handled by Unbound or by the clients themselves."
 msgstr "没有接口绑定到 mihomo：所有接口的 DNS 都由 Unbound 或客户端自己处理。"
 
 msgid "No log entries yet."
 msgstr "暂无日志。"
+
+msgid "No matching log entries."
+msgstr "没有匹配的日志。"
 
 msgid "No nameserver or nameserver-policy is configured: mihomo uses its default upstreams, which may not be pollution-resistant."
 msgstr "没有配置 nameserver 或 nameserver-policy：mihomo 会使用默认上游，未必能防污染。"
@@ -540,8 +627,17 @@ msgstr "配置中未定义代理分组。"
 msgid "No rule would be generated: every row is disabled, has no source, or has no outbound selected."
 msgstr "不会生成任何规则：所有行要么未启用、要么没有源、要么没有选出站。"
 
+msgid "No structured task record"
+msgstr "暂无可识别的任务记录"
+
+msgid "No task recorded"
+msgstr "暂无任务记录"
+
 msgid "Not applied"
 msgstr "未应用"
+
+msgid "Not confirmed"
+msgstr "尚未确认"
 
 msgid "Not policy-routed: Unbound answers DNS on this interface."
 msgstr "未走策略路由：这个接口的 DNS 由 Unbound 应答。"
@@ -579,6 +675,12 @@ msgstr "可留空，默认使用接口网段。"
 msgid "Other"
 msgstr "其他"
 
+msgid "Other rule scopes"
+msgstr "其他规则范围"
+
+msgid "Outgoing"
+msgstr "出站"
+
 msgid "POST required."
 msgstr "需要 POST 请求。"
 
@@ -597,6 +699,9 @@ msgstr "检测到占位节点"
 msgid "Policy Routing"
 msgstr "路由策略"
 
+msgid "Policy configuration"
+msgstr "策略配置"
+
 msgid "Policy routing"
 msgstr "策略路由"
 
@@ -606,11 +711,20 @@ msgstr "策略路由已启用"
 msgid "Policy routing is in place."
 msgstr "策略路由已就位。"
 
+msgid "Port"
+msgstr ""
+
 msgid "Preview"
 msgstr "预览"
 
 msgid "Preview limited to 100 lines per version."
 msgstr "每个版本最多预览 100 行。"
+
+msgid "Process memory (RSS)"
+msgstr "进程内存（RSS）"
+
+msgid "Protocol"
+msgstr "协议"
 
 msgid "Proxy Groups"
 msgstr "代理分组"
@@ -626,6 +740,15 @@ msgstr "代理组 \"%s\" 不在当前配置文件里。"
 
 msgid "Proxy group name."
 msgstr "代理组名。"
+
+msgid "Read failed. The last result is retained."
+msgstr "读取失败，仍显示上次结果。"
+
+msgid "Reapply saved settings"
+msgstr "重新应用"
+
+msgid "Reapply the saved settings to retry an incomplete apply. All unlocked fields and plugin settings will be written again."
+msgstr "若上次应用未完成，可重新应用已保存的设置。所有已解锁字段和插件设置都会再次写入。"
 
 msgid "Recover domains from TLS SNI, required for domain based rules on routed traffic."
 msgstr "从 TLS SNI 还原域名；被路由的流量要用域名规则时必须开启。"
@@ -672,6 +795,9 @@ msgstr "用虚拟网卡把流量导入 mihomo。"
 msgid "Rule"
 msgstr "命中规则"
 
+msgid "Rule details"
+msgstr "规则详情"
+
 msgid "Rule-based"
 msgstr "规则模式"
 
@@ -687,6 +813,9 @@ msgstr "保存设置"
 msgid "Save failed"
 msgstr "保存失败"
 
+msgid "Save subscription settings before submitting an update."
+msgstr "请先保存订阅设置，再提交更新。"
+
 msgid "Scheduled task could not be updated: %s"
 msgstr "定时任务更新失败：%s"
 
@@ -698,6 +827,9 @@ msgstr "定时任务已删除：订阅更新。"
 
 msgid "Scope"
 msgstr "规则范围"
+
+msgid "Secret"
+msgstr ""
 
 msgid "Secret written into the generated configuration."
 msgstr "写入生成配置的密钥。"
@@ -732,6 +864,9 @@ msgstr "服务将在开机时自动启动。"
 msgid "Set a subscription URL before starting an update."
 msgstr "请先设置订阅地址再执行更新。"
 
+msgid "Set a subscription URL in Settings to enable updates."
+msgstr "请先填写并保存订阅地址。"
+
 msgid "Settings"
 msgstr "设置"
 
@@ -759,8 +894,8 @@ msgstr "来源"
 msgid "Stack"
 msgstr "协议栈"
 
-msgid "Start Subscription"
-msgstr "开始订阅"
+msgid "Start at boot"
+msgstr "开机启动"
 
 msgid "Start the service at boot."
 msgstr "开机时启动服务。"
@@ -771,11 +906,17 @@ msgstr "启动服务会把所有 IPv4 流量的路由指向 TUN 设备。若节�
 msgid "Status"
 msgstr "状态"
 
+msgid "Status unavailable"
+msgstr "无法读取状态"
+
 msgid "Strict Route"
 msgstr "严格路由"
 
 msgid "Strict route is enabled"
 msgstr "已启用严格路由"
+
+msgid "Subscription"
+msgstr ""
 
 msgid "Subscription Management"
 msgstr "订阅管理"
@@ -791,6 +932,9 @@ msgstr "订阅日志"
 
 msgid "Subscription settings saved."
 msgstr "订阅设置已保存。"
+
+msgid "Subscription task"
+msgstr "订阅任务"
 
 msgid "Subscription task submitted; follow the log for progress."
 msgstr "订阅任务已提交，请查看日志了解进度。"
@@ -882,6 +1026,9 @@ msgstr "本次写入的防火墙规则已撤销，当前没有任何接口被绑
 msgid "The key is missing from the file; the core uses its default value."
 msgstr "文件里没有这个键，内核使用默认值。"
 
+msgid "The loaded PF ruleset could not be read."
+msgstr "无法读取已加载的 PF 规则。"
+
 msgid "The page and the file disagree on %d item(s), but those are still set to \"leave alone\", so the file keeps its own values: %s — clear \"leave alone\" on them to write the page values, or press Import to load the file values into the page."
 msgstr "有 %d 项页面和文件对不上，但它们还是「不修改」，所以文件里保持原样：%s —— 想让页面说了算就把它们的勾去掉；想用文件里的值刷新页面就点「从配置导入」。"
 
@@ -900,6 +1047,9 @@ msgstr "服务已停止，可用页面右上角的启动按钮将其拉起。"
 msgid "The service will be restarted right after the update, which rebuilds the TUN device and its routes. Make sure the new nodes work, otherwise clients behind this firewall may lose connectivity."
 msgstr "更新后会立即重启服务，这会重建 TUN 设备及其路由。请确认新节点可用，否则本机后面的客户端可能断网。"
 
+msgid "The service will restart after applying these settings."
+msgstr "应用这些设置后将重启服务。"
+
 msgid "The subscription script is not installed; subscription updates are unavailable."
 msgstr "未安装订阅脚本，无法执行订阅更新。"
 
@@ -909,8 +1059,8 @@ msgstr "时间"
 msgid "Time range"
 msgstr "时间范围"
 
-msgid "Total Downloaded / Uploaded"
-msgstr "累计下载 / 上传"
+msgid "Times use the device time zone. Results come from the retained task log; older records may have been rotated."
+msgstr "时间以设备时区为准。结果来自现存任务日志，较早记录可能已轮转。"
 
 msgid "Traffic"
 msgstr "流量趋势"
@@ -975,6 +1125,12 @@ msgstr "更新订阅"
 msgid "Update the subscription on a schedule."
 msgstr "按计划更新订阅。"
 
+msgid "Updated"
+msgstr "已更新"
+
+msgid "Updating"
+msgstr "正在更新"
+
 msgid "Updating the subscription rebuilds config.yaml from the subscription template, so manual edits are replaced. The current file is backed up as config.yaml.bak.sub_* first."
 msgstr "更新订阅会用订阅模板整份重写 config.yaml，手工改过的内容会被替换；更新前会自动备份成 config.yaml.bak.sub_*。"
 
@@ -1020,6 +1176,9 @@ msgstr "正在采集流量数据。"
 msgid "WebGUI"
 msgstr "页面（设置）"
 
+msgid "Write locks"
+msgstr "写入锁"
+
 msgid "Writes the mihomo configuration and, where needed, creates the interface, gateway and firewall rule on OPNsense. config.xml is backed up first."
 msgstr "写入 mihomo 配置；需要时在 OPNsense 上创建接口、网关和防火墙规则（先备份 config.xml）。"
 
@@ -1056,8 +1215,14 @@ msgstr "一致"
 msgid "current"
 msgstr "当前"
 
+msgid "debug"
+msgstr ""
+
 msgid "different"
 msgstr "不一致"
+
+msgid "direct"
+msgstr ""
 
 msgid "disabled"
 msgstr "已禁用"
@@ -1065,17 +1230,32 @@ msgstr "已禁用"
 msgid "domestic"
 msgstr "国内"
 
+msgid "error"
+msgstr ""
+
 msgid "exit IP"
 msgstr "出口 IP"
 
 msgid "external-controller is bound to %s. Anyone who can reach that address and knows the secret can reconfigure the proxy. Bind it to 127.0.0.1 — this WebGUI talks to the controller over the loopback interface only."
 msgstr "external-controller 绑定在 %s。任何能访问该地址并知道密钥的人都能改代理配置。建议改为 127.0.0.1 —— 本 WebGUI 只通过回环接口与控制器通信。"
 
+msgid "fake-ip"
+msgstr ""
+
 msgid "fake-ip returns synthetic addresses, redir-host returns real ones."
 msgstr "fake-ip 返回合成地址；redir-host 返回真实地址。"
 
+msgid "global"
+msgstr ""
+
+msgid "gvisor"
+msgstr ""
+
 msgid "in effect"
 msgstr "生效中"
+
+msgid "info"
+msgstr ""
 
 msgid "mihomo DNS is only used on interfaces whose traffic is policy-routed into the TUN device. Other interfaces keep using Unbound. Plain DNS on port 53 is hijacked; DoH/DoT and IPv6 DNS are not."
 msgstr "只有流量被策略路由进 TUN 的接口才会使用 mihomo DNS；其它接口仍由 Unbound 解析。这里只劫持 53 端口的明文 DNS，DoH/DoT 与 IPv6 DNS 不在其中。"
@@ -1092,6 +1272,9 @@ msgstr "mihomo 未运行：这个接口上的 DNS 会失败。"
 msgid "mihomo rules"
 msgstr "mihomo 规则"
 
+msgid "mixed"
+msgstr ""
+
 msgid "not checked (no secret)"
 msgstr "没设密钥，内核不校验"
 
@@ -1107,6 +1290,9 @@ msgstr "未运行"
 msgid "nothing bound"
 msgstr "未绑定任何接口"
 
+msgid "redir-host"
+msgstr ""
+
 msgid "rule"
 msgstr "规则"
 
@@ -1119,20 +1305,20 @@ msgstr "运行中"
 msgid "running only"
 msgstr "仅运行值"
 
+msgid "silent"
+msgstr ""
+
 msgid "stopped"
 msgstr "已停止"
+
+msgid "system"
+msgstr ""
 
 msgid "timeout"
 msgstr "超时"
 
+msgid "warning"
+msgstr ""
+
 msgid "…"
 msgstr "未知"
-
-msgid "Could not load the configuration. Try again."
-msgstr "配置读取失败，请重试。"
-
-msgid "Start at boot"
-msgstr "开机启动"
-
-msgid "Controller secret"
-msgstr "控制器密钥"
