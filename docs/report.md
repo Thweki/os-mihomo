@@ -1,5 +1,7 @@
 # os-mihomo WebUI 二次开发 — 交付报告
 
+> 2026-10-24 补充：[UI、实际功能与交互只读评估](ui-assessment-2026-10-24.md)。下文早期交付记录不代表当前运行状态；设备目前服务运行且自启为 YES，本轮评估前后实际设置指纹一致。
+
 > **一句话**：把上游 `Opnwall/OPNsense-repo:src/os-mihomo`（1.0.4，纯 legacy 过程式页面）的 WebUI
 > **重写为 OPNsense 原生 MVC 界面**并实机安装到 `192.168.1.1`，
 > 全程未触碰防火墙 / NAT / 路由 / DNS 配置，服务保持未启用状态。
