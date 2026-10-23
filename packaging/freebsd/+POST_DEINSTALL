@@ -1,0 +1,3 @@
+#!/bin/sh
+rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cache.json
+echo 'User configuration and network settings have been retained.'

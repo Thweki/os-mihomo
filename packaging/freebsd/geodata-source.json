@@ -1,0 +1,12 @@
+[
+  {
+    "file": "src/usr/local/etc/mihomo/GeoIP.dat",
+    "sha256": "83797719facc092e210f8f8e0e5e0b0bdfe06ac90a3a4a3d6a6ab2d781a917ae",
+    "url": "https://raw.githubusercontent.com/Opnwall/OPNsense-repo/f181fdc5432bdfbfe71e23d32401b1d5db2b6f61/src/os-mihomo/src/usr/local/etc/mihomo/GeoIP.dat"
+  },
+  {
+    "file": "src/usr/local/etc/mihomo/GeoSite.dat",
+    "sha256": "e5bcab3a7ae7b4fc35c31575e17c2bffad6ba3e5866a682bbb81fe72cd2f3ed8",
+    "url": "https://raw.githubusercontent.com/Opnwall/OPNsense-repo/f181fdc5432bdfbfe71e23d32401b1d5db2b6f61/src/os-mihomo/src/usr/local/etc/mihomo/GeoSite.dat"
+  }
+]

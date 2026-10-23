@@ -1,0 +1,187 @@
+<?xml version="1.0"?>
+<form>
+    <field>
+        <type>header</type>
+        <label>Service</label>
+    </field>
+    <field>
+        <id>mihomo.general.enabled</id>
+        <label>Start at boot</label>
+        <type>checkbox</type>
+        <help>Start the service at boot.</help>
+    </field>
+    <field>
+        <id>mihomo.general.logLevel</id>
+        <label>Log Level</label>
+        <type>dropdown</type>
+        <help>Log verbosity. Use error or silent for long term operation.</help>
+    </field>
+    <field>
+        <id>mihomo.general.mode</id>
+        <label>Mode</label>
+        <type>dropdown</type>
+        <help>rule: follow the routing rules. global: everything through the selected proxy. direct: no proxy.</help>
+    </field>
+    <field>
+        <id>mihomo.general.allowLan</id>
+        <label>Allow LAN</label>
+        <type>checkbox</type>
+        <help>Let local clients use the proxy ports directly.</help>
+    </field>
+    <field>
+        <id>mihomo.general.sniffer</id>
+        <label>Domain sniffing</label>
+        <type>checkbox</type>
+        <help>Recover domains from TLS SNI. Required for domain based rules on routed traffic.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>External Controller</label>
+        <advanced>true</advanced>
+    </field>
+    <field>
+        <id>mihomo.general.controllerBind</id>
+        <advanced>true</advanced>
+        <label>Bind Address</label>
+        <type>text</type>
+        <help>Controller listen address. Keep 127.0.0.1 unless you really need remote access.</help>
+    </field>
+    <field>
+        <id>mihomo.general.controllerPort</id>
+        <advanced>true</advanced>
+        <label>Port</label>
+        <type>text</type>
+        <help>Controller port.</help>
+    </field>
+    <field>
+        <id>mihomo.general.secret</id>
+        <advanced>true</advanced>
+        <label>Controller secret</label>
+        <type>text</type>
+        <help>Controller API secret.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>TUN Device</label>
+    </field>
+    <field>
+        <id>mihomo.tun.enabled</id>
+        <label>TUN Mode</label>
+        <type>checkbox</type>
+        <help>Route traffic into mihomo through a virtual device.</help>
+    </field>
+    <field>
+        <id>mihomo.tun.device</id>
+        <advanced>true</advanced>
+        <label>Device Name</label>
+        <type>text</type>
+        <help>Fixed (tun_mihomo): the firewall rules refer to this device name by hand.</help>
+    </field>
+    <field>
+        <id>mihomo.tun.stack</id>
+        <advanced>true</advanced>
+        <label>Stack</label>
+        <type>dropdown</type>
+        <help>Fixed (gvisor): the combination verified on FreeBSD.</help>
+    </field>
+    <field>
+        <id>mihomo.tun.autoRoute</id>
+        <advanced>true</advanced>
+        <label>Automatic Route</label>
+        <type>checkbox</type>
+        <help>Take over the default route. Without working proxy nodes this cuts the network off.</help>
+    </field>
+    <field>
+        <id>mihomo.tun.strictRoute</id>
+        <advanced>true</advanced>
+        <label>Strict Route</label>
+        <type>checkbox</type>
+        <help>Keep the TUN device above other default routes.</help>
+    </field>
+    <field>
+        <id>mihomo.tun.mtu</id>
+        <advanced>true</advanced>
+        <label>MTU</label>
+        <type>text</type>
+        <help>Device MTU.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>DNS</label>
+    </field>
+    <field>
+        <id>mihomo.dns.enabled</id>
+        <label>DNS Module</label>
+        <type>checkbox</type>
+        <help>Let mihomo resolve DNS itself (required for fake-ip).</help>
+    </field>
+    <field>
+        <id>mihomo.dns.listen</id>
+        <label>Listen Address</label>
+        <type>text</type>
+        <help>DNS listen address, e.g. 127.0.0.1:1053.</help>
+    </field>
+    <field>
+        <id>mihomo.dns.enhancedMode</id>
+        <label>Enhanced Mode</label>
+        <type>dropdown</type>
+        <help>fake-ip returns synthetic addresses, redir-host returns real ones.</help>
+    </field>
+    <field>
+        <id>mihomo.dns.ipv6</id>
+        <label>DNS over IPv6</label>
+        <type>checkbox</type>
+        <help>Answer AAAA records. Turn off if the tunnel only carries IPv4.</help>
+    </field>
+    <field>
+        <id>mihomo.dns.upstream</id>
+        <advanced>true</advanced>
+        <label>DNS upstream (YAML)</label>
+        <type>textbox</type>
+        <height>12</height>
+        <help>YAML fragment relative to the dns: block: default-nameserver / nameserver / proxy-server-nameserver / direct-nameserver / nameserver-policy / respect-rules. Do not include the dns: line. Empty removes these keys.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>IPv6</label>
+    </field>
+    <field>
+        <id>mihomo.general.ipv6</id>
+        <label>IPv6 handling</label>
+        <type>checkbox</type>
+        <help>Let the core handle IPv6. Off = IPv6 traffic stays on the normal route (current design).</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>Subscription</label>
+    </field>
+    <field>
+        <id>mihomo.subscription.url</id>
+        <label>Subscription URL</label>
+        <type>text</type>
+        <help>Subscription URL, stored in the plugin environment file.</help>
+    </field>
+    <field>
+        <id>mihomo.subscription.secret</id>
+        <label>Access Secret</label>
+        <type>text</type>
+        <help>Secret written into the generated configuration.</help>
+    </field>
+    <field>
+        <id>mihomo.subscription.updateEnabled</id>
+        <label>Auto update</label>
+        <type>checkbox</type>
+        <help>Create a scheduled task for the subscription update.</help>
+    </field>
+    <field>
+        <id>mihomo.subscription.updateInterval</id>
+        <label>Interval</label>
+        <type>dropdown</type>
+        <help>How often the scheduled task runs.</help>
+    </field>
+</form>

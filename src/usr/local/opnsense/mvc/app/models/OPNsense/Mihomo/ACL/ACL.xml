@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<acl>
+    <page-vpn-mihomo>
+        <name>VPN: Proxy Suite: Mihomo</name>
+        <description>Allow access to the 'VPN: Proxy Suite: Mihomo' pages.</description>
+        <patterns>
+            <pattern>ui/mihomo/*</pattern>
+            <pattern>api/mihomo/*</pattern>
+        </patterns>
+    </page-vpn-mihomo>
+    <page-vpn-mihomo-legacy>
+        <name>VPN: Proxy Suite: Mihomo (legacy redirects)</name>
+        <description>Allow access to the legacy mihomo pages, which now redirect to the native MVC interface.</description>
+        <patterns>
+            <pattern>mihomo.php*</pattern>
+            <pattern>mihomo_logs.php*</pattern>
+            <pattern>mihomo_sub.php*</pattern>
+            <pattern>mihomo_sub_log.php*</pattern>
+        </patterns>
+    </page-vpn-mihomo-legacy>
+</acl>

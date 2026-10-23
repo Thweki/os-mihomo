@@ -1,0 +1,18 @@
+Mihomo proxy integration for OPNsense, rendered by the OPNsense WebGUI.
+
+This is a self-contained OPNsense plugin: it installs the mihomo proxy
+core, a native MVC WebGUI (VPN > Proxy Suite > Mihomo), configd actions,
+an rc.d service, the default configuration, dashboard and diagnostics
+pages, a subscription helper and zh_CN translation entries.
+
+The WebGUI is rendered by OPNsense itself (Phalcon + Volt + Bootstrap 3
+with the opnsense theme). No third-party dashboard is embedded and the
+browser never talks to the mihomo controller directly: every dashboard
+and API request is proxied by the plugin over the loopback interface,
+using the controller secret from the configuration file.
+
+Package layout follows the OPNsense plugin conventions, so it can be
+installed, upgraded and removed by the built-in plugin manager
+(System > Firmware > Plugins) from a pkg repository:
+  name os-mihomo, origin opnsense/os-mihomo, native FreeBSD ABI,
+  MVC model/ACL/menu metadata, configd actions, rc.d integration.

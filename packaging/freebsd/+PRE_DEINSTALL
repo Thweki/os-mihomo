@@ -1,0 +1,3 @@
+#!/bin/sh
+# Network integration and user configuration belong to the administrator.
+echo 'Removing plugin files. Stop Mihomo and review dependent policies before uninstalling.'

@@ -1,0 +1,212 @@
+<?xml version="1.0"?>
+<model>
+    <mount>//OPNsense/mihomo</mount>
+    <version>1.1.0</version>
+    <description>mihomo proxy integration settings</description>
+    <items>
+        <general>
+            <enabled type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Start the service at boot.</ValidationMessage>
+            </enabled>
+            <logLevel type="OptionField">
+                <Default>info</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <debug>debug</debug>
+                    <info>info</info>
+                    <warning>warning</warning>
+                    <error>error</error>
+                    <silent>silent</silent>
+                </OptionValues>
+            </logLevel>
+            <mode type="OptionField">
+                <Default>rule</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <rule>rule</rule>
+                    <global>global</global>
+                    <direct>direct</direct>
+                </OptionValues>
+            </mode>
+            <controllerBind type="TextField">
+                <Default>127.0.0.1</Default>
+                <Required>Y</Required>
+                <Mask>/^(?:\*|[0-9]{1,3}(?:\.[0-9]{1,3}){3}|\[[0-9a-fA-F:]+\])$/</Mask>
+                <ValidationMessage>Enter an IP address, e.g. 127.0.0.1 or 0.0.0.0.</ValidationMessage>
+            </controllerBind>
+            <controllerPort type="PortField">
+                <Default>9090</Default>
+                <Required>Y</Required>
+            </controllerPort>
+            <secret type="TextField">
+                <Mask>/^[0-9a-zA-Z_.\-]{0,128}$/</Mask>
+                <ValidationMessage>Up to 128 characters: letters, digits, ".", "-" and "_".</ValidationMessage>
+            </secret>
+            <allowLan type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+            </allowLan>
+            <sniffer type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Recover domains from TLS SNI, required for domain based rules on routed traffic.</ValidationMessage>
+            </sniffer>
+            <ipv6 type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Let the core handle IPv6 traffic.</ValidationMessage>
+            </ipv6>
+        </general>
+        <tun>
+            <enabled type="BooleanField">
+                <Default>1</Default>
+                <Required>Y</Required>
+            </enabled>
+            <device type="TextField">
+                <Default>tun_mihomo</Default>
+                <Required>Y</Required>
+                <Mask>/^[a-zA-Z0-9_]{1,15}$/</Mask>
+                <ValidationMessage>Up to 15 characters: letters, digits, underscore.</ValidationMessage>
+            </device>
+            <stack type="OptionField">
+                <Default>gvisor</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <system>system</system>
+                    <gvisor>gvisor</gvisor>
+                    <mixed>mixed</mixed>
+                </OptionValues>
+            </stack>
+            <autoRoute type="BooleanField">
+                <Default>1</Default>
+                <Required>Y</Required>
+            </autoRoute>
+            <strictRoute type="BooleanField">
+                <Default>1</Default>
+                <Required>Y</Required>
+            </strictRoute>
+            <mtu type="IntegerField">
+                <Default>1500</Default>
+                <Required>Y</Required>
+                <MinimumValue>576</MinimumValue>
+                <MaximumValue>9000</MaximumValue>
+            </mtu>
+        </tun>
+        <dns>
+            <enabled type="BooleanField">
+                <Default>1</Default>
+                <Required>Y</Required>
+            </enabled>
+            <listen type="TextField">
+                <Default>127.0.0.1:1053</Default>
+                <Required>Y</Required>
+                <Mask>/^(?:\*|[0-9]{1,3}(?:\.[0-9]{1,3}){3}|\[[0-9a-fA-F:]+\]):[0-9]{1,5}$/</Mask>
+                <ValidationMessage>Enter address and port, e.g. 127.0.0.1:1053.</ValidationMessage>
+            </listen>
+            <enhancedMode type="OptionField">
+                <Default>fake-ip</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <fake-ip>fake-ip</fake-ip>
+                    <redir-host>redir-host</redir-host>
+                </OptionValues>
+            </enhancedMode>
+            <ipv6 type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Answer AAAA (IPv6) records too.</ValidationMessage>
+            </ipv6>
+            <upstream type="TextField">
+                <Required>N</Required>
+            </upstream>
+        </dns>
+        <subscription>
+            <url type="TextField">
+                <Mask>/^(?:https?:\/\/[^\s]{1,500})?$/</Mask>
+                <ValidationMessage>Enter an http(s) URL, or leave empty.</ValidationMessage>
+            </url>
+            <secret type="TextField">
+                <Mask>/^[0-9a-zA-Z_.\-]{0,128}$/</Mask>
+                <ValidationMessage>Up to 128 characters: letters, digits, ".", "-" and "_".</ValidationMessage>
+            </secret>
+            <restartAfterUpdate type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Restart the service after a successful update.</ValidationMessage>
+            </restartAfterUpdate>
+            <updateEnabled type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+                <ValidationMessage>Update the subscription on a schedule.</ValidationMessage>
+            </updateEnabled>
+            <updateInterval type="OptionField">
+                <Default>v24</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <v6>Every 6 hours</v6>
+                    <v12>Every 12 hours</v12>
+                    <v24>Daily</v24>
+                </OptionValues>
+            </updateInterval>
+        </subscription>
+        <!--
+          路由策略：按接口(/源)决定流量走哪个代理出口。
+          本节点只描述「谁的流量」与「走哪个出口」，实际生效需要两件事：
+            1) 生成的规则写入 config.yaml（本插件负责，见 Api/RoutingController::applyAction）
+            2) 该接口的流量经 pf 策略路由进入 TUN（P12-2 的网络侧同步；manual 表示用户自行处理）
+        -->
+        <policyRouting>
+            <rule type="ArrayField">
+                <enabled type="BooleanField">
+                    <Default>1</Default>
+                    <Required>Y</Required>
+                </enabled>
+                <interface type="TextField">
+                    <Required>Y</Required>
+                    <Mask>/^[a-z0-9_]{2,16}$/</Mask>
+                    <ValidationMessage>Pick an interface, e.g. lan or opt2.</ValidationMessage>
+                </interface>
+                <source type="TextField">
+                    <Mask>/^[0-9a-zA-Z_.:\/-]{0,64}$/</Mask>
+                    <ValidationMessage>Optional. Empty uses the interface network.</ValidationMessage>
+                </source>
+                <scope type="OptionField">
+                    <Default>foreign</Default>
+                    <Required>Y</Required>
+                    <OptionValues>
+                        <foreign>Foreign only</foreign>
+                        <all>All</all>
+                        <direct>Direct</direct>
+                    </OptionValues>
+                </scope>
+                <target type="TextField">
+                    <Default></Default>
+                    <Mask>/^[^\r\n]{0,64}$/</Mask>
+                    <ValidationMessage>Proxy group name.</ValidationMessage>
+                </target>
+                <firewall type="OptionField">
+                    <Default>manual</Default>
+                    <Required>Y</Required>
+                    <OptionValues>
+                        <manual>Do not create</manual>
+                        <auto>Create</auto>
+                    </OptionValues>
+                </firewall>
+                <descr type="DescriptionField">
+                    <Required>N</Required>
+                </descr>
+            </rule>
+        </policyRouting>
+        <!--
+          「不修改」开关：逗号分隔的页面字段 id，列出**允许本插件写入**的项。
+          空 = 每一项都不修改（默认）：插件只读文件，不改写任何设置。
+          由设置页的复选框维护，见 Api\SettingsController::applyAction()。
+        -->
+        <managed type="TextField">
+            <Mask>/^[a-zA-Z0-9_.,:-]{0,1500}$/</Mask>
+            <ValidationMessage>Internal list of the page fields this plugin may write.</ValidationMessage>
+        </managed>
+    </items>
+</model>

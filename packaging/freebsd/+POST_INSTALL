@@ -1,0 +1,12 @@
+#!/bin/sh
+# File-only installation. Never configure or start network services here.
+set -eu
+for file in /etc/rc.conf.d/mihomo /usr/local/etc/mihomo/config.yaml /usr/local/etc/mihomo/sub/env /usr/local/etc/mihomo/sub/template_config.yaml; do
+    if [ ! -e "$file" ] && [ -f "$file.sample" ]; then
+        cp -p "$file.sample" "$file"
+    fi
+done
+touch /var/log/mihomo.log /var/log/mihomo_sub.log
+rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cache.json
+echo 'Mihomo installed. Existing configuration is preserved; no service was started.'
+echo 'Review settings and configure network integration explicitly before starting Mihomo.'

@@ -1,0 +1,72 @@
+name: CI and release
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Validate source, translations and interactions
+        run: python3 tools/validate.py
+  package:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BUILD_REF: ${{ github.ref }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build and inspect FreeBSD 15 amd64 package
+        uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc # v1
+        with:
+          release: '15.1'
+          arch: x86_64
+          envs: BUILD_REF
+          prepare: |
+            env ASSUME_ALWAYS_YES=yes pkg bootstrap -f
+          run: sh scripts/ci_build.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: os-mihomo-freebsd15-amd64
+          path: |
+            dist/os-mihomo.pkg
+            dist/os-mihomo-repository.tar.gz
+            dist/SHA256SUMS
+            dist/package-files.txt
+          if-no-files-found: error
+          retention-days: 14
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: os-mihomo-freebsd15-amd64
+          path: dist
+      - name: Create reviewable release draft
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/os-mihomo.pkg
+            dist/os-mihomo-repository.tar.gz
+            dist/SHA256SUMS
+            dist/package-files.txt

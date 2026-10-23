@@ -1,0 +1,11 @@
+<menu>
+    <VPN>
+        <ProxySuite VisibleName="Proxy Suite" cssClass="fa fa-lock fa-fw">
+            <Mihomo VisibleName="Mihomo" order="10" url="/ui/mihomo" cssClass="fa fa-paper-plane fa-fw"/>
+            <MihomoSettings VisibleName="Settings" order="20" url="/ui/mihomo/settings"/>
+            <MihomoSubscription VisibleName="Subscription" order="30" url="/ui/mihomo/subscription"/>
+            <MihomoRouting VisibleName="Policy Routing" order="40" url="/ui/mihomo/routing"/>
+            <MihomoLog VisibleName="Log File" order="100" url="/ui/mihomo/log"/>
+        </ProxySuite>
+    </VPN>
+</menu>
