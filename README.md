@@ -7,6 +7,8 @@
 
 **OPNsense 原生 WebUI 的 mihomo 插件**
 
+[![CI](https://github.com/Thweki/os-mihomo/actions/workflows/ci.yml/badge.svg)](https://github.com/Thweki/os-mihomo/actions/workflows/ci.yml)
+
 ![OPNsense](https://img.shields.io/badge/OPNsense-26.7-red)
 ![FreeBSD](https://img.shields.io/badge/FreeBSD-15.1-999999)
 ![mihomo](https://img.shields.io/badge/mihomo-1.19.31--vincent-purple)
@@ -34,7 +36,7 @@
 | **零第三方前端** | 没有 iframe、没有 zashboard/yacd/metacubexd，不引外部 JS/CSS 资源 |
 | **特权操作可审计** | 写配置、读/清日志、跑订阅等特权动作统一走 **configd**（root），而不是 PHP 里 `exec` 拼命令 |
 | **改配置前先验证** | 原始 YAML 落盘前先 `mihomo -t` 校验，并保留带时间戳的备份；补丁器只改必要的那一行 |
-| **服务默认不自启** | 装完不 enable；仪表盘在检测到"占位节点 / TUN 自动接管路由 / DNS 劫持"等风险时显示红色体检横幅 |
+| **服务默认不自启** | 新装默认关闭，不由安装钩子启停服务或修改网络；诊断接口保留，概览不显示常驻差异警告 |
 
 ## 2. 功能
 
@@ -42,7 +44,7 @@
 
 | 页面 | 地址 | 能力 |
 |---|---|---|
-| **Mihomo**（概览） | `/ui/mihomo` | 服务状态与启停、开机自启开关、**安全体检横幅**、实时速率曲线、累计流量、内存/内核版本、代理分组与节点切换/延迟测试、运行模式切换、活动连接表格（可单条断开/全部断开） |
+| **Mihomo**（概览） | `/ui/mihomo` | 服务状态与启停、开机自启开关、最近 1/5/15 分钟及 1 小时流量曲线（仅记录本页打开期间的数据）、一位小数速率、累计流量、内存/内核版本、代理分组与节点切换/延迟测试、运行模式切换、活动连接表格（可单条断开/全部断开） |
 | **Settings**（设置） | `/ui/mihomo/settings` | 原生表单（服务 / 控制器 / TUN / DNS / 订阅）+ 原始 YAML 编辑器（写盘前 `mihomo -t` 校验、自动备份、"仅改一行"的最小化补丁）+ **配置对照**（页面值 / 文件值 / 运行中三方并排，并提示手写配置、受管区块、IPv6 绕过等）+ 从当前配置文件导入 |
 | **Subscription**（订阅） | `/ui/mihomo/subscription` | 订阅地址与密钥、一键更新（默认**不**自动重启服务，避免刚换订阅就把网络打断）、实时订阅日志 |
 | **Log File**（日志） | `/ui/mihomo/log` | 内核日志 / 订阅日志：可选行数、下载、清空（经 configd 读取，无需放宽文件权限） |
@@ -66,26 +68,30 @@
 
 | 方式 | 命令 / 入口 | 会改动系统配置吗 | 适用 |
 |---|---|---|---|
-| **A. 插件管理器** | `系统 → 固件 → 插件 → 安装`（需先配置插件仓库，见 §5） | 会（执行包内 `+POST_INSTALL`，见下方警告） | 新装设备、希望被固件系统统一管理 |
+| **A. 插件管理器** | `系统 → 固件 → 插件 → 安装`（需先配置插件仓库，见 §5） | 不会；仅安装文件，首次复制样例配置 | 新装设备、希望被固件系统统一管理 |
 | **B. 单文件包** | `pkg add -f os-mihomo.pkg` | 同上 | 离线分发 |
 | **C. 安全部署脚本** | `scripts/deploy.sh`（配合 `tools/remote.ps1`） | **不会**：只写插件自己的文件，不碰防火墙 / 接口 / DNS / 路由 | 正在服务生产网络的设备（本项目交付时走的就是这条） |
 
 ```sh
 # 方式 C：安全部署（逐文件安装 + php -l/sh -n 校验 + 清理菜单缓存 + 重启 configd）
-powershell -File tools/deploy.ps1               # 首次安装（含内核二进制）
+powershell -File tools/deploy.ps1 -WithBinary   # 首次安装（含内核二进制）
 powershell -File tools/deploy.ps1               # 之后升级（不动已存在的 config.yaml）
 powershell -File tools/webtest.ps1              # 端到端验证：页面 200 / 接口 200 / 未授权 302
 ```
 
-> [!CAUTION]
-> **`pkg add` / 插件管理器安装会执行包内的 `+POST_INSTALL`**，其行为是上游既有的：
-> 1. 向 `/conf/config.xml` 添加 `tun_mihomo` 虚拟接口与一条防火墙放行规则；
-> 2. 把 Unbound 的查询转发指向 `127.0.0.1:1053`（mihomo 未运行时会导致 DNS 不可用）；
-> 3. 把 `/etc/rc.conf.d/mihomo` 写成 `mihomo_enable="YES"`（**开机自启**）；
-> 4. 生成随机 `secret` 写回配置。
->
-> 随包分发的 `config.yaml` 用的是占位节点 `88.88.88.88`，而 `tun.auto-route` 默认为真 ——
-> **在这种状态下开机自启 = 全屋断网**。所以：要么先换好节点/订阅，要么用方式 C（不改任何网络配置、也不自启）。
+当前版本的包钩子只安装文件，不创建接口、网关或防火墙规则，不修改 DNS，也不启动服务。运行配置以 `.sample` 分发，已有配置不覆盖，新装默认 `mihomo_enable="NO"`。卸载保留用户配置；先自行停用依赖 Mihomo 的策略并停止服务。
+
+历史上游包的安装/卸载钩子具有网络副作用。由旧包迁移前请备份，并检查旧包钩子；本版本无法控制旧包的卸载行为。
+
+仅更新界面（本轮实际使用）：
+
+```powershell
+powershell -File tools/deploy.ps1 -UiOnly
+# 输出的时间戳目录可用于恢复界面文件：
+powershell -File tools/remote.ps1 -Script scripts/rollback.sh -ScriptArgs /usr/local/opnsense/_bak/os-mihomo/TIMESTAMP
+```
+
+自动检查、FreeBSD 包和标签发布见 [CI/CD](docs/ci-cd.md)。主题直接继承 OPNsense，不提供独立主题开关；中英文界面与翻译模板见 [界面实现记录](docs/ui-implementation-2026-10-24.md)。
 
 ## 5. 发布插件仓库（让插件管理器管理它）
 
@@ -143,14 +149,14 @@ os-mihomo|||1.0.4|||Mihomo proxy integration for OPNsense|||76.7MiB|||0|||0|||||
 ## 6. 首次使用（务必先读）
 
 1. **先换节点/订阅，再启动服务。** 编辑 `Settings → 配置文件`，或到 `Subscription` 提交订阅；
-   概览页的红色横幅会同时列出当前风险（占位节点、TUN 自动接管路由、严格路由、DNS 劫持、控制器对外暴露等）。
+   只读诊断接口 `/api/mihomo/service/safety` 可检查当前运行条件；概览不显示常驻差异警告。
 2. **确认自启开关符合预期**：`Settings → 服务 → 启用 mihomo`。默认关闭，是否开机自启由你决定。
 3. 启动后看概览页：控制器可达 → 代理分组出现 → 可切节点、看连接与实时速率。
 4. 稳定运行后把 `设置 → 日志层级` 调成 `error` 或 `silent`，避免长期写日志。
 
 > **关于 DNS**：如果局域网客户端把 OPNsense 的 LAN 地址当 DNS，Unbound 会在请求到达 mihomo 之前先处理。
 > 要让 mihomo 接管 DNS，可 NAT 重定向局域网 DNS、由 DHCP 下发外部 DNS，或让 Unbound 转发到
-> mihomo 的监听端口（`1053`）。上游的 `+POST_INSTALL` 走的是最后一种，并在 Fake-IP 里加了
+> mihomo 的监听端口（`1053`）。历史上游 `+POST_INSTALL` 走的是最后一种，并在 Fake-IP 里加了
 > `geosite:cn` 过滤（国内域名返回真实 IP、国外域名走 Fake-IP）。
 > **本项目不会替你改这些**：改不改 DNS、要不要 TUN，全部由你在 `Settings` 里明示。
 

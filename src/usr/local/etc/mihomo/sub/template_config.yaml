@@ -4,10 +4,10 @@ allow-lan: false
 bind-address: 127.0.0.1
 mode: rule
 keep-alive-interval: 15
-external-controller: 0.0.0.0:9090
+external-controller: 127.0.0.1:9090
 external-ui: /usr/local/etc/mihomo/ui
 external-ui-url: "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip"
-secret: "CHANGE_ME"
+secret: example-change-me
 client-fingerprint: chrome
 profile:
   store-selected: true

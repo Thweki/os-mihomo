@@ -5,8 +5,8 @@ PKG_NAME="${PKG_NAME:-os-mihomo}"
 VERSION="${VERSION:-1.1.0}"
 ORIGIN="${ORIGIN:-opnsense/os-mihomo}"
 COMMENT="${COMMENT:-Mihomo proxy integration for OPNsense}"
-MAINTAINER="${MAINTAINER:-https://github.com/Opnwall/}"
-WWW="${WWW:-https://github.com/MetaCubeX/mihomo}"
+MAINTAINER="${MAINTAINER:-https://github.com/Thweki/}"
+WWW="${WWW:-https://github.com/Thweki/os-mihomo}"
 PREFIX="${PREFIX:-/usr/local}"
 FORMAT="${FORMAT:-tgz}"
 # OPNsense 的插件仓库是按 ABI 分目录的（<base>/<abi>/），
@@ -175,6 +175,13 @@ done
 chmod 0600 "$STAGEDIR/usr/local/etc/mihomo/sub/env" 2>/dev/null || true
 chmod 0600 "$STAGEDIR/usr/local/etc/mihomo/sub/template_config.yaml" 2>/dev/null || true
 chmod 0644 "$STAGEDIR/usr/local/etc/mihomo/config.yaml" 2>/dev/null || true
+
+# Package sample files only. pkg upgrades/deletion must never own live settings.
+for mutable in etc/rc.conf.d/mihomo usr/local/etc/mihomo/config.yaml usr/local/etc/mihomo/sub/env usr/local/etc/mihomo/sub/template_config.yaml; do
+    mv "$STAGEDIR/$mutable" "$STAGEDIR/$mutable.sample"
+done
+# Service is disabled on a new installation regardless of source defaults.
+printf 'mihomo_enable="NO"\n' > "$STAGEDIR/etc/rc.conf.d/mihomo.sample"
 
 echo "==> Generating plist"
 find "$STAGEDIR" -type f | sed "s#^$STAGEDIR##" | sort > "$PLIST"

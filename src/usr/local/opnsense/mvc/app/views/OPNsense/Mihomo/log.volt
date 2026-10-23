@@ -7,15 +7,23 @@
  # All rights reserved.
  # 详见 models/OPNsense/Mihomo/Config.php 头部的 BSD 许可条款。
  #}
+{% set lang = mihomoLang %}
+<script src="{{ cache_safe('/js/mihomo/ui.js') }}"></script>
+
 
 <script>
     $(document).ready(function () {
         function refreshLogs(scroll) {
             const key = $('#log-source').val();
-            ajaxGet('/api/mihomo/log/tail', { 'key': key, 'lines': $('#log-lines').val() }, function (data) {
+            ajaxGet('/api/mihomo/log/tail', { 'key': key, 'lines': $('#log-lines').val() }, function (data, status) {
+                if (status !== 'success' || !data || data.status !== 'ok') {
+                    $('#log-state').text({{ lang._('Could not read the log. Try refreshing.') | json_encode }}); return;
+                }
+                const content = MihomoUI.decodeApiText(data.content);
+                $('#log-state').text(content ? {{ lang._('Log updated') | json_encode }} : {{ lang._('No log entries yet.') | json_encode }});
                 const $viewer = $('#log-viewer');
                 const atBottom = $viewer[0].scrollHeight - $viewer.scrollTop() - $viewer.outerHeight() < 40;
-                $viewer.val(data['content'] || '');
+                $viewer.val(content);
                 if (scroll || atBottom) {
                     $viewer.scrollTop($viewer[0].scrollHeight);
                 }
@@ -28,7 +36,7 @@
         $('#downloadAct').click(function () {
             const key = $('#log-source').val();
             ajaxGet('/api/mihomo/log/tail', { 'key': key, 'lines': 5000 }, function (data) {
-                const blob = new Blob([data['content'] || ''], { 'type': 'text/plain' });
+                const blob = new Blob([MihomoUI.decodeApiText(data['content'])], { 'type': 'text/plain' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
                 link.download = key + '.log';
@@ -39,8 +47,8 @@
         $('#clearAct').click(function () {
             BootstrapDialog.confirm({
                 'type': BootstrapDialog.TYPE_WARNING,
-                'title': '{{ lang._('Clear log?') }}',
-                'message': '{{ lang._('The selected log file will be emptied.') }}',
+                'title': ({{ lang._('Clear log?') | json_encode }}),
+                'message': ({{ lang._('The selected log file will be emptied.') | json_encode }}),
                 'callback': function (result) {
                     if (!result) {
                         return;
@@ -60,26 +68,27 @@
 <div class="row">
     <section class="col-xs-12">
         <div class="content-box">
-            <div style="padding: 12px 14px; border-bottom: 1px solid #eeeeee;">
+            <div style="padding: 12px 14px; ">
                 <i class="fa fa-file-text-o text-muted"></i> <b>{{ lang._('Log File') }}</b>
                 <span class="pull-right">
-                    <select id="log-source" class="form-control" style="width: auto; display: inline-block; height: 28px; padding: 2px 6px;">
+                    <select aria-label="{{ lang._('Log source') }}" id="log-source" class="form-control" style="width: auto; display: inline-block; height: 28px; padding: 2px 6px;">
                         <option value="mihomo">{{ lang._('Core log') }} — /var/log/mihomo.log</option>
                         <option value="subscription">{{ lang._('Subscription log') }} — /var/log/mihomo_sub.log</option>
                     </select>
-                    <select id="log-lines" class="form-control" style="width: auto; display: inline-block; height: 28px; padding: 2px 6px;">
+                    <select aria-label="{{ lang._('Lines') }}" id="log-lines" class="form-control" style="width: auto; display: inline-block; height: 28px; padding: 2px 6px;">
                         <option value="100">100</option>
                         <option value="300" selected="selected">300</option>
                         <option value="1000">1000</option>
                         <option value="3000">3000</option>
                     </select>
-                    <button type="button" class="btn btn-xs btn-default" id="refreshAct"><i class="fa fa-refresh fa-fw"></i></button>
-                    <button type="button" class="btn btn-xs btn-default" id="downloadAct"><i class="fa fa-download fa-fw"></i></button>
-                    <button type="button" class="btn btn-xs btn-default" id="clearAct"><i class="fa fa-trash fa-fw"></i></button>
+                    <button type="button" class="btn btn-xs btn-default" id="refreshAct" title="{{ lang._('Refresh') }}" aria-label="{{ lang._('Refresh') }}"><i class="fa fa-refresh fa-fw"></i></button>
+                    <button type="button" class="btn btn-xs btn-default" id="downloadAct" title="{{ lang._('Download log') }}" aria-label="{{ lang._('Download log') }}"><i class="fa fa-download fa-fw"></i></button>
+                    <button type="button" class="btn btn-xs btn-default" id="clearAct" title="{{ lang._('Clear Log') }}" aria-label="{{ lang._('Clear Log') }}"><i class="fa fa-trash fa-fw"></i></button>
                 </span>
             </div>
             <div style="padding: 14px;">
-                <textarea id="log-viewer" class="form-control" rows="30" readonly
+                <p id="log-state" class="text-muted" role="status"></p>
+                <textarea aria-label="{{ lang._('Log contents') }}" id="log-viewer" class="form-control" rows="30" readonly
                           style="width: 100%; max-width: 100%; font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere;"></textarea>
             </div>
         </div>

@@ -38,21 +38,25 @@
     <field>
         <type>header</type>
         <label>External Controller</label>
+        <advanced>true</advanced>
     </field>
     <field>
         <id>mihomo.general.controllerBind</id>
+        <advanced>true</advanced>
         <label>Bind Address</label>
         <type>text</type>
         <help>Controller listen address. Keep 127.0.0.1 unless you really need remote access.</help>
     </field>
     <field>
         <id>mihomo.general.controllerPort</id>
+        <advanced>true</advanced>
         <label>Port</label>
         <type>text</type>
         <help>Controller port.</help>
     </field>
     <field>
         <id>mihomo.general.secret</id>
+        <advanced>true</advanced>
         <label>Secret</label>
         <type>text</type>
         <help>Controller API secret.</help>
@@ -70,30 +74,35 @@
     </field>
     <field>
         <id>mihomo.tun.device</id>
+        <advanced>true</advanced>
         <label>Device Name</label>
         <type>text</type>
         <help>Fixed (tun_mihomo): the firewall rules refer to this device name by hand.</help>
     </field>
     <field>
         <id>mihomo.tun.stack</id>
+        <advanced>true</advanced>
         <label>Stack</label>
         <type>dropdown</type>
         <help>Fixed (gvisor): the combination verified on FreeBSD.</help>
     </field>
     <field>
         <id>mihomo.tun.autoRoute</id>
+        <advanced>true</advanced>
         <label>Automatic Route</label>
         <type>checkbox</type>
         <help>Take over the default route. Without working proxy nodes this cuts the network off.</help>
     </field>
     <field>
         <id>mihomo.tun.strictRoute</id>
+        <advanced>true</advanced>
         <label>Strict Route</label>
         <type>checkbox</type>
         <help>Keep the TUN device above other default routes.</help>
     </field>
     <field>
         <id>mihomo.tun.mtu</id>
+        <advanced>true</advanced>
         <label>MTU</label>
         <type>text</type>
         <help>Device MTU.</help>
@@ -129,6 +138,7 @@
     </field>
     <field>
         <id>mihomo.dns.upstream</id>
+        <advanced>true</advanced>
         <label>DNS upstream (YAML)</label>
         <type>textbox</type>
         <height>12</height>

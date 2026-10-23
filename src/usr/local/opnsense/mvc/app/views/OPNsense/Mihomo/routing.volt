@@ -7,6 +7,8 @@
  # Copyright (C) 2026  os-mihomo contributors
  # All rights reserved. 详见 models/OPNsense/Mihomo/Config.php 头部的 BSD 许可条款。
  #}
+{% set lang = mihomoLang %}
+
 
 <script>
     $(document).ready(function () {
@@ -29,15 +31,15 @@
         /* 绑定状态：只说人话 */
         function stateText(row) {
             if (row.state === 'active') {
-                return '{{ lang._('in effect') }}';
+                return ({{ lang._('in effect') | json_encode }});
             }
             if (row.state === 'pending') {
-                return '{{ lang._('apply to take effect') }}';
+                return ({{ lang._('apply to take effect') | json_encode }});
             }
             if (row.state === 'inactive') {
-                return '{{ lang._('TUN off') }}';
+                return ({{ lang._('TUN off') | json_encode }});
             }
-            return '{{ lang._('Manual') }}';
+            return ({{ lang._('Manual') | json_encode }});
         }
 
         /* 下拉选项由接口在返回行数据时一并给出（见 get_rule 的 asDialogChoices）：
@@ -62,11 +64,11 @@
                 const parts = (data.rows || []).map(function (row) {
                     return row.interface + ' → ' + (row.target || 'DIRECT') + ' · ' + stateText(row);
                 });
-                $('#routeState').text(parts.length ? parts.join('　') : '{{ lang._('nothing bound') }}')
+                $('#routeState').text(parts.length ? parts.join('　') : ({{ lang._('nothing bound') | json_encode }}))
                     .toggleClass('text-muted', parts.length === 0);
                 $('#policyEmptyHint').toggleClass('hidden', parts.length > 0);
                 $('#routeNotes').text(
-                    data.tun_enabled ? '' : '（' + '{{ lang._('TUN off') }}' + '）'
+                    data.tun_enabled ? '' : '（' + ({{ lang._('TUN off') | json_encode }}) + '）'
                 );
             });
         }
@@ -103,13 +105,13 @@
 
         function planText(head) {
             const lines = [];
-            lines.push('{{ lang._('mihomo rules') }} (' + lastPlan.rules.length + ')');
+            lines.push(({{ lang._('mihomo rules') | json_encode }} + ' (') + lastPlan.rules.length + ')');
             if (lastPlan.rules.length) {
                 lastPlan.rules.forEach(function (r) { lines.push('  ' + r); });
             } else {
                 lines.push('  —');
             }
-            lines.push('{{ lang._('OPNsense changes') }} (' + lastPlan.changes.length + ')');
+            lines.push(({{ lang._('OPNsense changes') | json_encode }} + ' (') + lastPlan.changes.length + ')');
             if (lastPlan.changes.length) {
                 lastPlan.changes.forEach(function (c) { lines.push('  ' + c); });
             } else {
@@ -128,7 +130,7 @@
 
         $('#previewPolicyAct').click(function () {
             collectPlan(function () {
-                dialog('{{ lang._('Preview') }}', planText(''), BootstrapDialog.TYPE_INFO);
+                dialog(({{ lang._('Preview') | json_encode }}), planText(''), BootstrapDialog.TYPE_INFO);
             });
         });
 
@@ -136,20 +138,20 @@
             collectPlan(function () {
                 BootstrapDialog.show({
                     'type': BootstrapDialog.TYPE_WARNING,
-                    'title': '{{ lang._('Apply') }}',
+                    'title': ({{ lang._('Apply') | json_encode }}),
                     'message': $('<pre>').css({
                         'white-space': 'pre-wrap', 'margin': '0', 'border': '0', 'background': 'transparent'
-                    }).text(planText('{{ lang._('Writes the mihomo configuration and, where needed, creates the interface, gateway and firewall rule on OPNsense. config.xml is backed up first.') }}')),
+                    }).text(planText(({{ lang._('Writes the mihomo configuration and, where needed, creates the interface, gateway and firewall rule on OPNsense. config.xml is backed up first.') | json_encode }}))),
                     'buttons': [
-                        { 'label': '{{ lang._('Cancel') }}', 'action': function (d) { d.close(); } },
+                        { 'label': ({{ lang._('Cancel') | json_encode }}), 'action': function (d) { d.close(); } },
                         {
-                            'label': '{{ lang._('Apply') }}',
+                            'label': ({{ lang._('Apply') | json_encode }}),
                             'cssClass': 'btn-primary',
                             'action': function (d) {
                                 d.close();
                                 ajaxCall('/api/mihomo/routing/apply', {}, function (r1) {
                                     if (r1['status'] !== 'ok') {
-                                        dialog('{{ lang._('Apply failed') }}', decode(r1['message'] || ''), BootstrapDialog.TYPE_DANGER);
+                                        dialog(({{ lang._('Apply failed') | json_encode }}), decode(r1['message'] || ''), BootstrapDialog.TYPE_DANGER);
                                         return;
                                     }
                                     ajaxCall('/api/mihomo/routing/netapply', {}, function (r2) {
@@ -162,7 +164,7 @@
                                         } else {
                                             out.push('  ' + decode(r2['message'] || ''));
                                         }
-                                        dialog('{{ lang._('Apply') }}', out.join('\n'),
+                                        dialog(({{ lang._('Apply') | json_encode }}), out.join('\n'),
                                             r2['status'] === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER);
                                         loadState();
                                     });
@@ -177,17 +179,17 @@
         $('#netRollbackAct').click(function () {
             BootstrapDialog.show({
                 'type': BootstrapDialog.TYPE_DANGER,
-                'title': '{{ lang._('Undo network changes') }}',
-                'message': '{{ lang._('Restores the most recent config.xml backup created by this plugin and reloads the firewall.') }}',
+                'title': ({{ lang._('Undo network changes') | json_encode }}),
+                'message': ({{ lang._('Restores the most recent config.xml backup created by this plugin and reloads the firewall.') | json_encode }}),
                 'buttons': [
-                    { 'label': '{{ lang._('Cancel') }}', 'action': function (d) { d.close(); } },
+                    { 'label': ({{ lang._('Cancel') | json_encode }}), 'action': function (d) { d.close(); } },
                     {
-                        'label': '{{ lang._('Undo') }}',
+                        'label': ({{ lang._('Undo') | json_encode }}),
                         'cssClass': 'btn-danger',
                         'action': function (d) {
                             d.close();
                             ajaxCall('/api/mihomo/routing/netrollback', {}, function (data) {
-                                dialog('{{ lang._('Undo network changes') }}',
+                                dialog(({{ lang._('Undo network changes') | json_encode }}),
                                     (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_SUCCESS);
                                 loadState();
                             });
@@ -208,25 +210,25 @@
             ajaxCall('/api/mihomo/routing/selftest', {}, function (data) {
                 $btn.prop('disabled', false);
                 if (data['status'] !== 'ok') {
-                    dialog('{{ lang._('Self test') }}', decode(data['message'] || ''), BootstrapDialog.TYPE_DANGER);
+                    dialog(({{ lang._('Self test') | json_encode }}), decode(data['message'] || ''), BootstrapDialog.TYPE_DANGER);
                     return;
                 }
                 const lines = [];
                 (data.results || []).forEach(function (r) {
                     lines.push(r.interface + '  (' + r.source + ' → ' + (r.expected_group || 'DIRECT') + ')');
                     if (r.foreign_ip) {
-                        lines.push('  ' + '{{ lang._('exit IP') }}' + ': ' + r.foreign_ip
-                            + '   ' + '{{ lang._('rule') }}' + ': ' + (r.foreign_rule || '—')
-                            + '   ' + '{{ lang._('Proxy group') }}' + ': ' + (r.foreign_group || '—'));
+                        lines.push('  ' + ({{ lang._('exit IP') | json_encode }}) + ': ' + r.foreign_ip
+                            + '   ' + ({{ lang._('rule') | json_encode }}) + ': ' + (r.foreign_rule || '—')
+                            + '   ' + ({{ lang._('Proxy group') | json_encode }}) + ': ' + (r.foreign_group || '—'));
                     } else {
                         lines.push('  ' + (r.note || 'failed'));
                     }
                     if (r.domestic_rule) {
-                        lines.push('  ' + '{{ lang._('domestic') }}' + ': ' + r.domestic_rule);
+                        lines.push('  ' + ({{ lang._('domestic') | json_encode }}) + ': ' + r.domestic_rule);
                     }
                     lines.push('');
                 });
-                dialog('{{ lang._('Self test') }}', lines.join('\n'), BootstrapDialog.TYPE_INFO);
+                dialog(({{ lang._('Self test') | json_encode }}), lines.join('\n'), BootstrapDialog.TYPE_INFO);
             });
         });
 
@@ -250,9 +252,9 @@
                         .append($('<td>').text(stamp))
                         .append($('<td>').text((row.size / 1024).toFixed(1) + ' KiB'))
                         .append($('<td>')
-                            .append($('<button>').addClass('btn btn-xs btn-default __mr').text('{{ lang._('Diff') }}')
+                            .append($('<button>').addClass('btn btn-xs btn-default __mr').text(({{ lang._('Diff') | json_encode }}))
                                 .click(function () { showDiff(row.ts); }))
-                            .append($('<button>').addClass('btn btn-xs btn-default').text('{{ lang._('Restore') }}')
+                            .append($('<button>').addClass('btn btn-xs btn-default').text(({{ lang._('Restore') | json_encode }}))
                                 .click(function () { confirmRestore(row.ts); }))));
                 });
             });
@@ -263,7 +265,7 @@
                 if (status !== 'success' || data['status'] !== 'ok') {
                     return;
                 }
-                dialog('{{ lang._('Diff') }} (' + ts + ' → ' + '{{ lang._('current') }}' + ')',
+                dialog(({{ lang._('Diff') | json_encode }} + ' (') + ts + ' → ' + ({{ lang._('current') | json_encode }}) + ')',
                     decode(data['diff'] || '') || '—', BootstrapDialog.TYPE_INFO);
             });
         }
@@ -271,17 +273,17 @@
         function confirmRestore(ts) {
             BootstrapDialog.show({
                 'type': BootstrapDialog.TYPE_WARNING,
-                'title': '{{ lang._('Restore') }}',
-                'message': decode('{{ lang._('Restore this configuration backup? The current file is backed up first and the result is validated with mihomo -t.') }}'),
+                'title': ({{ lang._('Restore') | json_encode }}),
+                'message': decode(({{ lang._('Restore this configuration backup? The current file is backed up first and the result is validated with mihomo -t.') | json_encode }})),
                 'buttons': [
-                    { 'label': '{{ lang._('Cancel') }}', 'action': function (d) { d.close(); } },
+                    { 'label': ({{ lang._('Cancel') | json_encode }}), 'action': function (d) { d.close(); } },
                     {
-                        'label': '{{ lang._('Restore') }}',
+                        'label': ({{ lang._('Restore') | json_encode }}),
                         'cssClass': 'btn-primary',
                         'action': function (d) {
                             d.close();
                             ajaxCall('/api/mihomo/routing/history_restore', { 'ts': ts }, function (data) {
-                                dialog('{{ lang._('Restore') }}', (data['messages'] || []).join('\n'),
+                                dialog(({{ lang._('Restore') | json_encode }}), (data['messages'] || []).join('\n'),
                                     data['status'] === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER);
                                 loadHistory();
                             });

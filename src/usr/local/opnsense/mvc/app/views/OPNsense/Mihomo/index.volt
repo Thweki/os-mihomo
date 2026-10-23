@@ -8,8 +8,11 @@
  # All rights reserved.
  # 详见 models/OPNsense/Mihomo/Config.php 头部的 BSD 许可条款。
  #}
+{% set lang = mihomoLang %}
+
 
 <script src="{{ cache_safe('/ui/js/chart.umd.min.js') }}"></script>
+<script src="{{ cache_safe('/js/mihomo/ui.js') }}"></script>
 
 <script>
     $(document).ready(function () {
@@ -17,14 +20,7 @@
          * 工具函数
          * ------------------------------------------------------------------ */
         function fmtBytes(bytes) {
-            bytes = Number(bytes) || 0;
-            const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
-            let idx = 0;
-            while (bytes >= 1024 && idx < units.length - 1) {
-                bytes /= 1024;
-                idx++;
-            }
-            return (idx === 0 ? bytes : bytes.toFixed(2)) + ' ' + units[idx];
+            return MihomoUI.formatBytes(bytes);
         }
 
         function fmtRate(bytesPerSecond) {
@@ -54,7 +50,7 @@
             if (delay === null || delay === undefined) {
                 return '—';
             } else if (delay <= 0) {
-                return '{{ lang._('timeout') }}';
+                return ({{ lang._('timeout') | json_encode }});
             }
             return delay + ' ms';
         }
@@ -73,13 +69,13 @@
                 if (data['status'] === 'disabled') {
                     $box.html('<div class="alert alert-warning">'
                         + '<i class="fa fa-power-off fa-fw"></i> '
-                        + '<b>{{ lang._('The service is not enabled at boot.') }}</b> '
-                        + '{{ lang._('Use %sSettings%s to enable it, then start it from the controls in the page header.') | format('<a href="/ui/mihomo/settings">', '</a>') }}'
+                        + ('<b>' + {{ lang._('The service is not enabled at boot.') | json_encode }} + '</b> ')
+                        + ({{ lang._('Use %sSettings%s to enable it, then start it from the controls in the page header.') | format('<a href="/ui/mihomo/settings">', '</a>') | json_encode }})
                         + '</div>');
                 } else if (data['status'] === 'stopped') {
                     $box.html('<div class="alert alert-danger">'
                         + '<i class="fa fa-stop-circle fa-fw"></i> '
-                        + '{{ lang._('The service is stopped. Use the start button in the page header to bring it up.') }}'
+                        + ({{ lang._('The service is stopped. Use the start button in the page header to bring it up.') | json_encode }})
                         + '</div>');
                 } else {
                     $box.empty();
@@ -88,58 +84,34 @@
         }
 
         /* ------------------------------------------------------------------ *
-         * 安全体检横幅
-         * ------------------------------------------------------------------ */
-        function renderSafety(data) {
-            const $box = $('#mihomo-safety');
-            const items = data['items'] || [];
-            if (items.length === 0) {
-                $box.empty();
-                return;
-            }
-            let worst = 'info';
-            let html = '';
-            items.forEach(function (item) {
-                if (item['level'] === 'danger') {
-                    worst = 'danger';
-                } else if (item['level'] === 'warning' && worst !== 'danger') {
-                    worst = 'warning';
-                }
-            });
-            if (worst === 'info') {
-                $box.empty();
-                return;
-            }
-            /* 条目文字一律继承横幅的配色：主题里 text-danger/warning 与 alert 底色可能撞色，
-               之前在深色横幅上就看不见内容（只有一个空框） */
-            html += '<div class="alert alert-' + worst + '">';
-            html += '<i class="fa fa-exclamation-triangle fa-fw"></i> <b>'
-                + (worst === 'danger'
-                    ? '{{ lang._('Fix these before starting the service') }}'
-                    : '{{ lang._('Check these before starting the service') }}')
-                + '</b><ul style="margin-bottom:0;margin-top:6px;padding-left:20px;">';
-            items.forEach(function (item) {
-                if (item['level'] === 'info') {
-                    return;
-                }
-                const icon = item['level'] === 'danger' ? 'fa-times-circle' : 'fa-exclamation-circle';
-                html += '<li style="color:inherit;"><i class="fa ' + icon + ' fa-fw"></i> <b>'
-                    + escapeHtml(item['title']) + '</b>：' + escapeHtml(item['detail']) + '</li>';
-            });
-            html += '</ul></div>';
-            $box.html(html);
-        }
-
-        function loadSafety() {
-            ajaxGet('/api/mihomo/service/safety', {}, renderSafety);
-        }
-
-        /* ------------------------------------------------------------------ *
          * 运行态概览
          * ------------------------------------------------------------------ */
         let gTrafficChart = null;
-        let gPreviousSample = null;
-        let gLabels = [];
+        let storedHistory = [];
+        try { storedHistory = JSON.parse(sessionStorage.getItem('mihomo.traffic.v1') || '[]'); } catch (error) { /* Optional cache. */ }
+        const trafficHistory = new MihomoUI.TrafficHistory(storedHistory);
+        let trafficRange = 60;
+        let overviewPending = false;
+        let lastHistorySave = 0;
+
+        function drawTraffic() {
+            if (!gTrafficChart) { return; }
+            const samples = trafficHistory.window(trafficRange, Date.now());
+            gTrafficChart.data.labels = samples.map(function (point) {
+                return new Date(point.time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: trafficRange <= 300 ? '2-digit' : undefined});
+            });
+            gTrafficChart.data.datasets[0].data = samples.map(function (point) { return point.down; });
+            gTrafficChart.data.datasets[1].data = samples.map(function (point) { return point.up; });
+            gTrafficChart.update('none');
+            $('#traffic-history-note').text(samples.length < 2
+                ? {{ lang._('Waiting for traffic samples.') | json_encode }}
+                : {{ lang._('History is collected while this page is open. Gaps indicate missing samples.') | json_encode }});
+        }
+
+        $('#traffic-range').on('change', function () {
+            trafficRange = Number(this.value);
+            drawTraffic();
+        });
 
         function renderOverview(data) {
             const runtime = data['runtime'] || {};
@@ -149,13 +121,13 @@
             $('#stat-connections').text(fmtCount(runtime['connections']));
             $('#stat-download').text(fmtBytes(runtime['downloadTotal']));
             $('#stat-upload').text(fmtBytes(runtime['uploadTotal']));
-            $('#stat-memory').text(fmtBytes(runtime['memory']));
+            $('#stat-memory').text(runtime['memory'] > 0 ? fmtBytes(runtime['memory']) : {{ lang._('Unavailable') | json_encode }});
             $('#stat-version').text(controller['meta'] === true ? 'Meta' : (controller['alive'] ? 'core' : '—'));
 
             if (controller['alive']) {
                 $('#mihomo-version').text(controller['version'] || '—');
             } else {
-                $('#mihomo-version').text('{{ lang._('not running') }}');
+                $('#mihomo-version').text(({{ lang._('not running') | json_encode }}));
             }
 
             if (!$('#mode-select').data('user-changed')) {
@@ -163,38 +135,28 @@
             }
 
             const now = Date.now();
-            let inRate = 0;
-            let outRate = 0;
-            if (gPreviousSample !== null) {
-                const seconds = Math.max((now - gPreviousSample.time) / 1000, 0.5);
-                inRate = Math.max((runtime['downloadTotal'] - gPreviousSample.download) / seconds, 0);
-                outRate = Math.max((runtime['uploadTotal'] - gPreviousSample.upload) / seconds, 0);
+            const rate = trafficHistory.add(now, runtime['downloadTotal'], runtime['uploadTotal'], runtime['ready'] && controller['alive']);
+            $('#stat-rate-down').text(rate.down === null ? '—' : fmtRate(rate.down));
+            $('#stat-rate-up').text(rate.up === null ? '—' : fmtRate(rate.up));
+            if (now - lastHistorySave > 10000) {
+                try { sessionStorage.setItem('mihomo.traffic.v1', JSON.stringify(trafficHistory.samples)); } catch (error) { /* Storage may be disabled. */ }
+                lastHistorySave = now;
             }
-            gPreviousSample = { time: now, download: runtime['downloadTotal'] || 0, upload: runtime['uploadTotal'] || 0 };
-
-            $('#stat-rate-down').text(fmtRate(inRate));
-            $('#stat-rate-up').text(fmtRate(outRate));
-
-            if (gTrafficChart !== null) {
-                const label = new Date(now).toLocaleTimeString();
-                gLabels.push(label);
-                gTrafficChart.data.labels.push(label);
-                gTrafficChart.data.datasets[0].data.push(Math.round(inRate));
-                gTrafficChart.data.datasets[1].data.push(Math.round(outRate));
-                const maxPoints = 60;
-                if (gLabels.length > maxPoints) {
-                    gLabels.shift();
-                    gTrafficChart.data.labels.shift();
-                    gTrafficChart.data.datasets.forEach(function (dataset) {
-                        dataset.data.shift();
-                    });
-                }
-                gTrafficChart.update('none');
-            }
+            drawTraffic();
         }
 
         function loadOverview() {
-            ajaxGet('/api/mihomo/dashboard/overview', {}, renderOverview);
+            if (overviewPending) { return; }
+            overviewPending = true;
+            ajaxGet('/api/mihomo/dashboard/overview', {}, function (data, status) {
+                overviewPending = false;
+                if (status === 'success' && data && data.runtime) { renderOverview(data); }
+                else {
+                    trafficHistory.add(Date.now(), null, null, false);
+                    $('#stat-rate-down, #stat-rate-up').text('—');
+                    drawTraffic();
+                }
+            });
         }
 
         /* ------------------------------------------------------------------ *
@@ -204,13 +166,13 @@
             const $box = $('#proxy-groups');
             if (!data['ready']) {
                 $box.html('<div class="text-muted" style="padding: 12px;">'
-                    + '<i class="fa fa-plug fa-fw"></i> {{ lang._('The controller is not reachable. Start the service to see proxy groups.') }}'
+                    + ('<i class="fa fa-plug fa-fw"></i> ' + {{ lang._('The controller is not reachable. Start the service to see proxy groups.') | json_encode }})
                     + '</div>');
                 return;
             }
             const groups = data['groups'] || [];
             if (groups.length === 0) {
-                $box.html('<div class="text-muted" style="padding: 12px;">{{ lang._('No proxy groups are defined in the configuration.') }}</div>');
+                $box.html(('<div class="text-muted" style="padding: 12px;">' + {{ lang._('No proxy groups are defined in the configuration.') | json_encode }} + '</div>'));
                 return;
             }
 
@@ -218,7 +180,7 @@
             groups.forEach(function (group) {
                 html += '<div class="col-md-6" style="margin-bottom: 15px;">';
                 html += '<div class="content-box" style="height: 300px; margin-bottom: 0; display: flex; flex-direction: column;">';
-                html += '<div style="padding: 10px 12px; border-bottom: 1px solid #eeeeee; flex: 0 0 auto;">';
+                html += '<div style="padding: 10px 12px;  flex: 0 0 auto;">';
                 html += '<b>' + escapeHtml(group['name']) + '</b> ';
                 html += '<span class="label label-opnsense label-opnsense-sm label-info">' + escapeHtml(group['type']) + '</span>';
                 html += '<span class="pull-right">';
@@ -370,22 +332,22 @@
                 'labels': [],
                 'datasets': [
                     {
-                        'label': '{{ lang._('Download') }}',
+                        'label': ({{ lang._('Download') | json_encode }}),
                         'data': [],
-                        'borderColor': '#3c8dbc',
-                        'backgroundColor': 'rgba(60, 141, 188, 0.15)',
+                        'borderColor': 'currentColor',
+                        'backgroundColor': 'transparent',
                         'borderWidth': 1,
                         'pointRadius': 0,
-                        'fill': true
+                        'fill': false, 'spanGaps': false
                     },
                     {
-                        'label': '{{ lang._('Upload') }}',
+                        'label': ({{ lang._('Upload') | json_encode }}),
                         'data': [],
-                        'borderColor': '#a94442',
-                        'backgroundColor': 'rgba(169, 68, 66, 0.15)',
+                        'borderColor': 'currentColor',
+                        'backgroundColor': 'transparent',
                         'borderWidth': 1,
                         'pointRadius': 0,
-                        'fill': true
+                        'fill': false, 'spanGaps': false
                     }
                 ]
             },
@@ -409,19 +371,32 @@
             }
         });
 
-        function refreshAll() {
-            loadOverview();
+        function updateChartTheme() {
+            const colors = MihomoUI.theme(document.getElementById('traffic-panel'));
+            gTrafficChart.data.datasets[0].borderColor = colors.down;
+            gTrafficChart.data.datasets[1].borderColor = colors.up;
+            gTrafficChart.data.datasets[1].borderDash = [5, 3];
+            gTrafficChart.options.color = colors.text;
+            gTrafficChart.options.scales.x.ticks.color = colors.text;
+            gTrafficChart.options.scales.y.ticks.color = colors.text;
+            gTrafficChart.options.scales.x.grid = {color: colors.grid};
+            gTrafficChart.options.scales.y.grid = {color: colors.grid};
+            gTrafficChart.options.plugins.legend.labels = {color: colors.text};
+            gTrafficChart.update('none');
         }
+        updateChartTheme();
+        new MutationObserver(updateChartTheme).observe(document.documentElement, {attributes: true, attributeFilter: ['class', 'style', 'data-theme']});
+        new MutationObserver(updateChartTheme).observe(document.body, {attributes: true, attributeFilter: ['class', 'style', 'data-theme']});
+        new MutationObserver(updateChartTheme).observe(document.head, {childList: true, subtree: true, attributes: true, attributeFilter: ['href']});
+        document.addEventListener('load', function (event) { if (event.target.tagName === 'LINK') { updateChartTheme(); } }, true);
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateChartTheme);
 
-        loadSafety();
         loadOverview();
         loadGroups();
         loadServiceState();
-        refreshAll();
 
         setInterval(loadOverview, 2000);
         setInterval(loadGroups, 15000);
-        setInterval(loadSafety, 60000);
         setInterval(loadServiceState, 30000);
     });
 </script>
@@ -432,87 +407,58 @@
     </section>
 </div>
 
-<div class="row">
-    <section class="col-xs-12">
-        <div id="mihomo-safety"></div>
-    </section>
+
+<div class="row mihomo-metrics">
+    <section class="col-sm-6 col-lg-3"><div class="content-box" style="padding:16px; min-height:100px; margin-bottom:15px;">
+        <div class="text-muted">{{ lang._('Active Connections') }}</div>
+        <div id="stat-connections" style="font-size:22px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere;">—</div>
+    </div></section>
+    <section class="col-sm-6 col-lg-3"><div class="content-box" style="padding:16px; min-height:100px; margin-bottom:15px;">
+        <div class="text-muted">{{ lang._('Download rate') }}</div>
+        <div id="stat-rate-down" style="font-size:22px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere;">—</div>
+    </div></section>
+    <section class="col-sm-6 col-lg-3"><div class="content-box" style="padding:16px; min-height:100px; margin-bottom:15px;">
+        <div class="text-muted">{{ lang._('Upload rate') }}</div>
+        <div id="stat-rate-up" style="font-size:22px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere;">—</div>
+    </div></section>
+    <section class="col-sm-6 col-lg-3"><div class="content-box" style="padding:16px; min-height:100px; margin-bottom:15px;">
+        <div class="text-muted">{{ lang._('Memory') }}</div>
+        <div id="stat-memory" style="font-size:22px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere;">—</div>
+    </div></section>
 </div>
+<div class="row"><section class="col-xs-12"><div class="content-box" style="padding:10px 14px; display:flex; flex-wrap:wrap; gap:12px 24px; margin-bottom:15px;">
+    <span>{{ lang._('Downloaded') }}: <span id="stat-download">—</span></span>
+    <span>{{ lang._('Uploaded') }}: <span id="stat-upload">—</span></span>
+    <span>{{ lang._('Core version') }}: <span id="mihomo-version">—</span></span>
+</div></section></div>
 
 <div class="row">
     <section class="col-xs-12">
-        <div class="content-box" style="padding: 10px 4px 4px 4px;">
-            <div class="row">
-                <div class="col-sm-6 col-lg-3" style="margin-bottom: 10px;">
-                    <div style="height: 5em; display: flex; align-items: stretch; border: 1px solid rgba(217, 79, 0, 0.2); border-radius: 0.3em; background: rgba(217, 79, 0, 0.06); overflow: hidden;">
-                        <div style="width: 42%; display: flex; align-items: center; justify-content: center; background: rgba(217, 79, 0, 0.12);">
-                            <i class="fa fa-exchange fa-2x" style="color: #d94f00;"></i>
-                        </div>
-                        <div style="width: 58%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 4px;">
-                            <div style="font-size: 17px; font-weight: 600;" id="stat-connections">—</div>
-                            <div class="text-muted" style="font-size: 11px; text-align: center; line-height: 1.2;">{{ lang._('Active Connections') }}</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-sm-6 col-lg-3" style="margin-bottom: 10px;">
-                    <div style="height: 5em; display: flex; align-items: stretch; border: 1px solid rgba(217, 79, 0, 0.2); border-radius: 0.3em; background: rgba(217, 79, 0, 0.06); overflow: hidden;">
-                        <div style="width: 42%; display: flex; align-items: center; justify-content: center; background: rgba(217, 79, 0, 0.12);">
-                            <i class="fa fa-area-chart fa-2x text-success"></i>
-                        </div>
-                        <div style="width: 58%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 4px;">
-                            <div style="font-size: 15px; font-weight: 600; color: #3c8dbc;" id="stat-rate-down">—</div>
-                            <div style="font-size: 15px; font-weight: 600; color: #a94442;" id="stat-rate-up">—</div>
-                            <div class="text-muted" style="font-size: 11px; line-height: 1.2;">{{ lang._('Download / Upload') }}</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-sm-6 col-lg-3" style="margin-bottom: 10px;">
-                    <div style="height: 5em; display: flex; align-items: stretch; border: 1px solid rgba(217, 79, 0, 0.2); border-radius: 0.3em; background: rgba(217, 79, 0, 0.06); overflow: hidden;">
-                        <div style="width: 42%; display: flex; align-items: center; justify-content: center; background: rgba(217, 79, 0, 0.12);">
-                            <i class="fa fa-database fa-2x text-primary"></i>
-                        </div>
-                        <div style="width: 58%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 4px;">
-                            <div style="font-size: 15px; font-weight: 600;" id="stat-download">—</div>
-                            <div style="font-size: 15px; font-weight: 600;" id="stat-upload">—</div>
-                            <div class="text-muted" style="font-size: 11px; line-height: 1.2;">{{ lang._('Total Downloaded / Uploaded') }}</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-sm-6 col-lg-3" style="margin-bottom: 10px;">
-                    <div style="height: 5em; display: flex; align-items: stretch; border: 1px solid rgba(217, 79, 0, 0.2); border-radius: 0.3em; background: rgba(217, 79, 0, 0.06); overflow: hidden;">
-                        <div style="width: 42%; display: flex; align-items: center; justify-content: center; background: rgba(217, 79, 0, 0.12);">
-                            <i class="fa fa-microchip fa-2x text-info"></i>
-                        </div>
-                        <div style="width: 58%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 4px;">
-                            <div style="font-size: 15px; font-weight: 600;" id="stat-memory">—</div>
-                            <div style="font-size: 13px; font-weight: 600;" id="mihomo-version">—</div>
-                            <div class="text-muted" style="font-size: 11px; line-height: 1.2;">{{ lang._('Memory / Core Version') }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-</div>
-
-<div class="row">
-    <section class="col-xs-12">
-        <div class="content-box">
-            <div style="padding: 12px 14px; border-bottom: 1px solid #eeeeee;">
+        <div class="content-box" id="traffic-panel">
+            <div style="padding:12px 14px; display:flex; align-items:center; flex-wrap:wrap; gap:10px;">
                 <i class="fa fa-area-chart text-muted"></i> <b>{{ lang._('Traffic') }}</b>
-                <span class="pull-right">
-                    <label style="font-weight: normal;">{{ lang._('Mode') }}:</label>
+                <span style="margin-left:auto; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                    <label for="traffic-range" style="font-weight:normal; margin:0;">{{ lang._('Time range') }}</label>
+                    <select id="traffic-range" class="form-control" style="width:auto;">
+                        <option value="60">{{ lang._('Last minute') }}</option>
+                        <option value="300">{{ lang._('Last 5 minutes') }}</option>
+                        <option value="900">{{ lang._('Last 15 minutes') }}</option>
+                        <option value="3600">{{ lang._('Last hour') }}</option>
+                    </select>
+                    <label for="mode-select" style="font-weight: normal;">{{ lang._('Mode') }}:</label>
                     <select id="mode-select" class="form-control" style="width: auto; display: inline-block; height: 28px; padding: 2px 6px;">
                         <option value="">{{ lang._('…') }}</option>
-                        <option value="rule">rule</option>
-                        <option value="global">global</option>
-                        <option value="direct">direct</option>
+                        <option value="rule">{{ lang._('Rule-based') }}</option>
+                        <option value="global">{{ lang._('Global') }}</option>
+                        <option value="direct">{{ lang._('Direct') }}</option>
                     </select>
                 </span>
             </div>
             <div style="padding: 12px;">
                 <div style="height: 200px;">
-                    <canvas id="traffic-chart"></canvas>
+                    <canvas id="traffic-chart" role="img" aria-label="{{ lang._('Download and upload rates') }}"></canvas>
                 </div>
+                <p class="text-muted" id="traffic-history-note" role="status" style="margin-top:10px;"></p>
             </div>
         </div>
     </section>
@@ -521,7 +467,7 @@
 <div class="row">
     <section class="col-xs-12">
         <div class="content-box">
-            <div style="padding: 12px 14px; border-bottom: 1px solid #eeeeee;">
+            <div style="padding: 12px 14px; ">
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
             <div style="padding: 12px;" id="proxy-groups">
@@ -534,7 +480,7 @@
 <div class="row">
     <section class="col-xs-12">
         <div class="content-box">
-            <div style="padding: 12px 14px; border-bottom: 1px solid #eeeeee;">
+            <div style="padding: 12px 14px; ">
                 <i class="fa fa-exchange text-muted"></i> <b>{{ lang._('Active Connections') }}</b>
                 <span class="pull-right">
                     <button type="button" id="close-all-connections" class="btn btn-xs btn-default">

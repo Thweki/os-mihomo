@@ -35,7 +35,7 @@ upgraded and removed by the built-in **plugin manager** (`System → Firmware �
 | **No third-party frontend** | No iframe, no zashboard/yacd/metacubexd, no external JS/CSS assets |
 | **Auditable privileged actions** | Writing config, reading/clearing logs and running subscription updates all go through **configd** (root) instead of shell string building in PHP |
 | **Validate before writing** | Raw YAML is checked with `mihomo -t` before it replaces the active file, the previous file is kept as a timestamped backup, and the patcher only touches the keys that actually change |
-| **Service is off by default** | The plugin never enables autostart on its own; the dashboard shows a red safety banner when it detects placeholder nodes, TUN auto-route takeover or DNS hijacking |
+| **Service is off by default** | The plugin never enables autostart on its own; diagnostic APIs remain available without a persistent dashboard difference banner |
 
 ## 2. Features
 
@@ -43,7 +43,7 @@ Menu: `VPN → Proxy Suite → Mihomo / Settings / Subscription / Log File`
 
 | Page | Route | Capabilities |
 |---|---|---|
-| **Mihomo** (overview) | `/ui/mihomo` | Service state and start/stop, boot-enable toggle, **safety check banner**, live rate chart, cumulative traffic, memory/core version, proxy groups with node switch and latency test, runtime mode switch, active connections table (close one / close all) |
+| **Mihomo** (overview) | `/ui/mihomo` | Service state and start/stop, boot-enable toggle, selectable traffic time ranges, cumulative traffic, memory/core version, proxy groups with node switch and latency test, runtime mode switch, active connections table (close one / close all) |
 | **Settings** | `/ui/mihomo/settings` | Native form (service / controller / TUN / DNS / subscription) plus a raw YAML editor (validated with `mihomo -t`, timestamped backup, minimal one-line patching) and import from the active configuration file |
 | **Subscription** | `/ui/mihomo/subscription` | Subscription URL and secret, one-click update (deliberately does **not** restart the service by default), live subscription log |
 | **Log File** | `/ui/mihomo/log` | Core log / subscription log: line count, download, clear (read through configd, so no file permissions have to be loosened) |
@@ -67,27 +67,22 @@ Pick one of three paths:
 
 | Path | Command / entry point | Touches system networking? | Use when |
 |---|---|---|---|
-| **A. Plugin manager** | `System → Firmware → Plugins → Install` (configure a plugin repository first, see §5) | Yes (runs the package `+POST_INSTALL`, see warning below) | Fresh devices; you want the firmware system to manage it |
+| **A. Plugin manager** | `System → Firmware → Plugins → Install` (configure a plugin repository first, see §5) | No; file-only installation | Fresh devices; you want the firmware system to manage it |
 | **B. Single package** | `pkg add -f os-mihomo.pkg` | Same as A | Offline distribution |
 | **C. Safe deploy script** | `scripts/deploy.sh` (driven by `tools/remote.ps1`) | **No** — only writes the plugin's own files; never touches firewall, interfaces, DNS or routes | Devices already serving a production network (this is how this project was delivered) |
 
 ```sh
 # Path C: file-by-file install, php -l / sh -n checks, menu cache clear, configd restart
-powershell -File tools/deploy.ps1               # first install (includes the core binary)
+powershell -File tools/deploy.ps1 -WithBinary   # first install (includes the core binary)
 powershell -File tools/deploy.ps1               # later upgrades (keeps your config.yaml)
 powershell -File tools/webtest.ps1              # end-to-end check: pages 200 / APIs 200 / unauthorized 302
 ```
 
-> [!CAUTION]
-> **Installing via `pkg add` or the plugin manager runs the package `+POST_INSTALL`** (upstream behaviour):
-> 1. adds a `tun_mihomo` interface and one firewall pass rule to `/conf/config.xml`;
-> 2. points Unbound forwarding at `127.0.0.1:1053` (DNS breaks for clients while mihomo is not running);
-> 3. writes `mihomo_enable="YES"` to `/etc/rc.conf.d/mihomo` (**autostart on boot**);
-> 4. generates a random `secret` and writes it back into the configuration.
->
-> The shipped `config.yaml` still contains the placeholder node `88.88.88.88` while `tun.auto-route`
-> defaults to true — **autostart in that state takes the whole network down.** Either replace the
-> nodes/subscription first, or use path C (no networking changes, no autostart).
+Package hooks now install files only. They never configure interfaces, firewall, routes or DNS, or start/restart the service. Live settings are not package-owned: defaults ship as `.sample` files, are copied only when absent, and new installations have autostart disabled. Uninstall retains user configuration; stop dependent policies and the service yourself before removal.
+
+Legacy upstream packages have network-changing hooks. Back up and inspect their uninstall hooks before migrating: this version cannot prevent an old package from running its own hooks.
+
+Use `powershell -File tools/deploy.ps1 -UiOnly` for a UI-only update with backup and rollback. See [CI/CD](docs/ci-cd.md) for validation, FreeBSD artifacts and tag-triggered draft releases. The UI inherits the active OPNsense theme, uses one decimal place for traffic, and provides 1/5/15-minute and 1-hour views of samples collected while the page is open. English source strings, a Chinese catalog and a gettext template are included.
 
 ## 5. Publishing a plugin repository
 
@@ -157,7 +152,7 @@ os-mihomo|||1.0.4|||Mihomo proxy integration for OPNsense|||76.7MiB|||0|||0|||||
 > **About DNS**: if LAN clients use the OPNsense LAN address as their resolver, Unbound answers before
 > the query ever reaches mihomo. To let mihomo handle DNS you can NAT-redirect LAN DNS, hand out an
 > external resolver via DHCP, or forward Unbound to mihomo's listen port (`1053`). Upstream's
-> `+POST_INSTALL` does the last one and adds a `geosite:cn` filter to Fake-IP (domestic domains get
+> The legacy upstream `+POST_INSTALL` did the last one and adds a `geosite:cn` filter to Fake-IP (domestic domains get
 > real IPs, foreign ones get Fake-IPs). **This project never changes that for you** — DNS and TUN
 > behaviour is controlled only by what you set explicitly in `Settings`.
 

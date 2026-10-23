@@ -5,6 +5,9 @@
  # All rights reserved.
  # 详见 models/OPNsense/Mihomo/Config.php 头部的 BSD 许可条款。
  #}
+{% set lang = mihomoLang %}
+<script src="{{ cache_safe('/js/mihomo/ui.js') }}"></script>
+
 
 <script>
     $(document).ready(function () {
@@ -18,8 +21,8 @@
 
         function loadSettings() {
             ajaxGet('/api/mihomo/subscription/get', {}, function (data) {
-                $('[id="mihomo.subscription.url"]').val(data['url'] || '');
-                $('[id="mihomo.subscription.secret"]').val(data['secret'] || '');
+                $('[id="mihomo.subscription.url"]').val(MihomoUI.decodeApiText(data['url']));
+                $('[id="mihomo.subscription.secret"]').val(MihomoUI.decodeApiText(data['secret']));
                 $('#env-file').text(data['envFile'] || '');
                 if (!data['scriptAvailable']) {
                     $('#sub-unavailable').show();
@@ -28,10 +31,15 @@
         }
 
         function refreshLogs(scroll) {
-            ajaxGet('/api/mihomo/subscription/log', { 'lines': 400 }, function (data) {
+            ajaxGet('/api/mihomo/subscription/log', { 'lines': 400 }, function (data, status) {
+                if (status !== 'success' || !data || data.status !== 'ok') {
+                    $('#log-state').text({{ lang._('Could not read the log. Try refreshing.') | json_encode }}); return;
+                }
+                const content = MihomoUI.decodeApiText(data.content);
+                $('#log-state').text(content ? {{ lang._('Log updated') | json_encode }} : {{ lang._('No log entries yet.') | json_encode }});
                 const $viewer = $('#log-viewer');
                 const atBottom = $viewer.length > 0 && ($viewer[0].scrollHeight - $viewer.scrollTop() - $viewer.outerHeight()) < 40;
-                $viewer.val(data['content'] || '');
+                $viewer.val(content);
                 if (scroll || atBottom) {
                     $viewer.scrollTop($viewer[0].scrollHeight);
                 }
@@ -48,7 +56,7 @@
                 }, function (data) {
                     $btn.prop('disabled', false);
                     showResult(
-                        data['status'] === 'ok' ? '{{ lang._('Settings saved') }}' : '{{ lang._('Save failed') }}',
+                        data['status'] === 'ok' ? ({{ lang._('Settings saved') | json_encode }}) : ({{ lang._('Save failed') | json_encode }}),
                         data['message'] || '',
                         data['status'] === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER
                     );
@@ -67,7 +75,7 @@
                 ajaxCall('/api/mihomo/subscription/run', { 'restart': restart ? 1 : 0 }, function (data) {
                     $btn.prop('disabled', false);
                     showResult(
-                        data['status'] === 'ok' ? '{{ lang._('Subscription update started') }}' : '{{ lang._('Subscription update failed') }}',
+                        data['status'] === 'ok' ? ({{ lang._('Subscription update started') | json_encode }}) : ({{ lang._('Subscription update failed') | json_encode }}),
                         data['message'] || '',
                         data['status'] === 'ok' ? BootstrapDialog.TYPE_INFO : BootstrapDialog.TYPE_DANGER
                     );
@@ -78,8 +86,8 @@
             if (restart) {
                 BootstrapDialog.confirm({
                     'type': BootstrapDialog.TYPE_WARNING,
-                    'title': '{{ lang._('Restart service?') }}',
-                    'message': '{{ lang._('The service will be restarted right after the update, which rebuilds the TUN device and its routes. Make sure the new nodes work, otherwise clients behind this firewall may lose connectivity.') }}',
+                    'title': ({{ lang._('Restart service?') | json_encode }}),
+                    'message': ({{ lang._('The service will be restarted right after the update, which rebuilds the TUN device and its routes. Make sure the new nodes work, otherwise clients behind this firewall may lose connectivity.') | json_encode }}),
                     'callback': function (result) { if (result) { confirmRestart(); } }
                 });
             } else {
@@ -89,7 +97,7 @@
 
         $('#clearLogAct').click(function () {
             ajaxCall('/api/mihomo/subscription/clear_log', {}, function (data) {
-                showResult('{{ lang._('Log') }}', data['message'] || '', BootstrapDialog.TYPE_INFO);
+                showResult(({{ lang._('Log') | json_encode }}), data['message'] || '', BootstrapDialog.TYPE_INFO);
                 refreshLogs(true);
             });
         });
@@ -123,7 +131,7 @@
 <div class="row">
     <section class="col-xs-12">
         <div class="content-box">
-            <div style="padding: 12px 14px; border-bottom: 1px solid #eeeeee;">
+            <div style="padding: 12px 14px; ">
                 <i class="fa fa-link text-muted"></i> <b>{{ lang._('Subscription Management') }}</b>
                 <span class="pull-right text-muted" style="font-size: 11px;" id="env-file"></span>
             </div>
@@ -136,12 +144,12 @@
                     </div>
                     <div class="form-group" style="margin-left: 15px;">
                         <label class="control-label" for="mihomo.subscription.secret">{{ lang._('Access Secret') }}</label>
-                        <input type="text" id="mihomo.subscription.secret" class="form-control" size="30" autocomplete="off"
+                        <input type="password" id="mihomo.subscription.secret" class="form-control" size="30" autocomplete="off"
                                placeholder="{{ lang._('Enter dashboard access secret') }}">
                     </div>
                     <div style="margin-top: 12px;">
                         <button type="button" class="btn btn-primary" id="saveAct"><i class="fa fa-save fa-fw"></i> {{ lang._('Save Settings') }}</button>
-                        <button type="button" class="btn btn-success" id="runAct"><i class="fa fa-refresh fa-fw"></i> {{ lang._('Start Subscription') }}</button>
+                        <button type="button" class="btn btn-success" id="runAct"><i class="fa fa-refresh fa-fw"></i> {{ lang._('Update subscription') }}</button>
                         <label style="font-weight: normal; margin-left: 12px;">
                             <input type="checkbox" id="restart-after-update"> {{ lang._('Restart service after a successful update') }}
                         </label>
@@ -155,15 +163,16 @@
 <div class="row">
     <section class="col-xs-12">
         <div class="content-box">
-            <div style="padding: 12px 14px; border-bottom: 1px solid #eeeeee;">
+            <div style="padding: 12px 14px; ">
                 <i class="fa fa-file-text text-muted"></i> <b>{{ lang._('Log Viewer') }}</b>
                 <span class="pull-right">
-                    <button type="button" class="btn btn-xs btn-default" id="refreshLogAct"><i class="fa fa-refresh fa-fw"></i></button>
-                    <button type="button" class="btn btn-xs btn-default" id="clearLogAct"><i class="fa fa-trash fa-fw"></i> {{ lang._('Clear Log') }}</button>
+                    <button type="button" class="btn btn-xs btn-default" id="refreshLogAct" title="{{ lang._('Refresh') }}" aria-label="{{ lang._('Refresh') }}"><i class="fa fa-refresh fa-fw"></i></button>
+                    <button type="button" class="btn btn-xs btn-default" id="clearLogAct" title="{{ lang._('Clear Log') }}" aria-label="{{ lang._('Clear Log') }}"><i class="fa fa-trash fa-fw"></i> {{ lang._('Clear Log') }}</button>
                 </span>
             </div>
             <div style="padding: 14px;">
-                <textarea id="log-viewer" class="form-control" rows="18" readonly
+                <p id="log-state" class="text-muted" role="status"></p>
+                <textarea aria-label="{{ lang._('Log contents') }}" id="log-viewer" class="form-control" rows="18" readonly
                           style="width: 100%; max-width: 100%; font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere;"></textarea>
             </div>
         </div>

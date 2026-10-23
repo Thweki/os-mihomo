@@ -9,6 +9,9 @@
  # All rights reserved.
  # 详见 models/OPNsense/Mihomo/Config.php 头部的 BSD 许可条款。
  #}
+{% set lang = mihomoLang %}
+<script src="{{ cache_safe('/js/mihomo/ui.js') }}"></script>
+
 
 <script>
     $(document).ready(function () {
@@ -91,8 +94,8 @@
             const on = String($sw.attr('data-managed')) === '1';
             $sw.toggleClass('mihomo-on', on)
                 .attr('title', on
-                    ? '{{ lang._('Written by the plugin: on Apply the value above is written into the file. Click to leave the file alone instead.') }}'
-                    : '{{ lang._('Leave alone: the plugin never writes this item, the file keeps whatever you wrote. Click to let the plugin write it here.') }}');
+                    ? ({{ lang._('Written by the plugin: on Apply the value above is written into the file. Click to leave the file alone instead.') | json_encode }})
+                    : ({{ lang._('Leave alone: the plugin never writes this item, the file keeps whatever you wrote. Click to let the plugin write it here.') | json_encode }}));
             $sw.find('i').toggleClass('fa-lock', !on).toggleClass('fa-unlock-alt', on);
         }
 
@@ -113,6 +116,11 @@
                 $el.closest('td').toggleClass('mihomo-leave-alone', off || fixed);
                 if ($el.hasClass('selectpicker')) {
                     $el.selectpicker('refresh');
+                    $el.closest('td').find('.mihomo-selected-value').remove();
+                    if (off) {
+                        $('<span>').addClass('mihomo-selected-value form-control-static').text($el.find('option:selected').text() || $el.val()).insertAfter($el.parent('.bootstrap-select'));
+                        $el.parent('.bootstrap-select').hide();
+                    } else { $el.parent('.bootstrap-select').show(); }
                 }
             });
             $('[data-managed-for]').each(function () {
@@ -159,7 +167,7 @@
                 }
                 $('<i>')
                     .addClass('fa fa-thumb-tack mihomo-fixed-icon')
-                    .attr('title', '{{ lang._('Fixed by the plugin and not editable here — see the help text.') }}')
+                    .attr('title', ({{ lang._('Fixed by the plugin and not editable here — see the help text.') | json_encode }}))
                     .appendTo($(labelEl));
             });
         }
@@ -208,8 +216,8 @@
             }
             const $btn = $('<button type="button" class="btn btn-xs btn-default" id="dns-upstream-recommended">')
                 .css({ 'margin-top': '6px' })
-                .attr('title', '{{ lang._('Suggested values; apply to activate.') }}')
-                .html('<i class="fa fa-magic fa-fw"></i> ' + '{{ lang._('Fill recommended values') }}')
+                .attr('title', ({{ lang._('Suggested values; apply to activate.') | json_encode }}))
+                .html('<i class="fa fa-magic fa-fw"></i> ' + ({{ lang._('Fill recommended values') | json_encode }}))
                 .on('click', function () {
                     el.value = RECOMMENDED_DNS_UPSTREAM;
                     const $sw = $('[data-managed-for="mihomo.dns.upstream"]');
@@ -219,7 +227,7 @@
                 });
             $(el).after($btn).after(
                 $('<div class="text-muted">').css('margin-top', '4px')
-                    .text('{{ lang._('Not written until you unlock and apply.') }}')
+                    .text(({{ lang._('Not written until you unlock and apply.') | json_encode }}))
             );
         }
 
@@ -257,11 +265,11 @@
                 }, function (data) {
                     $btn.prop('disabled', false);
                     if (data['status'] === 'ok') {
-                        showResult('{{ lang._('Settings applied') }}', (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_SUCCESS);
+                        showResult(({{ lang._('Settings applied') | json_encode }}), (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_SUCCESS);
                         loadRawConfig();
                         reloadForm();
                     } else {
-                        showResult('{{ lang._('Apply failed') }}', data['message'] || '', BootstrapDialog.TYPE_DANGER);
+                        showResult(({{ lang._('Apply failed') | json_encode }}), data['message'] || '', BootstrapDialog.TYPE_DANGER);
                     }
                 });
             }, true, function () {
@@ -273,9 +281,9 @@
             ajaxCall('/api/mihomo/settings/import', {}, function (data) {
                 if (data['status'] === 'ok') {
                     reloadForm();
-                    showResult('{{ lang._('Settings imported') }}', (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_INFO);
+                    showResult(({{ lang._('Settings imported') | json_encode }}), (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_INFO);
                 } else {
-                    showResult('{{ lang._('Import failed') }}', data['message'] || '', BootstrapDialog.TYPE_DANGER);
+                    showResult(({{ lang._('Import failed') | json_encode }}), data['message'] || '', BootstrapDialog.TYPE_DANGER);
                 }
             });
         });
@@ -299,12 +307,12 @@
 
         function dnsBool(value) {
             return value
-                ? '<span class="label label-success">{{ lang._('Enabled') }}</span>'
-                : '<span class="label label-default">{{ lang._('Disabled') }}</span>';
+                ? ('<span class="label label-success">' + {{ lang._('Enabled') | json_encode }} + '</span>')
+                : ('<span class="label label-default">' + {{ lang._('Disabled') | json_encode }} + '</span>');
         }
 
         function loadDnsStatus() {
-            $('#dns-summary').html('<tr><td colspan="2" class="text-muted">{{ lang._('Loading …') }}</td></tr>');
+            $('#dns-summary').html(('<tr><td colspan="2" class="text-muted">' + {{ lang._('Loading …') | json_encode }} + '</td></tr>'));
             ajaxGet('/api/mihomo/settings/dns_status', {}, function (data, status) {
                 if (status !== 'success' || !data || data['status'] !== 'ok') {
                     $('#dns-summary').html('<tr><td colspan="2" class="text-muted">'
@@ -328,26 +336,26 @@
                 const entries = (h['entries'] || []).join(', ') || '—';
 
                 const summary = [
-                    ['{{ lang._('DNS Module') }}', dnsBool(d['enabled'])],
-                    ['{{ lang._('Listen Address') }}', escapeHtml(d['listen'] || '—')],
-                    ['{{ lang._('Enhanced Mode') }}', escapeHtml(d['mode'] || '—')],
-                    ['{{ lang._('DNS over IPv6') }}', dnsBool(d['ipv6'])],
-                    ['{{ lang._('TUN Mode') }}', dnsBool(d['tun_enabled'])],
-                    ['{{ lang._('Service') }}', d['service_running']
-                        ? '<span class="label label-success">{{ lang._('running') }}</span>'
-                        : '<span class="label label-danger">{{ lang._('stopped') }}</span>'],
-                    ['{{ lang._('Client DNS hijack') }}', escapeHtml(coverage)
+                    [({{ lang._('DNS Module') | json_encode }}), dnsBool(d['enabled'])],
+                    [({{ lang._('Listen Address') | json_encode }}), escapeHtml(d['listen'] || '—')],
+                    [({{ lang._('Enhanced Mode') | json_encode }}), escapeHtml(d['mode'] || '—')],
+                    [({{ lang._('DNS over IPv6') | json_encode }}), dnsBool(d['ipv6'])],
+                    [({{ lang._('TUN Mode') | json_encode }}), dnsBool(d['tun_enabled'])],
+                    [({{ lang._('Service') | json_encode }}), d['service_running']
+                        ? ('<span class="label label-success">' + {{ lang._('running') | json_encode }} + '</span>')
+                        : ('<span class="label label-danger">' + {{ lang._('stopped') | json_encode }} + '</span>')],
+                    [({{ lang._('Client DNS hijack') | json_encode }}), escapeHtml(coverage)
                         + ' <span class="text-muted">(' + escapeHtml(entries) + ')</span>'],
                     ['Unbound', u['enabled']
-                        ? escapeHtml(u['all'] ? '{{ lang._('all interfaces') }}' : (u['interfaces'] || []).join(', '))
-                        : '{{ lang._('disabled') }}'],
-                    ['{{ lang._('DNS nameserver') }}', up['nameserver']
-                        ? '{{ lang._('configured') }}'
-                        : '{{ lang._('not configured') }}'],
-                    ['{{ lang._('Upstream policy') }}', up['nameserver_policy']
-                        ? '{{ lang._('configured') }}'
-                        : '{{ lang._('not configured') }}'],
-                    ['{{ lang._('Follow routing rules') }}', dnsBool(up['respect_rules'])]
+                        ? escapeHtml(u['all'] ? ({{ lang._('all interfaces') | json_encode }}) : (u['interfaces'] || []).join(', '))
+                        : ({{ lang._('disabled') | json_encode }})],
+                    [({{ lang._('DNS nameserver') | json_encode }}), up['nameserver']
+                        ? ({{ lang._('configured') | json_encode }})
+                        : ({{ lang._('not configured') | json_encode }})],
+                    [({{ lang._('Upstream policy') | json_encode }}), up['nameserver_policy']
+                        ? ({{ lang._('configured') | json_encode }})
+                        : ({{ lang._('not configured') | json_encode }})],
+                    [({{ lang._('Follow routing rules') | json_encode }}), dnsBool(up['respect_rules'])]
                 ];
                 $('#dns-summary').html(summary.map(function (row) {
                     return '<tr><th style="width: 30%;">' + row[0] + '</th><td>' + row[1] + '</td></tr>';
@@ -366,7 +374,7 @@
                 if (!warnings.length) {
                     $warn.append($('<div>').addClass('alert alert-success').css('margin-bottom', '6px')
                         .html('<i class="fa fa-check-circle fa-fw"></i> '
-                            + '{{ lang._('No obvious DNS path problems.') }}'));
+                            + ({{ lang._('No obvious DNS path problems.') | json_encode }})));
                 }
 
                 const $body = $('#dns-iface-body').empty();
@@ -377,13 +385,13 @@
                         : r['interface'];
                     let pathText = '—';
                     if (r['path'] === 'mihomo') {
-                        pathText = '{{ lang._('Mihomo (TUN)') }}';
+                        pathText = ({{ lang._('Mihomo (TUN)') | json_encode }});
                     } else if (r['path'] === 'unbound') {
                         pathText = 'Unbound';
                     } else if (r['path'] === 'pending') {
-                        pathText = '{{ lang._('Not applied') }}';
+                        pathText = ({{ lang._('Not applied') | json_encode }});
                     } else if (r['path'] === 'manual') {
-                        pathText = '{{ lang._('Manual') }}';
+                        pathText = ({{ lang._('Manual') | json_encode }});
                     }
                     const kind = r['state'] === 'ok' ? 'ok'
                         : (r['state'] === 'danger' ? 'danger'
@@ -430,15 +438,15 @@
 
         function compareState(row) {
             if (row['runtime_only']) {
-                return { kind: 'runtime', icon: 'fa-circle-o', label: '{{ lang._('running only') }}' };
+                return { kind: 'runtime', icon: 'fa-circle-o', label: ({{ lang._('running only') | json_encode }}) };
             }
             if (row['state'] === 'differs') {
-                return { kind: 'differs', icon: 'fa-exclamation-circle text-warning', label: '{{ lang._('different') }}' };
+                return { kind: 'differs', icon: 'fa-exclamation-circle text-warning', label: ({{ lang._('different') | json_encode }}) };
             }
             if (row['state'] === 'missing') {
-                return { kind: 'missing', icon: 'fa-minus-circle text-muted', label: '{{ lang._('not in file') }}' };
+                return { kind: 'missing', icon: 'fa-minus-circle text-muted', label: ({{ lang._('not in file') | json_encode }}) };
             }
-            return { kind: 'match', icon: 'fa-check-circle text-success', label: '{{ lang._('consistent') }}' };
+            return { kind: 'match', icon: 'fa-check-circle text-success', label: ({{ lang._('consistent') | json_encode }}) };
         }
 
         function compareValueCell(value) {
@@ -485,7 +493,7 @@
             $('#compare-runtime-dot')
                 .removeClass('fa-circle fa-circle-o text-success text-muted')
                 .addClass(data['runtime'] ? 'fa-circle text-success' : 'fa-circle-o text-muted')
-                .attr('title', data['runtime'] ? '{{ lang._('running') }}' : '{{ lang._('not running') }}');
+                .attr('title', data['runtime'] ? ({{ lang._('running') | json_encode }}) : ({{ lang._('not running') | json_encode }}));
 
             const diffOnly = $('#compare-diff-only').prop('checked');
             let visible = 0;
@@ -499,16 +507,16 @@
                 if (groupKey !== group) {
                     group = groupKey;
                     $body.append(
-                        $('<tr>').addClass('mihomo-compare-group').append(
+                        $('<tr>').addClass('mihomo-compare-group active').append(
                             $('<td>').attr('colspan', 5)
                                 .append($('<i>').addClass('fa ' + (COMPARE_GROUP_ICONS[groupKey] || 'fa-th-large') + ' fa-fw').attr('aria-hidden', 'true'))
-                                .append($('<span>').text(row['group_label'] || '{{ lang._('Other') }}'))
+                                .append($('<span>').text(row['group_label'] || ({{ lang._('Other') | json_encode }})))
                         )
                     );
                 }
 
                 const state = compareState(row);
-                const $tr = $('<tr>').addClass('mihomo-compare-row mihomo-compare-' + state.kind);
+                const $tr = $('<tr>').addClass('mihomo-compare-row mihomo-compare-' + state.kind).toggleClass('warning', state.kind === 'differs');
                 $tr.append(
                     $('<td>').addClass('mihomo-compare-status')
                         .attr('title', state.label)
@@ -520,7 +528,7 @@
                 if (row['managed'] === false) {
                     $page.append(
                         $('<i>').addClass('fa fa-lock mihomo-compare-lock')
-                            .attr('title', '{{ lang._('Leave alone: the page value is not written to the file.') }}')
+                            .attr('title', ({{ lang._('Leave alone: the page value is not written to the file.') | json_encode }}))
                             .attr('aria-hidden', 'true')
                     );
                 }
@@ -533,7 +541,7 @@
 
             if (visible === 0) {
                 const emptyText = diffOnly
-                    ? '{{ lang._('No differences: the page matches the configuration file.') }}'
+                    ? ({{ lang._('No differences: the page matches the configuration file.') | json_encode }})
                     : '—';
                 $body.append($('<tr>').addClass('mihomo-compare-empty').append(
                     $('<td>').attr('colspan', 5).text(emptyText)
@@ -546,7 +554,7 @@
             $btn.prop('disabled', true).find('i').addClass('fa-spin');
             $('#compare-body').html(
                 '<tr class="mihomo-compare-empty"><td colspan="5">'
-                + '<i class="fa fa-spinner fa-spin fa-fw"></i> {{ lang._('Loading …') }}'
+                + ('<i class="fa fa-spinner fa-spin fa-fw"></i> ' + {{ lang._('Loading …') | json_encode }})
                 + '</td></tr>'
             );
             ajaxGet('/api/mihomo/settings/inspect', {}, function (data, status) {
@@ -571,14 +579,21 @@
         /* ------------------------------------------------------------------ *
          * 原始配置编辑器
          * ------------------------------------------------------------------ */
+        let rawOriginal = '';
+        let rawLoaded = false;
         function loadRawConfig() {
-            ajaxGet('/api/mihomo/settings/config_get', {}, function (data) {
-                if (data['status'] === 'ok') {
-                    $('#config-editor').val(data['content']);
-                    $('#config-info').text(data['file'] + '  ·  ' + data['bytes'] + ' ' + '{{ lang._('bytes') }}');
+            $('#config-unlock, #config-save, #config-validate').prop('disabled', true);
+            ajaxGet('/api/mihomo/settings/config_get', {}, function (data, status) {
+                if (status === 'success' && data && data['status'] === 'ok') {
+                    rawOriginal = MihomoUI.decodeApiText(data['content']); rawLoaded = true;
+                    $('#config-editor').val(rawOriginal).prop('readonly', true);
+                    $('#config-save, #config-validate').prop('disabled', true);
+                    $('#config-unlock').prop('disabled', false);
+                    $('#config-changed').text('');
+                    $('#config-info').text(data['file'] + '  ·  ' + data['bytes'] + ' ' + ({{ lang._('bytes') | json_encode }}));
                 } else {
-                    $('#config-editor').val('');
-                    $('#config-info').text('{{ lang._('Configuration file not found.') }}');
+                    $('#config-editor').prop('readonly', true);
+                    $('#config-info').text({{ lang._('Could not load the configuration. Try again.') | json_encode }});
                 }
             });
         }
@@ -586,17 +601,17 @@
         $('#config-validate').click(function () {
             ajaxCall('/api/mihomo/settings/config_validate', { 'content': $('#config-editor').val() }, function (data) {
                 showResult(
-                    data['status'] === 'ok' ? '{{ lang._('Validation passed') }}' : '{{ lang._('Validation failed') }}',
+                    data['status'] === 'ok' ? ({{ lang._('Validation passed') | json_encode }}) : ({{ lang._('Validation failed') | json_encode }}),
                     data['message'] || '',
                     data['status'] === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER
                 );
             });
         });
 
-        $('#config-save').click(function () {
-            ajaxCall('/api/mihomo/settings/config_set', { 'content': $('#config-editor').val() }, function (data) {
+        function saveRawConfig(content) {
+            ajaxCall('/api/mihomo/settings/config_set', { 'content': content }, function (data) {
                 showResult(
-                    data['status'] === 'ok' ? '{{ lang._('Configuration saved') }}' : '{{ lang._('Save failed') }}',
+                    data['status'] === 'ok' ? ({{ lang._('Configuration saved') | json_encode }}) : ({{ lang._('Save failed') | json_encode }}),
                     data['message'] || '',
                     data['status'] === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER
                 );
@@ -604,19 +619,66 @@
                     loadRawConfig();
                 }
             });
+        }
+
+        $('#config-unlock').click(function () {
+            $('#config-editor').prop('readonly', false).focus();
+            $('#config-validate').prop('disabled', false);
+            $(this).prop('disabled', true);
+        });
+        $('#config-editor').on('input', function () {
+            const changed = $(this).val() !== rawOriginal;
+            $('#config-save').prop('disabled', !changed);
+            $('#config-changed').text(changed ? {{ lang._('Unsaved changes') | json_encode }} : '');
+        });
+        $('#config-reload').click(function () {
+            if ($('#config-editor').val() === rawOriginal || window.confirm({{ lang._('Discard the unsaved YAML changes?') | json_encode }})) { loadRawConfig(); }
+        });
+        $('#config-save').click(function () {
+            const $preview = $('<div>').append($('<p>').text({{ lang._('Review the YAML changes before saving. A backup is created and validation runs before the file is replaced.') | json_encode }}));
+            const current = $('#config-editor').val();
+            const before = rawOriginal.split('\n'), after = current.split('\n');
+            let first = 0;
+            while (first < before.length && first < after.length && before[first] === after[first]) { first++; }
+            let lastBefore = before.length, lastAfter = after.length;
+            while (lastBefore > first && lastAfter > first && before[lastBefore - 1] === after[lastAfter - 1]) { lastBefore--; lastAfter--; }
+            const lines = before.slice(first, Math.min(lastBefore, first + 100)).map(line => '- ' + line)
+                .concat(after.slice(first, Math.min(lastAfter, first + 100)).map(line => '+ ' + line));
+            $preview.append($('<pre>').css({'white-space': 'pre-wrap', 'max-height': '350px', 'overflow': 'auto'}).text(lines.join('\n')));
+            if (lastBefore - first > 100 || lastAfter - first > 100) { $preview.append($('<p>').text({{ lang._('Preview limited to 100 lines per version.') | json_encode }})); }
+            BootstrapDialog.show({title: {{ lang._('Review changes') | json_encode }}, message: $preview, buttons: [
+                {label: {{ lang._('Cancel') | json_encode }}, action: dialog => dialog.close()},
+                {label: {{ lang._('Validate and save') | json_encode }}, cssClass: 'btn-primary', action: function (dialog) { dialog.close(); saveRawConfig(current); }}
+            ]});
+        });
+        window.addEventListener('beforeunload', function (event) {
+            if (rawLoaded && $('#config-editor').val() !== rawOriginal) { event.preventDefault(); event.returnValue = ''; }
         });
 
         $('#config-test').click(function () {
             ajaxCall('/api/mihomo/settings/config_test', {}, function (data) {
                 showResult(
-                    data['status'] === 'ok' ? '{{ lang._('Active configuration is valid') }}' : '{{ lang._('Active configuration is invalid') }}',
+                    data['status'] === 'ok' ? ({{ lang._('Active configuration is valid') | json_encode }}) : ({{ lang._('Active configuration is invalid') | json_encode }}),
                     data['message'] || '',
                     data['status'] === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER
                 );
             });
         });
 
-        loadRawConfig();
+        $('#configTab').on('shown.bs.tab', function () {
+            if (!rawLoaded) { loadRawConfig(); }
+        });
+        $('#maintabs a').on('shown.bs.tab', function (event) {
+            $('#settings-actions').toggle($(event.target).attr('href') === '#settings');
+        });
+        $('#settings-actions').toggle($('#settings').hasClass('active'));
+        if (window.location.hash === '#advanced' || window.location.hash === '#config') { $('#configTab').tab('show'); }
+        $('#advanced-dns').click(function () {
+            $('#maintabs a[href="#settings"]').tab('show');
+            const $toggle = $('#show_advanced_frm_Settings');
+            if ($toggle.hasClass('fa-toggle-off')) { $toggle.click(); }
+            document.getElementById('mihomo.dns.upstream').scrollIntoView({block: 'center'});
+        });
     });
 </script>
 
@@ -637,7 +699,6 @@
     .mihomo-switch:hover,
     .mihomo-switch:focus {
         opacity: 1;
-        background-color: rgba(128, 128, 128, .22);
     }
     /* 写死的项（设备名 / 协议栈）：图钉一枚，不可点 */
     .mihomo-fixed-icon {
@@ -726,8 +787,6 @@
     }
     .mihomo-compare-table > thead > tr > th {
         padding: 8px 10px;
-        background-color: rgba(128, 128, 128, .045);
-        border-bottom: 1px solid rgba(128, 128, 128, .28);
         font-size: 12px;
         font-weight: 600;
         white-space: nowrap;
@@ -738,7 +797,6 @@
     }
     .mihomo-compare-table > tbody > tr > td {
         padding: 8px 10px;
-        border-top: 1px solid rgba(128, 128, 128, .13);
         vertical-align: top;
         line-height: 1.5;
     }
@@ -776,18 +834,13 @@
         opacity: .7;
     }
     .mihomo-compare-differs > td {
-        background-color: rgba(240, 173, 78, .065);
     }
     .mihomo-compare-differs > td:first-child {
-        box-shadow: inset 3px 0 0 #f0ad4e;
     }
     .mihomo-compare-missing > td:first-child {
-        box-shadow: inset 3px 0 0 rgba(128, 128, 128, .55);
     }
     .mihomo-compare-group > td {
         padding: 8px 10px;
-        background-color: rgba(128, 128, 128, .105);
-        border-top: 1px solid rgba(128, 128, 128, .18);
         font-size: 12px;
         font-weight: 600;
         letter-spacing: .02em;
@@ -797,7 +850,6 @@
         border-top: 0;
     }
     .mihomo-compare-table > tbody > tr.mihomo-compare-group:hover > td {
-        background-color: rgba(128, 128, 128, .105);
     }
     .mihomo-compare-group i {
         margin-right: 6px;
@@ -806,7 +858,6 @@
     .mihomo-compare-empty > td {
         padding: 30px 10px !important;
         text-align: center;
-        color: #999;
     }
     .mihomo-compare-runtime-dot {
         margin-left: 4px;
@@ -826,7 +877,7 @@
 <ul class="nav nav-tabs" role="tablist" id="maintabs">
     <li class="active"><a data-toggle="tab" href="#settings">{{ lang._('Settings') }}</a></li>
     <li><a data-toggle="tab" href="#dnsstatus" id="dnsStatusTab">{{ lang._('DNS status') }}</a></li>
-    <li><a data-toggle="tab" href="#config">{{ lang._('Configuration File') }}</a></li>
+    <li><a data-toggle="tab" href="#config" id="configTab">{{ lang._('Advanced configuration') }}</a></li>
     <li><a data-toggle="tab" href="#compare" id="compareTab">{{ lang._('Configuration comparison') }}</a></li>
 </ul>
 <div class="tab-content content-box">
@@ -869,17 +920,23 @@
     </div>
     <div id="config" class="tab-pane fade in">
         <div style="padding: 12px 14px;">
-            <div class="alert alert-info" style="margin-bottom: 10px;">
+            <h4>{{ lang._('YAML editor') }}</h4>
+            <p class="text-muted">{{ lang._('Edit the full configuration here. DNS upstream options are available in the advanced form.') }}</p>
+            <button type="button" class="btn btn-default btn-sm" id="advanced-dns">{{ lang._('DNS upstream options') }}</button>
+            <div class="alert alert-info" style="margin-top:12px; margin-bottom:10px;">
                 <i class="fa fa-info-circle fa-fw"></i>
                 {{ lang._('Validated with mihomo -t before it replaces the active file; the previous file is kept as a backup.') }}
                 <span class="pull-right" id="config-info"></span>
             </div>
-            <textarea id="config-editor" class="form-control" rows="26" spellcheck="false"
+            <textarea id="config-editor" readonly aria-label="{{ lang._('YAML configuration') }}" class="form-control" rows="26" spellcheck="false"
                       style="width: 100%; max-width: 100%; font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre; overflow-wrap: normal; resize: vertical;"></textarea>
-            <div style="margin-top: 10px;">
+            <div style="margin-top:10px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                <button type="button" class="btn btn-default" id="config-unlock" disabled>{{ lang._('Edit YAML') }}</button>
+                <button type="button" class="btn btn-default" id="config-reload">{{ lang._('Reload file') }}</button>
                 <button type="button" class="btn btn-default" id="config-test"><i class="fa fa-check-circle fa-fw"></i> {{ lang._('Test Active Configuration') }}</button>
-                <button type="button" class="btn btn-default" id="config-validate"><i class="fa fa-flask fa-fw"></i> {{ lang._('Validate') }}</button>
-                <button type="button" class="btn btn-primary" id="config-save"><i class="fa fa-save fa-fw"></i> {{ lang._('Save') }}</button>
+                <button type="button" class="btn btn-default" id="config-validate" disabled><i class="fa fa-flask fa-fw"></i> {{ lang._('Validate') }}</button>
+                <button type="button" class="btn btn-primary" id="config-save" disabled><i class="fa fa-save fa-fw"></i> {{ lang._('Review changes') }}</button>
+                <span class="text-muted" id="config-changed" role="status"></span>
             </div>
         </div>
     </div>
@@ -933,7 +990,7 @@
     </div>
 </div>
 
-<section class="grid-bottom-reserve __mt">
+<section class="grid-bottom-reserve __mt" id="settings-actions">
     <div class="alert content-box" style="margin-bottom: 0;">
         <div class="clearfix">
             <div class="pull-left">

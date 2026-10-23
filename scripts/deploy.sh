@@ -23,6 +23,52 @@ log() { printf '%s\n' "$*"; }
 
 [ -d "$STAGE" ] || { echo "staging tree missing: $STAGE" >&2; exit 2; }
 
+# UI-only deployment never touches runtime configuration, actions or services.
+if [ "${1:-}" = "--ui-only" ]; then
+    mkdir -p "$BAK"
+    LIST="$BAK/ui-files.txt"
+    : > "$LIST"
+    for tree in \
+        usr/local/opnsense/mvc/app/models/OPNsense/Mihomo \
+        usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo \
+        usr/local/opnsense/mvc/app/views/OPNsense/Mihomo \
+        usr/local/www/js/mihomo; do
+        [ -d "$STAGE/$tree" ] || { echo "missing UI tree: $tree" >&2; exit 2; }
+        (cd "$STAGE" && find "$tree" -type f) >> "$LIST"
+    done
+    while IFS= read -r rel; do
+        case "$rel" in *.php) php -l "$STAGE/$rel" >/dev/null ;; esac
+    done < "$LIST"
+    : > "$BAK/ui-existing.txt"
+    while IFS= read -r rel; do
+        if [ -f "/$rel" ]; then
+            mkdir -p "$BAK/files/$(dirname "$rel")"
+            cp -p "/$rel" "$BAK/files/$rel"
+            echo "$rel" >> "$BAK/ui-existing.txt"
+        fi
+    done < "$LIST"
+    # Restore all copied files if any install fails; no service restarts needed.
+    restore_ui() {
+        while IFS= read -r rel; do
+            if grep -Fxq "$rel" "$BAK/ui-existing.txt"; then
+                cp -p "$BAK/files/$rel" "/$rel"
+            else
+                rm -f "/$rel"
+            fi
+        done < "$LIST"
+    }
+    trap 'restore_ui' 1 2 3 15
+    while IFS= read -r rel; do
+        mkdir -p "/$(dirname "$rel")"
+        if ! install -m 0644 -o root -g wheel "$STAGE/$rel" "/$rel"; then
+            restore_ui; exit 1
+        fi
+    done < "$LIST"
+    trap - 1 2 3 15
+    echo "UI deployment complete; rollback backup: $BAK"
+    exit 0
+fi
+
 log "=== os-mihomo deploy @ $TS ==="
 
 # ---------------------------------------------------------------- 0. 净化
@@ -41,6 +87,7 @@ for path in \
     /usr/local/opnsense/mvc/app/models/OPNsense/Mihomo \
     /usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo \
     /usr/local/opnsense/mvc/app/views/OPNsense/Mihomo \
+    /usr/local/www/js/mihomo \
     /usr/local/opnsense/scripts/mihomo \
     /usr/local/opnsense/service/conf/actions.d/actions_mihomo.conf \
     /usr/local/opnsense/version/mihomo \
@@ -76,6 +123,7 @@ for rel in \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Controller.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Logs.php \
+    usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Translator.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/RequestParamsTrait.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Safety.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Subscription.php \
@@ -111,6 +159,15 @@ for rel in \
         install_file "$STAGE/$rel" "/$rel" 0644
     else
         log "  (skip, not in tree) $rel"
+    fi
+done
+
+# Plugin-owned catalogs and browser helpers (no system theme/catalog changes).
+for tree in usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Locale usr/local/www/js/mihomo; do
+    if [ -d "$STAGE/$tree" ]; then
+        (cd "$STAGE" && find "$tree" -type f) | while IFS= read -r rel; do
+            install_file "$STAGE/$rel" "/$rel" 0644
+        done
     fi
 done
 

@@ -14,11 +14,11 @@ upstream/
 
 # ---- 大体积 / 可再生成的二进制与数据文件（不入库） ----
 # 上游以 xz 形式随包分发 mihomo 内核；本仓库只保留构建脚本与校验和。
-# 重新获取：见 src/os-mihomo/README.md「获取内核二进制」一节。
-src/os-mihomo/src/usr/local/bin/*.xz
-src/os-mihomo/src/usr/local/etc/mihomo/*.dat
-src/os-mihomo/work/
-src/os-mihomo/dist/
+# 重新获取：见 README.md「获取内核二进制」一节。
+src/usr/local/bin/*.xz
+src/usr/local/etc/mihomo/*.dat
+work/
+dist/
 *.pkg
 *.tzst
 

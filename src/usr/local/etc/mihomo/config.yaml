@@ -4,10 +4,10 @@ allow-lan: false
 bind-address: 127.0.0.1
 mode: rule
 keep-alive-interval: 15
-external-controller: 0.0.0.0:9090
+external-controller: 127.0.0.1:9090
 external-ui: /usr/local/etc/mihomo/ui
 external-ui-url: "https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip"
-secret: "CHANGE_ME"
+secret: example-change-me
 client-fingerprint: chrome
 profile:
   store-selected: true
@@ -110,24 +110,24 @@ dns:
 proxies:
   - name: vless-reality-vision-bw
     type: vless
-    server: 88.88.88.88
+    server: 192.0.2.1
     port: 1443
-    uuid: aa5aa394-378c-4710-92e8-a441acdee9b9
+    uuid: 00000000-0000-0000-0000-000000000000
     network: tcp
     udp: true
     tls: true
     flow: xtls-rprx-vision
     servername: apple.com
     reality-opts:
-      public-key: q4vXvVtKwT67g4tYa7twV5dFZY_ApCTBaSJTGXZpXD4
+      public-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
       short-id: 89f095df
     client-fingerprint: chrome
 
   - name: hysteria2-bw
     type: hysteria2
-    server: 88.88.88.88
+    server: 192.0.2.1
     port: 3443
-    password: aa5aa394-378c-4710-92e8-a441acdee9b9
+    password: example-password
     alpn:
       - h3
     sni: www.bing.com
@@ -136,10 +136,10 @@ proxies:
 
   - name: tuic5-bw
     type: tuic
-    server: 88.88.88.88
+    server: 192.0.2.1
     port: 4443
-    uuid: aa5aa394-378c-4710-92e8-a441acdee9b9
-    password: aa5aa394-378c-4710-92e8-a441acdee9b9
+    uuid: 00000000-0000-0000-0000-000000000000
+    password: example-password
     alpn:
       - h3
     disable-sni: true
@@ -151,9 +151,9 @@ proxies:
 
   - name: anytls-bw
     type: anytls
-    server: 88.88.88.88
+    server: 192.0.2.1
     port: 5443
-    password: aa5aa394-378c-4710-92e8-a441acdee9b9
+    password: example-password
     client-fingerprint: chrome
     udp: true
     idle-session-check-interval: 30

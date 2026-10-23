@@ -17,6 +17,7 @@ class RoutingController extends \OPNsense\Base\IndexController
 {
     public function indexAction()
     {
+        $this->view->mihomoLang = new Translator();
         $this->view->formDialogPolicyRule = $this->getForm('policy_rule');
         $this->view->formGridPolicy = $this->getFormGrid('policy_rule');
         $this->view->pick('OPNsense/Mihomo/routing');

@@ -14,6 +14,7 @@ class LogController extends \OPNsense\Base\IndexController
 {
     public function indexAction()
     {
+        $this->view->mihomoLang = new Translator();
         $this->view->pick('OPNsense/Mihomo/log');
     }
 }

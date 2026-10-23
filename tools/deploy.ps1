@@ -3,12 +3,30 @@
 #   .\tools\deploy.ps1              # 只装 WebUI / 脚本（不动内核二进制）
 #   .\tools\deploy.ps1 -WithBinary  # 同时安装 mihomo 内核（首次需要）
 param(
-    [switch]$WithBinary
+    [switch]$WithBinary,
+    [switch]$UiOnly
 )
 
 $ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Push-Location $root
+
+if ($UiOnly) {
+    if ($WithBinary) { throw '-UiOnly cannot be combined with -WithBinary' }
+    python tools/build_locales.py --check
+    if ($LASTEXITCODE -ne 0) { throw 'Locale validation failed' }
+    New-Item -ItemType Directory -Force logs | Out-Null
+    tar -cf logs/ui-stage.tar -C src usr/local/opnsense/mvc/app/models/OPNsense/Mihomo usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo usr/local/opnsense/mvc/app/views/OPNsense/Mihomo usr/local/www/js/mihomo
+    if ($LASTEXITCODE -ne 0) { throw 'UI archive failed' }
+    & .\tools\remote.ps1 -Push logs/ui-stage.tar -PushTo /tmp/mihomo-ui-stage.tar
+    if ($LASTEXITCODE -ne 0) { throw 'UI upload failed' }
+    & .\tools\remote.ps1 -Cmd "mkdir -p /tmp/mihomo-stage/src && tar -xf /tmp/mihomo-ui-stage.tar -C /tmp/mihomo-stage/src"
+    if ($LASTEXITCODE -ne 0) { throw 'UI staging failed' }
+    & .\tools\remote.ps1 -Script scripts/deploy.sh -ScriptArgs '--ui-only'
+    $result = $LASTEXITCODE
+    Pop-Location
+    exit $result
+}
 
 Write-Host "=== 1/4 净化源码（去 BOM / 统一 LF）===" -ForegroundColor Cyan
 python tools\sanitize.py --write

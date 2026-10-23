@@ -14,6 +14,7 @@ class SubscriptionController extends \OPNsense\Base\IndexController
 {
     public function indexAction()
     {
+        $this->view->mihomoLang = new Translator();
         $this->view->pick('OPNsense/Mihomo/subscription');
     }
 }
