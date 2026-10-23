@@ -588,9 +588,6 @@ msgstr "没有 DNS 监听者：请给客户端指定一个能访问到的 DNS �
 msgid "No TUN forwarding rules were observed in the loaded PF ruleset."
 msgstr "已加载的 PF 规则中未见 TUN 转发规则。"
 
-msgid "No TUN rule observed"
-msgstr "未见 TUN 规则"
-
 msgid "No differences: the page matches the configuration file."
 msgstr "没有差异：页面与配置文件一致。"
 
@@ -599,6 +596,9 @@ msgstr "暂无接口数据。"
 
 msgid "No interface is bound to mihomo: DNS on all interfaces is handled by Unbound or by the clients themselves."
 msgstr "没有接口绑定到 mihomo：所有接口的 DNS 都由 Unbound 或客户端自己处理。"
+
+msgid "No interface-specific TUN rule"
+msgstr "未见接口专属 TUN 规则"
 
 msgid "No log entries yet."
 msgstr "暂无日志。"
@@ -800,6 +800,9 @@ msgstr "规则详情"
 
 msgid "Rule-based"
 msgstr "规则模式"
+
+msgid "Rules without an interface limit are listed separately and may also match these interfaces. Check their source and destination conditions in Rule details."
+msgstr "未限定接口的规则会单独列出，也可能匹配这些接口。请在规则详情中核对来源和目标条件。"
 
 msgid "Running (memory)"
 msgstr "运行中（内存）"

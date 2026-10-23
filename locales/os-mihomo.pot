@@ -782,10 +782,6 @@ msgstr ""
 msgid "No TUN forwarding rules were observed in the loaded PF ruleset."
 msgstr ""
 
-#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
-msgid "No TUN rule observed"
-msgstr ""
-
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "No differences: the page matches the configuration file."
 msgstr ""
@@ -796,6 +792,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
 msgid "No interface is bound to mihomo: DNS on all interfaces is handled by Unbound or by the clients themselves."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "No interface-specific TUN rule"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt
@@ -1064,6 +1064,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Rule-based"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Rules without an interface limit are listed separately and may also match these interfaces. Check their source and destination conditions in Rule details."
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt

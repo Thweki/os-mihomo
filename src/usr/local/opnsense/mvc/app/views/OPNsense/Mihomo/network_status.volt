@@ -28,7 +28,7 @@ $(document).ready(function () {
                         const value = rule.family + ' · ' + directions[rule.direction] + ' · ' + (rule.ports === '*' ? {{ lang._('All destination ports') | json_encode }} : text(rule.ports));
                         if (!values.includes(value)) { values.push(value); }
                     });
-                    if (!values.length) { $cell.addClass('text-muted').text({{ lang._('No TUN rule observed') | json_encode }}); }
+                    if (!values.length) { $cell.addClass('text-muted').text({{ lang._('No interface-specific TUN rule') | json_encode }}); }
                     values.forEach(value => $cell.append($('<div>').text(value)));
                 }
                 $row.append($cell);
@@ -96,6 +96,7 @@ $(document).ready(function () {
         <tbody class="network-rows"><tr><td colspan="4">{{ lang._('Loading …') }}</td></tr></tbody>
     </table></div>
     <p class="text-muted">{{ lang._('Loaded PF rules are shown here. Rule order, exceptions and core policies still affect traffic. DNS paths describe the configuration, not a client query test.') }}</p>
+    <p class="text-muted">{{ lang._('Rules without an interface limit are listed separately and may also match these interfaces. Check their source and destination conditions in Rule details.') }}</p>
     <div class="network-details hidden table-responsive">
         <table class="table table-condensed table-hover"><thead><tr>
             <th>{{ lang._('Device') }}</th><th>{{ lang._('Protocol') }}</th><th>{{ lang._('Source') }}</th>
