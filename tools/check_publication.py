@@ -15,13 +15,28 @@ FILES = {'.gitattributes', '.gitignore', '.github/workflows/ci.yml', '.github/de
          'tools/check_publication.py'}
 ROOTS = ('src/', 'locales/', 'packaging/freebsd/')
 
+# These exact images were visually reviewed after local privacy blurring.
+# Replacements need a new visual review before updating their hashes.
+# A text scan cannot establish whether screenshot pixels contain private data.
+SCREENSHOTS = {
+    'docs/assets/overview.png': 'ddd4ef2cd6bff07a0b1f37b737d85e8e4e9cf53a82a10292cf22ac601a183d33',
+    'docs/assets/routing.png': 'af58b1b61c8578ddab955e176034d50d3bcb0363a6fdfbe5bab4e854afea2eaf',
+    'docs/assets/configuration-comparison.png': 'bccfa3ae5121377c488108ecfbd3b8365de396157de1de6c20e8282f151e49ea',
+}
+
 def check():
     tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0')
     ignored = subprocess.check_output(['git', 'ls-files', '-ci', '--exclude-standard'], cwd=ROOT)
     assert not ignored.strip(), 'Ignored local files must not be tracked'
+    for relative, digest in SCREENSHOTS.items():
+        data = (ROOT / relative).read_bytes()
+        assert data.startswith(b'\x89PNG\r\n\x1a\n'), f'Expected PNG screenshot: {relative}'
+        assert hashlib.sha256(data).hexdigest() == digest, f'Screenshot needs privacy review: {relative}'
     for relative in filter(None, tracked):
-        assert relative in FILES or relative.startswith(ROOTS), f'Unexpected public file: {relative}'
+        assert relative in FILES or relative in SCREENSHOTS or relative.startswith(ROOTS), f'Unexpected public file: {relative}'
         path = ROOT / relative
+        if relative in SCREENSHOTS:
+            continue
         if path.suffix in ('.xz', '.dat', '.mo'):
             continue
         content = path.read_text(encoding='utf-8')

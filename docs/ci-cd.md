@@ -18,4 +18,6 @@ sh scripts/ci_build.sh
 
 The repository archive contains ABI-specific package metadata. To host it, extract it to a static server and replace the URL in its client configuration template. A hosted package repository is not provisioned by this workflow. SHA-256 files detect download corruption; independent release signing is not configured.
 
-Local instructions, work logs, screenshots, device exports and one-off diagnostics are excluded from publication. CI rejects tracked files that match `.gitignore`, unexpected files, private host addresses, home-directory paths, private keys and token patterns. Distributed configuration accepts only documented example credentials.
+Local instructions, work logs, original screenshots, device exports and one-off diagnostics are excluded from publication. Only the three reviewed, sanitized README images in `docs/assets/` are allowed, with exact SHA-256 checksums pinned in `tools/check_publication.py`. Replacing an image requires a new visual privacy review and checksum update; text scanning cannot detect sensitive content inside image pixels.
+
+CI rejects tracked files that match `.gitignore`, unexpected files, private host addresses, home-directory paths, private keys and token patterns. Distributed configuration accepts only documented example credentials.

@@ -23,6 +23,10 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
+
+These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.
+
 ## Requirements
 
 | Component | Current version / target |
@@ -76,6 +80,8 @@ After refreshing repository metadata, manage `os-mihomo` under **System → Firm
 
 Once network policies are active, affected traffic may depend on Mihomo continuing to run. Remove that dependency before stopping the service or uninstalling the plugin.
 
+![Routing policies with interface rules, preview controls and configuration history](docs/assets/routing.png)
+
 ## Configuration and maintenance
 
 ### Forms, YAML and runtime state
@@ -83,6 +89,8 @@ Once network policies are active, affected traffic may depend on Mihomo continui
 Saved form settings, YAML on disk and the core's running configuration are managed separately. Apply writes permitted fields to the file and synchronizes plugin settings. Saving a file does not mean the running core has loaded it; explicitly request a restart when needed.
 
 The advanced YAML editor starts in read-only mode. Unlock it to edit and review changes before saving. The server validates the new configuration and backs up the old file before replacing it. DNS status and Configuration comparison are read-only views.
+
+![Configuration comparison across form, file and runtime values](docs/assets/configuration-comparison.png)
 
 ### Subscription updates
 

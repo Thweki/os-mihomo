@@ -17,6 +17,13 @@ images/
 /docs/*
 !/docs/ci-cd.md
 
+# Only reviewed, sanitized README images may be published.
+!/docs/assets/
+/docs/assets/*
+!/docs/assets/overview.png
+!/docs/assets/routing.png
+!/docs/assets/configuration-comparison.png
+
 # Publish maintained build/deployment utilities only
 /scripts/*
 !/scripts/ci_build.sh
