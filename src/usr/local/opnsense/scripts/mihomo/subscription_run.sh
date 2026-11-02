@@ -8,6 +8,7 @@
 # 之所以默认不重启：上游 sub.sh 结尾写死 `service mihomo restart`，
 # 在未确认节点可用时自动重启可能让整网流量进入无效 TUN 路由。
 set -u
+umask 077
 
 LOG=/var/log/mihomo_sub.log
 SCRIPT=/usr/local/etc/mihomo/sub/sub.sh
@@ -19,7 +20,7 @@ case "${1:-no}" in
 esac
 
 touch "$LOG" 2>/dev/null || true
-chmod 0640 "$LOG" 2>/dev/null || true
+chmod 0600 "$LOG" 2>/dev/null || true
 
 now() { date '+%Y-%m-%d %H:%M:%S'; }
 
@@ -28,13 +29,17 @@ printf '[%s] Subscription task submitted (restart service after update: %s).\n' 
 
 if [ ! -f "$SCRIPT" ]; then
     printf '[%s] Subscription script is missing: %s\n' "$(now)" "$SCRIPT" >> "$LOG"
-    exit 1
+    echo '{"status":"failed","state":"failed","changed":false,"code":"missing_script","message":"Subscription script is missing."}'
+    exit 0
 fi
 
-/usr/sbin/daemon -p "$PIDFILE" /bin/sh -c '
+if ! /usr/sbin/daemon -p "$PIDFILE" /bin/sh -c '
     MIHOMO_SERVICE_CMD="'"$SERVICE_CMD"'" /bin/sh '"$SCRIPT"' >> '"$LOG"' 2>&1
     rc=$?
     printf "[%s] Subscription task finished (exit=%s).\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$rc" >> '"$LOG"'
-'
+'; then
+    echo '{"status":"failed","state":"failed","changed":false,"code":"launch_failed","message":"Unable to launch the subscription task."}'
+    exit 0
+fi
 
-echo "Subscription task submitted; follow the log for progress."
+echo '{"status":"ok","state":"accepted","changed":false,"code":"accepted","message":"Subscription task accepted; follow its status for completion."}'

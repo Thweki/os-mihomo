@@ -36,10 +36,16 @@ images/
 !/tools/mo_editor.py
 !/tools/validate.py
 !/tools/check_publication.py
+!/tools/reproducible_archive.py
+!/tools/build_provenance.py
 /tests/*
 !/tests/test_patch.php
 !/tests/test_ui.js
 !/tests/test_runtime.php
+!/tests/test_writes.php
+!/tests/test_api.php
+!/tests/test_build.py
+!/tests/test_repository.sh
 
 # Local configuration, credentials, captures and build outputs
 *.local.yaml

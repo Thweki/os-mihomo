@@ -18,10 +18,15 @@
 # 再到 OPNsense 上写一份 /usr/local/etc/pkg/repos/os-mihomo.conf 指向它，
 # 之后「系统 > 固件 > 插件」里就能看到并安装/升级/卸载本插件。
 set -eu
+export LC_ALL=C TZ=UTC
+umask 022
 
 PKG_NAME="${PKG_NAME:-os-mihomo}"
 REPO_NAME="${REPO_NAME:-os-mihomo}"
 BASE_URL="${BASE_URL:-}"
+REPO_SIGNING_KEY="${REPO_SIGNING_KEY:-}"
+REPO_PUBLIC_KEY="${REPO_PUBLIC_KEY:-}"
+REQUIRE_SIGNED="${REQUIRE_SIGNED:-no}"
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 DISTDIR="${DISTDIR:-$SCRIPT_DIR/dist}"
@@ -45,6 +50,18 @@ case "$ABI" in
 esac
 
 REPO_DIR="$OUTDIR/$ABI"
+case "$REQUIRE_SIGNED" in yes|no) ;; *) echo 'REQUIRE_SIGNED must be yes or no' >&2; exit 1;; esac
+if [ -n "$REPO_SIGNING_KEY" ]; then
+    [ -r "$REPO_SIGNING_KEY" ] && [ -r "$REPO_PUBLIC_KEY" ] || {
+        echo 'Signing requires readable REPO_SIGNING_KEY and REPO_PUBLIC_KEY' >&2; exit 1;
+    }
+    # Match the configured public key before emitting a trusted client template.
+    private_public=$(openssl rsa -in "$REPO_SIGNING_KEY" -pubout 2>/dev/null)
+    expected_public=$(openssl pkey -pubin -in "$REPO_PUBLIC_KEY" -pubout 2>/dev/null)
+    [ "$private_public" = "$expected_public" ] || { echo 'Signing key pair mismatch' >&2; exit 1; }
+elif [ "$REQUIRE_SIGNED" = yes ] || [ -n "$REPO_PUBLIC_KEY" ]; then
+    echo 'A signing key is required; refusing unsigned fallback' >&2; exit 1
+fi
 rm -rf "$REPO_DIR"
 mkdir -p "$REPO_DIR"
 
@@ -52,7 +69,15 @@ PKG_FILE="$PKG_NAME-$VERSION.pkg"
 cp "$DISTDIR/$PKG_NAME.pkg" "$REPO_DIR/$PKG_FILE"
 
 echo "==> 生成仓库元数据（pkg repo）"
-pkg repo "$REPO_DIR" >/dev/null
+if [ -n "$REPO_SIGNING_KEY" ]; then
+    pkg repo "$REPO_DIR" "rsa:$REPO_SIGNING_KEY" >/dev/null
+    install -m 0644 "$REPO_PUBLIC_KEY" "$REPO_DIR/$REPO_NAME.pub"
+    trust="signature_type: \"pubkey\", pubkey: \"/usr/local/etc/pkg/keys/$REPO_NAME.pub\","
+else
+    pkg repo "$REPO_DIR" >/dev/null
+    trust='signature_type: "none",'
+    echo 'Repository is unsigned; configure REPO_SIGNING_KEY and REPO_PUBLIC_KEY for production.' >&2
+fi
 
 URL="${BASE_URL:-<把本目录放到静态站点后填写 base URL>/$ABI}"
 cat > "$REPO_DIR/$REPO_NAME.conf" <<EOF
@@ -66,7 +91,8 @@ cat > "$REPO_DIR/$REPO_NAME.conf" <<EOF
 #   随后「系统 > 固件 > 插件」即可看到 os-mihomo。
 $REPO_NAME: {
   url: "$URL",
-  enabled: yes
+  $trust
+  enabled: no
 }
 EOF
 

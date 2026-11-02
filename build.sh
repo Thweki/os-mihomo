@@ -1,5 +1,7 @@
 #!/bin/sh
 set -eu
+export LC_ALL=C TZ=UTC
+umask 022
 
 PKG_NAME="${PKG_NAME:-os-mihomo}"
 VERSION="${VERSION:-1.1.0}"
@@ -21,6 +23,8 @@ MIHOMO_SHA256="${MIHOMO_SHA256:-fd4ffdd64d379f046dc1863df91329b1ab37e4fc8bb0aac9
 DOWNLOAD_TIMEOUT="${DOWNLOAD_TIMEOUT:-300}"
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -c safe.directory="$SCRIPT_DIR" -C "$SCRIPT_DIR" log -1 --format=%ct)}"
+export SOURCE_DATE_EPOCH
 WORKDIR="${WORKDIR:-"$SCRIPT_DIR/work/freebsd-pkg"}"
 STAGEDIR="$WORKDIR/stage"
 METADIR="$WORKDIR/meta"
@@ -41,6 +45,7 @@ command -v pkg >/dev/null 2>&1 || die "pkg command not found. Run this script on
 command -v tar >/dev/null 2>&1 || die "tar command not found."
 command -v xz >/dev/null 2>&1 || die "xz command not found."
 command -v sha256 >/dev/null 2>&1 || die "sha256 command not found."
+command -v python3 >/dev/null 2>&1 || die "python3 command not found."
 if ! command -v fetch >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
     die "fetch or curl command not found."
 fi
@@ -151,6 +156,9 @@ prepare_binary() {
 
 echo "==> Staging files"
 copy_tree "$SCRIPT_DIR/src" "$STAGEDIR"
+# Ignore checkout ownership, umask and executable-bit differences.
+find "$STAGEDIR" -type d -exec chmod 0755 {} +
+find "$STAGEDIR" -type f -exec chmod 0644 {} +
 prepare_binary "$MIHOMO_ASSET" "$MIHOMO_DOWNLOAD_URL" "$DOWNLOADDIR/mihomo"
 mkdir -p "$STAGEDIR/usr/local/bin"
 install -m 0755 "$DOWNLOADDIR/mihomo" "$STAGEDIR/usr/local/bin/mihomo"
@@ -174,7 +182,7 @@ done
 # 配置文件按最小权限落包
 chmod 0600 "$STAGEDIR/usr/local/etc/mihomo/sub/env" 2>/dev/null || true
 chmod 0600 "$STAGEDIR/usr/local/etc/mihomo/sub/template_config.yaml" 2>/dev/null || true
-chmod 0644 "$STAGEDIR/usr/local/etc/mihomo/config.yaml" 2>/dev/null || true
+chmod 0600 "$STAGEDIR/usr/local/etc/mihomo/config.yaml"
 
 # Package sample files only. pkg upgrades/deletion must never own live settings.
 for mutable in etc/rc.conf.d/mihomo usr/local/etc/mihomo/config.yaml usr/local/etc/mihomo/sub/env usr/local/etc/mihomo/sub/template_config.yaml; do
@@ -239,23 +247,12 @@ cp "$METADIR/+MANIFEST" "$METADIR/+COMPACT_MANIFEST"
 
 echo "==> Creating package for $PKG_ABI"
 PKGROOT="$WORKDIR/package-root"
-TARLIST="$WORKDIR/pkg-tarlist"
 rm -rf "$PKGROOT"
 mkdir -p "$PKGROOT"
 install -m 0644 "$METADIR/+COMPACT_MANIFEST" "$PKGROOT/+COMPACT_MANIFEST"
 install -m 0644 "$METADIR/+MANIFEST" "$PKGROOT/+MANIFEST"
 copy_tree "$STAGEDIR" "$PKGROOT"
-{
-    printf '%s\n' '+COMPACT_MANIFEST' '+MANIFEST'
-    find "$PKGROOT" -type f ! -name '+COMPACT_MANIFEST' ! -name '+MANIFEST' |
-        sed "s#^$PKGROOT/##" |
-        sort
-} > "$TARLIST"
-tar -cPzf "$DISTDIR/$OUTPUT_NAME" \
-    -C "$PKGROOT" \
-    -s ',^etc,/etc,' \
-    -s ',^usr,/usr,' \
-    -T "$TARLIST"
+python3 "$SCRIPT_DIR/tools/reproducible_archive.py" "$PKGROOT" "$DISTDIR/$OUTPUT_NAME" --package
 
 echo "==> Package: $DISTDIR/$OUTPUT_NAME"
 pkg info -F "$DISTDIR/$OUTPUT_NAME" >/dev/null

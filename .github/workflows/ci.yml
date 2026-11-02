@@ -17,7 +17,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Validate source, translations and interactions
-        run: python3 tools/validate.py
+        run: |
+          python3 tools/check_publication.py
+          python3 tools/validate.py
   package:
     needs: validate
     runs-on: ubuntu-24.04
@@ -36,6 +38,7 @@ jobs:
           envs: BUILD_REF
           prepare: |
             env ASSUME_ALWAYS_YES=yes pkg bootstrap -f
+            env ASSUME_ALWAYS_YES=yes pkg install python3 php84 php84-simplexml git
           run: sh scripts/ci_build.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -45,6 +48,7 @@ jobs:
             dist/os-mihomo-repository.tar.gz
             dist/SHA256SUMS
             dist/package-files.txt
+            dist/build-info.json
           if-no-files-found: error
           retention-days: 14
   release:
@@ -54,11 +58,22 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: os-mihomo-freebsd15-amd64
           path: dist
+      - name: Attest release package, repository and build inputs
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: |
+            dist/os-mihomo.pkg
+            dist/os-mihomo-repository.tar.gz
+            dist/build-info.json
+            dist/SHA256SUMS
+          create-storage-record: false
       - name: Create reviewable release draft
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -70,3 +85,4 @@ jobs:
             dist/os-mihomo-repository.tar.gz
             dist/SHA256SUMS
             dist/package-files.txt
+            dist/build-info.json

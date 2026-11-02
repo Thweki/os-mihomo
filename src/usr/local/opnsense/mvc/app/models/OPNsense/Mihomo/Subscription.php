@@ -4,7 +4,7 @@
  * os-mihomo 二次开发 —— 订阅（env 文件 / 执行 / 日志）
  *
  * 上游把订阅地址与访问密钥存放在 /usr/local/etc/mihomo/sub/env（0600 root:wheel），
- * 但旧 WebUI 以 www 身份直接读写该文件，实际必然失败。这里统一改走 configd。
+ * 这里统一经 configd 读取，并通过共享协调器写入。
  *
  * Copyright (C) 2026  os-mihomo contributors
  * All rights reserved.
@@ -32,9 +32,9 @@ class Subscription
      * 写入订阅地址与访问密钥。
      * 空字符串表示清除该项（保留键但不赋值）。
      */
-    public static function saveEnv(string $url, string $secret): string
+    public static function saveEnv(string $url, string $secret, string $version): string
     {
-        return (new Backend())->configdpRun('mihomo env-set', [$url, $secret]);
+        return (new Backend())->configdpRun('mihomo env-set', [$url, $secret, $version]);
     }
 
     /**
@@ -45,6 +45,13 @@ class Subscription
     public static function run(bool $restart = false): string
     {
         return (new Backend())->configdpRun('mihomo sub-run', [$restart ? 'yes' : 'no']);
+    }
+
+    public static function status(): array
+    {
+        $raw = (new Backend())->configdRun('mihomo sub-status');
+        $data = json_decode((string)$raw, true);
+        return is_array($data) ? $data : ['status' => 'failed'];
     }
 
     public static function log(int $lines = 300): string

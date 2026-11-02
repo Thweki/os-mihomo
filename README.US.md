@@ -94,9 +94,30 @@ The advanced YAML editor starts in read-only mode. Unlock it to edit and review 
 
 ![Configuration comparison across form, file and runtime values](docs/assets/configuration-comparison.png)
 
+### Write coordination and privileges
+
+Settings, YAML, policy, subscription installation and restoration share a writer lock. Pages submit their original SHA-256 revision; stale submissions are rejected. Reload and review changes before retrying. Settings revisions include the OPNsense configuration file, so another administration page may also require a reload. Rule enable/delete operations remain immediate actions on the current UUID.
+
+Candidates are validated in unique files on the target filesystem, then the actual previous bytes are backed up before atomic replacement of each target. Settings group YAML, subscription env and autostart files; policy groups YAML and its subscription template. Recoverable commit errors restore targets already replaced. Configurations and backups use `0600`; backups named `<file>.bak.<time>_<random>` retain the latest 20 per file. Configuration history validates restored YAML and first backs up the current file. Cross-file transactions do not guarantee all-or-nothing recovery after power loss or forced process termination; inspect both targets against their backups in that case.
+
+Action `state` distinguishes `unchanged`, `completed`, `accepted`, `failed` and `partial`. Cron and service reloads occur after the file transaction; failures report partial completion, and failed Cron reloads remain pending for retry. An accepted restart does not prove service readiness. Logs mask URLs and common secret fields; configuration editors and history still expose their content to authorized configuration administrators.
+
+New OPNsense privileges separate `Mihomo (view)`, `Mihomo (operate)` and `Mihomo (configure)` for status/redacted logs, runtime control and configuration/credentials. Combine as needed. Existing full `Mihomo` grants remain compatible. Native settings model save/import retain the existing full-admin requirement. Read-only users cannot select proxies, change mode, close connections or write settings. View privileges do not grant raw YAML, subscription credentials or backup contents.
+
 ### Subscription updates
 
-Subscription updates regenerate `config.yaml` from the subscription template and can overwrite manual edits. Changes that must survive updates should also be reflected in the template. After submitting an update, check the subscription log for its result.
+Subscription updates regenerate `config.yaml` from the subscription template and can overwrite manual edits. Changes that must survive updates should also be reflected in the template. Download or validation failure preserves the old configuration. Changes to configuration, template or env during download also reject installation. WebUI updates default to writing files only; restart is explicitly selected. CLI/scheduled updates retain their existing restart behavior. Check the lightweight task status and subscription log after submission.
+
+The compatibility converter default is `https://subconverters.com/sub`. With a converter, the router sends the **complete subscription URL, including its token**, to that service so it can fetch and convert node data. The controller secret is added locally and is not a converter parameter. The converter is a third-party trust boundary; full requests and secrets are not logged. In root-owned `/usr/local/etc/mihomo/sub/env`, choose one of these shell variables and retain mode `0600`:
+
+```sh
+# Provider supplies Clash YAML containing proxies; bypass conversion.
+MIHOMO_CONVERTER_URL='direct'
+# Or choose a trusted/self-hosted HTTPS converter:
+# MIHOMO_CONVERTER_URL='https://converter.example.com/sub'
+```
+
+Direct mode still downloads from the provider. It extracts nodes and combines them with the local template instead of adopting subscription rules or groups.
 
 | File | Purpose |
 | --- | --- |
@@ -150,6 +171,8 @@ make repo      # Produces dist/repo/<ABI>/
 ```
 
 These commands build artifacts without installing the plugin or executing package hooks. CI builds and inspects packages in an isolated FreeBSD environment. A matching `v<version>` tag triggers a draft release. See [CI/CD](docs/ci-cd.md) for the complete workflow.
+
+Builds also require Python 3 and Git. `SOURCE_DATE_EPOCH` defaults to the source commit time; archive ordering, ownership and timestamps are normalized, and CI compares two independent package builds byte for byte. Releases include source/toolchain records in `build-info.json`. New tag builds produce GitHub attestations, verified with `gh attestation verify os-mihomo.pkg --repo Thweki/os-mihomo`; older releases do not acquire attestations retroactively. Repository signing supports `REPO_SIGNING_KEY`, `REPO_PUBLIC_KEY` and `REQUIRE_SIGNED=yes`. Production keys, trusted public-key distribution and HTTPS hosting require operator configuration; see the CI/CD guide.
 
 ### Translation
 

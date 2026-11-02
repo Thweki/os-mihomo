@@ -1,29 +1,17 @@
 <?php
 
-/*
- * os-mihomo —— Config::patchKeys 回归测试
- *
- * 在目标机以 root 运行；只读取传入的配置文件副本，所有产物落在 /tmp，不触碰系统状态。
- * 用法: php test_patch.php /tmp/mihomo-test/config.yaml
- */
-
-foreach ([__DIR__ . '/Config.php', '/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Config.php'] as $candidate) {
-    if (is_file($candidate)) {
-        require_once $candidate;
-        break;
-    }
+/* Portable pure-function fixtures; no appliance files or services are accessed. */
+if (!function_exists('gettext')) {
+    function gettext(string $message): string { return $message; }
 }
-foreach ([__DIR__ . '/Inspector.php', '/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php'] as $candidate) {
-    if (is_file($candidate)) {
-        require_once $candidate;
-        break;
-    }
-}
+$modelDir = dirname(__DIR__) . '/src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo';
+require_once $modelDir . '/Config.php';
+require_once $modelDir . '/Inspector.php';
 
 use OPNsense\Mihomo\Config;
 use OPNsense\Mihomo\Inspector;
 
-$file = $argv[1] ?? '/tmp/mihomo-test/config.yaml';
+$file = dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml';
 if (!is_file($file)) {
     fwrite(STDERR, "missing fixture: {$file}\n");
     exit(2);
@@ -45,7 +33,7 @@ function check(string $label, bool $ok, string $detail = ''): void
 
 function writeTemp(string $content): string
 {
-    $path = tempnam('/tmp', 'patchtest-');
+    $path = tempnam(sys_get_temp_dir(), 'patchtest-');
     file_put_contents($path, $content);
     return $path;
 }
@@ -154,18 +142,6 @@ check('CRLF 保留', str_contains($patched, "\r\n"));
 check('CRLF 下替换成功', (Config::scan($tmp)['tun.enable'] ?? '') === 'false', Config::scan($tmp)['tun.enable'] ?? '');
 @unlink($tmp);
 
-echo "\n=== 7. 落盘前校验器（mihomo -t）===\n";
-if (!is_file('/usr/local/bin/mihomo')) {
-    echo "  SKIP  mihomo 内核尚未安装\n";
-} else {
-    $tmp = writeTemp(Config::patchKeys($original, ['log-level' => 'error']));
-    $out = [];
-    $rc = 0;
-    exec('/usr/local/bin/mihomo -t -d /usr/local/etc/mihomo -f ' . escapeshellarg($tmp) . ' 2>&1', $out, $rc);
-    check('mihomo -t 接受补丁结果', $rc === 0, implode(' | ', array_slice($out, 0, 3)));
-    @unlink($tmp);
-}
-
 echo "\n=== 8. 路由策略：受管区块 ===\n";
 $policyRules = [
     'AND,((SRC-IP-CIDR,192.0.2.0/24),(GEOSITE,geolocation-!cn)),PROXY-US',
@@ -206,35 +182,7 @@ check('未启用的行不生成', count(array_filter($rendered, fn($r) => str_co
 check('无源/无出口的行被跳过', count($rendered) === 4, (string)count($rendered));
 check('接口网段能自动补齐', in_array('SRC-IP-CIDR,198.51.100.0/24,DIRECT', $rendered, true));
 
-echo "\n=== 11. 路由策略：真配置 + mihomo -t ===\n";
-/* 用真实存在的出口（DIRECT）做校验，避免测试数据里的假组名让 mihomo -t 拒绝 —— 那属于正确行为 */
-$validRules = [
-    'AND,((SRC-IP-CIDR,192.0.2.0/24),(GEOSITE,geolocation-!cn)),DIRECT',
-    'SRC-IP-CIDR,198.51.100.0/24,DIRECT',
-];
-$patched = Config::applyPolicyBlock($original, $validRules);
-$tmp = writeTemp($patched);
-if (!is_file('/usr/local/bin/mihomo')) {
-    echo "  SKIP  mihomo 内核尚未安装\n";
-} else {
-    $out = [];
-    $rc = 0;
-    exec('/usr/local/bin/mihomo -t -d /usr/local/etc/mihomo -f ' . escapeshellarg($tmp) . ' 2>&1', $out, $rc);
-    check('mihomo -t 接受带策略区块的配置', $rc === 0, implode(' | ', array_slice(array_filter($out, fn($l) => stripos($l, 'test is successful') === false), 0, 4)));
-}
-/* 引用了不存在的代理组时，mihomo -t 必须拒绝（这正是 apply 的安全网） */
-$badRules = ['AND,((SRC-IP-CIDR,192.0.2.0/24),(GEOSITE,geolocation-!cn)),NO-SUCH-GROUP-XYZ'];
-$tmpBad = writeTemp(Config::applyPolicyBlock($original, $badRules));
-if (is_file('/usr/local/bin/mihomo')) {
-    $out2 = [];
-    $rc2 = 0;
-    exec('/usr/local/bin/mihomo -t -d /usr/local/etc/mihomo -f ' . escapeshellarg($tmpBad) . ' 2>&1', $out2, $rc2);
-    check('引用不存在的组会被 mihomo -t 拒绝', $rc2 !== 0, 'rc=' . $rc2);
-}
-$snippet = Config::applyPolicyBlock("rules:\n  - MATCH,DIRECT\n", ['SRC-IP-CIDR,192.0.2.0/24,DIRECT']);
 check('无 rules: 键时新建区块', str_contains(Config::applyPolicyBlock("mode: rule\n", ['SRC-IP-CIDR,1.0.0.0/8,DIRECT']), "rules:\n"));
-@unlink($tmp);
-@unlink($tmpBad);
 
 echo "\n=== 12. 代理组名解析（块风格 + flow 风格）===\n";
 $blockStyle = "proxy-groups:\n  - name: 块风格组\n    type: select\n  - name: 第二组\n    type: url-test\nrules:\n  - MATCH,DIRECT\n";
@@ -260,12 +208,6 @@ $plain = "log-level: info\ndns:\n  enable: true\n";
 $patchedSn = Config::patchKeys($plain, Config::snifferKeys(true));
 check('能从零建出嵌套 sniffer 结构', str_contains($patchedSn, 'sniffer:') && str_contains($patchedSn, 'ports: [443, 8443]'), $patchedSn);
 $tmpSn = writeTemp($patchedSn);
-if (is_file('/usr/local/bin/mihomo')) {
-    $o = [];
-    $r = 0;
-    exec('/usr/local/bin/mihomo -t -d /usr/local/etc/mihomo -f ' . escapeshellarg($tmpSn) . ' 2>&1', $o, $r);
-    check('mihomo -t 接受生成的 sniffer 块', $r === 0, implode(' | ', array_slice($o, -2)));
-}
 @unlink($tmpSn);
 /* 幂等：已存在完整块时再次应用不应改变字节 */
 $again2 = Config::patchKeys($patchedSn, Config::snifferKeys(true));

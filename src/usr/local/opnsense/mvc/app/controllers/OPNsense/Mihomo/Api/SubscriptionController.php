@@ -13,6 +13,8 @@ namespace OPNsense\Mihomo\Api;
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Mihomo\RequestParamsTrait;
 use OPNsense\Mihomo\Subscription;
+use OPNsense\Mihomo\WriteCoordinator;
+use OPNsense\Mihomo\ActionResult;
 
 class SubscriptionController extends ApiControllerBase
 {
@@ -21,8 +23,10 @@ class SubscriptionController extends ApiControllerBase
     /** 读取订阅设置（来自 env 文件）+ 上游脚本是否存在 */
     public function getAction()
     {
+        $lock = new WriteCoordinator();
         $env = Subscription::env();
         return [
+            'version' => WriteCoordinator::revision(Subscription::ENV_FILE),
             'url' => (string)($env['mihomo_URL'] ?? ''),
             'secret' => (string)($env['mihomo_secret'] ?? ''),
             'envFile' => Subscription::ENV_FILE,
@@ -52,14 +56,16 @@ class SubscriptionController extends ApiControllerBase
             ];
         }
 
-        $output = Subscription::saveEnv($url, $secret);
-        if (!str_contains($output, 'saved')) {
-            return [
-                'status' => 'failed',
-                'message' => $output === '' ? gettext('Failed to save the subscription settings.') : $output,
-            ];
+        $version = $this->stringParam('version');
+        if ($version === '') {
+            return ActionResult::make('failed', false, 'conflict', 'Reload the subscription settings before saving.');
         }
-        return ['status' => 'ok', 'message' => gettext('Subscription settings saved.')];
+        return ActionResult::parse(Subscription::saveEnv($url, $secret, $version));
+    }
+
+    public function statusAction()
+    {
+        return Subscription::status();
     }
 
     /** 触发订阅更新 */
@@ -79,14 +85,7 @@ class SubscriptionController extends ApiControllerBase
         }
 
         $restart = $this->boolParam('restart');
-        $output = Subscription::run($restart);
-        return [
-            'status' => 'ok',
-            'restart' => $restart,
-            'message' => $output === ''
-                ? gettext('Subscription task submitted; follow the log for progress.')
-                : $output,
-        ];
+        return ActionResult::parse(Subscription::run($restart));
     }
 
     /** 读取订阅日志 */

@@ -21,7 +21,15 @@ class Logs
         if (!in_array($key, self::KEYS, true)) {
             return '';
         }
-        return rtrim((new Backend())->configdpRun('mihomo log-tail', [$key, $lines]), "\n");
+        return self::redact(rtrim((new Backend())->configdpRun('mihomo log-tail', [$key, $lines]), "\n"));
+    }
+
+    /** Defense in depth for historical logs, validator output and converter failures. */
+    public static function redact(string $text): string
+    {
+        $text = preg_replace('~https?://[^\s<>]+~iu', '[URL redacted]', $text) ?? '';
+        $text = preg_replace('/(?im)((?:secret|password|token|authorization|密钥)\s*[:=：]\s*)[^\r\n]+/u', '$1[redacted]', $text) ?? '';
+        return $text;
     }
 
     public static function clear(string $key): string

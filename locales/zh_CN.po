@@ -1325,3 +1325,27 @@ msgstr ""
 
 msgid "…"
 msgstr "未知"
+
+msgid "The operation failed. Please try again."
+msgstr "操作失败，请重试。"
+
+msgid "Test all nodes in this group"
+msgstr "测试此分组中的所有节点"
+
+msgid "Test node latency"
+msgstr "测试节点延迟"
+
+msgid "Latency tests"
+msgstr "延迟测试"
+
+msgid "Close connection"
+msgstr "关闭连接"
+
+msgid "Failed"
+msgstr "失败"
+
+msgid "Subscription update submitted"
+msgstr "订阅更新任务已提交"
+
+msgid "Settings partly applied"
+msgstr "设置部分应用，仍需处理失败步骤"

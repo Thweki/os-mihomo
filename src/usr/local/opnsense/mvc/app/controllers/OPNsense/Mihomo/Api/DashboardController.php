@@ -3,7 +3,7 @@
 /*
  * os-mihomo 二次开发 —— 概览页数据接口
  *
- * 所有数据由服务端（php-fpm, www 用户）通过 loopback 从 mihomo 的 RESTful
+ * 所有数据由服务端（OPNsense WebGUI）通过 loopback 从 mihomo 的 RESTful
  * 控制器取回，再以 OPNsense API 的形式返回给浏览器。
  * 浏览器端不会、也不需要直连 127.0.0.1:9090。
  *
@@ -34,9 +34,21 @@ class DashboardController extends ApiControllerBase
     /** 概览卡片 + 运行态摘要 */
     public function overviewAction()
     {
+        $snapshot = Controller::snapshot();
+        if ($this->stringParam('metadata', '1') === '0') {
+            return [
+                'controller' => ['alive' => (bool)$snapshot['ready']],
+                'runtime' => [
+                    'downloadTotal' => (int)($snapshot['downloadTotal'] ?? 0),
+                    'uploadTotal' => (int)($snapshot['uploadTotal'] ?? 0),
+                    'memory' => (int)($snapshot['memory'] ?? 0),
+                    'connections' => $snapshot['ready'] ? count($snapshot['connections']) : 0,
+                    'ready' => $snapshot['ready'], 'error' => (string)($snapshot['error'] ?? ''),
+                ],
+            ];
+        }
         $version = Controller::version();
         $running = Controller::runningConfig();
-        $snapshot = Controller::snapshot();
         $configured = Config::scan();
 
         return [
@@ -85,6 +97,7 @@ class DashboardController extends ApiControllerBase
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'message' => gettext('POST required.')];
         }
+        $this->throwReadOnly();
         $group = $this->stringParam('group');
         $member = $this->stringParam('member');
         if ($group === '' || $member === '') {
@@ -105,6 +118,7 @@ class DashboardController extends ApiControllerBase
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'message' => gettext('POST required.')];
         }
+        $this->throwReadOnly();
         $name = $this->stringParam('name');
         if ($name === '') {
             return ['status' => 'failed', 'message' => gettext('A node name is required.')];
@@ -123,6 +137,7 @@ class DashboardController extends ApiControllerBase
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'message' => gettext('POST required.')];
         }
+        $this->throwReadOnly();
         $mode = $this->stringParam('mode');
         $result = Controller::setMode($mode);
         return [
@@ -159,6 +174,7 @@ class DashboardController extends ApiControllerBase
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'message' => gettext('POST required.')];
         }
+        $this->throwReadOnly();
         $id = $this->stringParam('id');
         $result = Controller::closeConnection($id);
         return [

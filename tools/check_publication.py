@@ -12,7 +12,9 @@ FILES = {'.gitattributes', '.gitignore', '.github/workflows/ci.yml', '.github/de
          'scripts/ci_build.sh', 'scripts/make_repo.sh', 'scripts/deploy.sh', 'scripts/rollback.sh',
          'tests/test_patch.php', 'tests/test_ui.js', 'tests/test_runtime.php', 'tools/build_locales.py',
          'tools/extract_strings.py', 'tools/mo_editor.py', 'tools/validate.py',
-         'tools/check_publication.py'}
+         'tools/check_publication.py', 'tools/reproducible_archive.py',
+         'tools/build_provenance.py', 'tests/test_writes.php', 'tests/test_build.py',
+         'tests/test_repository.sh', 'tests/test_api.php'}
 ROOTS = ('src/', 'locales/', 'packaging/freebsd/')
 
 # These exact images were visually reviewed after local privacy blurring.

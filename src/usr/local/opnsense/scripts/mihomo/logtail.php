@@ -6,7 +6,7 @@
  *
  * 用法: logtail.php <mihomo|subscription> [行数]
  *
- * /var/log/mihomo.log 与 /var/log/mihomo_sub.log 均为 0640 root:wheel，
+ * /var/log/mihomo.log 与 /var/log/mihomo_sub.log 均为 0600 root:wheel，
  * php-fpm 的 www 用户无法直读，因此统一经 configd 取回。
  *
  * Copyright (C) 2026  os-mihomo contributors

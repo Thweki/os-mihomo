@@ -19,7 +19,7 @@
             });
         }
 
-        let savedUrl = '', savedSecret = '', taskRunning = false, taskKnown = false;
+        let savedUrl = '', savedSecret = '', savedVersion = '', taskRunning = false, taskKnown = false;
         function updateSubmitState() {
             const changed = $('[id="mihomo.subscription.url"]').val() !== savedUrl || $('[id="mihomo.subscription.secret"]').val() !== savedSecret;
             $('#saveAct').prop('disabled', !changed);
@@ -27,8 +27,9 @@
             $('#subscription-edit-state').text(changed ? {{ lang._('Save subscription settings before submitting an update.') | json_encode }}
                 : !savedUrl ? {{ lang._('Set a subscription URL in Settings to enable updates.') | json_encode }} : '');
         }
-        function refreshTask() {
-            ajaxGet('/api/mihomo/dashboard/runtime_status', {}, function (data, status) {
+        function refreshTask(done) {
+            ajaxGet('/api/mihomo/subscription/status', {}, function (data, status) {
+                if (done) { done(status === 'success' && data && data.status === 'ok'); }
                 if (status !== 'success' || !data || data.status !== 'ok') { taskKnown = false; updateSubmitState(); $('#subscription-task-state').text({{ lang._('Status unavailable') | json_encode }}); return; }
                 taskKnown = true;
                 const task = data.subscription || {};
@@ -51,6 +52,7 @@
                 $('[id="mihomo.subscription.secret"]').val(MihomoUI.decodeApiText(data['secret']));
                 savedUrl = MihomoUI.decodeApiText(data['url']);
                 savedSecret = MihomoUI.decodeApiText(data['secret']);
+                savedVersion = data.version || '';
                 updateSubmitState();
                 $('#env-file').text(data['envFile'] || '');
                 if (!data['scriptAvailable']) {
@@ -59,8 +61,13 @@
             });
         }
 
-        function refreshLogs(scroll) {
+        let logPending = false;
+        function refreshLogs(scroll, done) {
+            if (logPending) { if (done) { done(true); } return; }
+            logPending = true;
             ajaxGet('/api/mihomo/subscription/log', { 'lines': 400 }, function (data, status) {
+                logPending = false;
+                if (done) { done(status === 'success' && data && data.status === 'ok'); }
                 if (status !== 'success' || !data || data.status !== 'ok') {
                     $('#log-state').text({{ lang._('Could not read the log. Try refreshing.') | json_encode }}); return;
                 }
@@ -78,21 +85,19 @@
         $('#saveAct').click(function () {
             const $btn = $(this);
             $btn.prop('disabled', true);
-            saveFormToEndpoint('/api/mihomo/settings/set', 'frm_Subscription', function () {
-                ajaxCall('/api/mihomo/subscription/save', {
-                    'url': $('[id="mihomo.subscription.url"]').val(),
-                    'secret': $('[id="mihomo.subscription.secret"]').val()
-                }, function (data) {
-                    $btn.prop('disabled', false);
-                    showResult(
-                        data['status'] === 'ok' ? ({{ lang._('Settings saved') | json_encode }}) : ({{ lang._('Save failed') | json_encode }}),
-                        data['message'] || '',
-                        data['status'] === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER
-                    );
-                    loadSettings();
-                });
-            }, true, function () {
+            ajaxCall('/api/mihomo/subscription/save', {
+                'url': $('[id="mihomo.subscription.url"]').val(),
+                'secret': $('[id="mihomo.subscription.secret"]').val(),
+                'version': savedVersion
+            }, function (data) {
+                data = data || {};
                 $btn.prop('disabled', false);
+                showResult(
+                    data.status === 'ok' ? {{ lang._('Settings saved') | json_encode }} : {{ lang._('Save failed') | json_encode }},
+                    MihomoUI.decodeApiText(data.message),
+                    data.status === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER
+                );
+                if (data.status === 'ok') { loadSettings(); }
             });
         });
 
@@ -104,12 +109,12 @@
                 ajaxCall('/api/mihomo/subscription/run', { 'restart': restart ? 1 : 0 }, function (data) {
                     $btn.prop('disabled', false);
                     showResult(
-                        data['status'] === 'ok' ? ({{ lang._('Subscription update started') | json_encode }}) : ({{ lang._('Subscription update failed') | json_encode }}),
+                        data['status'] === 'ok' ? ({{ lang._('Subscription update submitted') | json_encode }}) : ({{ lang._('Subscription update failed') | json_encode }}),
                         data['message'] || '',
                         data['status'] === 'ok' ? BootstrapDialog.TYPE_INFO : BootstrapDialog.TYPE_DANGER
                     );
-                    refreshTask();
-                    setTimeout(function () { refreshLogs(true); refreshTask(); }, 1500);
+                    taskPoller.refresh();
+                    setTimeout(function () { logPoller.refresh(); taskPoller.refresh(); }, 1500);
                 });
             };
 
@@ -135,9 +140,11 @@
         $('#refreshLogAct').click(function () { refreshLogs(true); });
 
         loadSettings();
-        refreshTask();
-        refreshLogs(true);
-        setInterval(function () { if (!document.hidden) { refreshLogs(false); refreshTask(); } }, 5000);
+        const taskPoller = new MihomoUI.Poller(refreshTask, 5000);
+        const logPoller = new MihomoUI.Poller(done => refreshLogs(false, done), 5000);
+        [taskPoller, logPoller].forEach(poller => poller.refresh());
+        document.addEventListener('visibilitychange', () => [taskPoller, logPoller].forEach(poller => poller.visibilityChanged()));
+        window.addEventListener('pagehide', () => [taskPoller, logPoller].forEach(poller => poller.stop()));
     });
 </script>
 

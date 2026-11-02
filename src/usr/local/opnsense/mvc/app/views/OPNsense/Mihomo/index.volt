@@ -31,8 +31,8 @@
             return (Number(value) || 0).toLocaleString();
         }
 
-        function escapeHtml(text) {
-            return $('<div>').text(text === undefined || text === null ? '' : String(text)).html();
+        function actionFailed(data) {
+            $('#dashboard-action-state').text(MihomoUI.decodeApiText(data && data.message) || {{ lang._('The operation failed. Please try again.') | json_encode }});
         }
 
         function delayClass(delay) {
@@ -63,8 +63,11 @@
         /* ------------------------------------------------------------------ *
          * 服务状态提示（标准控件在标题栏；这里补充 disabled 状态的说明）
          * ------------------------------------------------------------------ */
-        function loadServiceState() {
-            ajaxGet('/api/mihomo/service/status', {}, function (data) {
+        function loadServiceState(done) {
+            ajaxGet('/api/mihomo/service/status', {}, function (data, status) {
+                const ok = status === 'success' && data && data.status;
+                if (done) { done(!!ok); }
+                if (!ok) { return; }
                 const $box = $('#mihomo-service-state');
                 if (data['status'] === 'disabled') {
                     $box.html('<div class="alert alert-warning">'
@@ -96,7 +99,7 @@
         try { storedHistory = JSON.parse(sessionStorage.getItem('mihomo.traffic.v1') || '[]'); } catch (error) { /* Optional cache. */ }
         const trafficHistory = new MihomoUI.TrafficHistory(storedHistory);
         let trafficRange = 60;
-        let overviewPending = false;
+        let lastMetadata = 0;
         let lastHistorySave = 0;
 
         function drawTraffic() {
@@ -129,12 +132,12 @@
             $('#stat-memory').text(processMemory !== null ? fmtBytes(processMemory) : {{ lang._('Unavailable') | json_encode }});
 
             if (controller['alive']) {
-                $('#mihomo-version').text(controller['version'] || '—');
+                if (controller.version !== undefined) { $('#mihomo-version').text(controller.version || '—'); }
             } else {
                 $('#mihomo-version').text(({{ lang._('not running') | json_encode }}));
             }
 
-            if (!$('#mode-select').data('user-changed')) {
+            if (runtime.mode !== undefined && !$('#mode-select').data('user-changed')) {
                 $('#mode-select').val(runtime['mode'] || '');
             }
 
@@ -149,17 +152,19 @@
             drawTraffic();
         }
 
-        function loadOverview() {
-            if (overviewPending) { return; }
-            overviewPending = true;
-            ajaxGet('/api/mihomo/dashboard/overview', {}, function (data, status) {
-                overviewPending = false;
-                if (status === 'success' && data && data.runtime) { renderOverview(data); }
-                else {
+        function loadOverview(done) {
+            const metadata = Date.now() - lastMetadata >= 30000;
+            ajaxGet('/api/mihomo/dashboard/overview', {metadata: metadata ? 1 : 0}, function (data, status) {
+                const ok = status === 'success' && data && data.runtime;
+                if (ok) {
+                    if (metadata) { lastMetadata = Date.now(); }
+                    renderOverview(data);
+                } else {
                     trafficHistory.add(Date.now(), null, null, false);
                     $('#stat-rate-down, #stat-rate-up').text('—');
                     drawTraffic();
                 }
+                if (done) { done(!!ok && data.runtime.ready); }
             });
         }
 
@@ -180,86 +185,56 @@
                 return;
             }
 
-            let html = '<div class="row">';
-            groups.forEach(function (group) {
-                html += '<div class="col-md-6" style="margin-bottom: 15px;">';
-                html += '<div class="content-box" style="height: 300px; margin-bottom: 0; display: flex; flex-direction: column;">';
-                html += '<div style="padding: 10px 12px;  flex: 0 0 auto;">';
-                html += '<b>' + escapeHtml(group['name']) + '</b> ';
-                html += '<span class="label label-opnsense label-opnsense-sm label-info">' + escapeHtml(group['type']) + '</span>';
-                html += '<span class="pull-right">';
-                html += '<button type="button" class="btn btn-xs btn-default cmd-test-group" data-group="' + escapeHtml(group['name']) + '"><i class="fa fa-tachometer fa-fw"></i></button>';
-                html += '</span>';
-                html += '</div>';
-                html += '<ul class="list-group" style="margin-bottom: 0; flex: 1 1 auto; overflow-y: auto;">';
-                group['members'].forEach(function (member) {
-                    const selected = member['selected'];
-                    html += '<li class="list-group-item' + (selected ? ' active' : '') + '" style="cursor: pointer; padding: 8px 12px;"';
-                    html += ' data-group="' + escapeHtml(group['name']) + '" data-member="' + escapeHtml(member['name']) + '">';
-                    html += '<span class="cmd-select" style="display:inline-block; width: 100%;">';
-                    html += (selected ? '<i class="fa fa-check-circle fa-fw text-success"></i> ' : '<i class="fa fa-circle-o fa-fw text-muted"></i> ');
-                    html += escapeHtml(member['name']);
-                    html += ' <span class="text-muted" style="font-size: 11px;">' + escapeHtml(member['type']) + '</span>';
-                    html += '<span class="label label-opnsense label-opnsense-sm ' + delayClass(member['delay']) + ' pull-right" style="margin-left: 6px;">';
-                    html += delayText(member['delay']) + '</span>';
-                    html += '<span class="pull-right"><button type="button" class="btn btn-xs btn-default cmd-test" data-name="' + escapeHtml(member['name']) + '"><i class="fa fa-bolt fa-fw"></i></button></span>';
-                    html += '</span></li>';
-                });
-                html += '</ul></div></div>';
-            });
-            html += '</div>';
-            $box.html(html);
-
-            $('.cmd-test').off('click').on('click', function (event) {
-                event.stopPropagation();
-                const $btn = $(this);
-                const name = $btn.data('name');
-                $btn.find('i').addClass('fa-spin');
-                ajaxCall('/api/mihomo/dashboard/test_delay', { name: name }, function () {
-                    $btn.find('i').removeClass('fa-spin');
-                    loadGroups();
-                });
-            });
-
-            $('.cmd-test-group').off('click').on('click', function (event) {
-                event.stopPropagation();
-                const $btn = $(this);
-                const group = $btn.data('group');
-                const names = [];
-                $btn.closest('.content-box').find('.cmd-test').each(function () {
-                    names.push($(this).data('name'));
-                });
-                $btn.find('i').addClass('fa-spin');
-                let pending = names.length;
-                if (pending === 0) {
-                    $btn.find('i').removeClass('fa-spin');
-                    return;
-                }
-                names.forEach(function (name) {
-                    ajaxCall('/api/mihomo/dashboard/test_delay', { name: name }, function () {
-                        pending -= 1;
-                        if (pending <= 0) {
-                            $btn.find('i').removeClass('fa-spin');
-                            loadGroups();
-                        }
-                    });
-                });
-            });
-
-            $('.cmd-select').off('click').on('click', function () {
-                const $item = $(this).closest('li');
-                const group = $item.data('group');
-                const member = $item.data('member');
-                ajaxCall('/api/mihomo/dashboard/select_proxy', { group: group, member: member }, function (data) {
-                    if (data['status'] === 'ok') {
-                        loadGroups();
-                    }
-                });
-            });
+            MihomoUI.renderProxyGroups($box[0], groups, {
+                testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
+                testNode: {{ lang._('Test node latency') | json_encode }}
+            }, delayText, delayClass);
         }
 
-        function loadGroups() {
-            ajaxGet('/api/mihomo/dashboard/proxies', {}, renderGroups);
+        let testing = false;
+        function testNodes(names) {
+            if (testing || !names.length) { return; }
+            testing = true;
+            $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
+            const progress = function (state) {
+                $('#proxy-test-state').text({{ lang._('Latency tests') | json_encode }} + ': ' + state.completed + '/' + state.total
+                    + ' · ' + {{ lang._('Failed') | json_encode }} + ': ' + state.failed);
+            };
+            progress({completed: 0, total: names.length, failed: 0});
+            MihomoUI.runLimited(names, 3, function (name, done) {
+                ajaxCall('/api/mihomo/dashboard/test_delay', {name: name}, function (data, status) {
+                    done(status === 'success' && data && data.status === 'ok');
+                });
+            }, progress, function () {
+                testing = false;
+                $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', false);
+                groupsPoller.refresh();
+            });
+        }
+        $('#proxy-groups').on('click', '.cmd-test', function () { testNodes([$(this).attr('data-name')]); });
+        $('#proxy-groups').on('click', '.cmd-test-group', function () {
+            const names = [];
+            $(this).closest('.content-box').find('.cmd-test').each(function () { names.push($(this).attr('data-name')); });
+            testNodes(Array.from(new Set(names)));
+        });
+        $('#proxy-groups').on('click', '.cmd-select', function () {
+            const $button = $(this), $item = $button.closest('li');
+            $button.prop('disabled', true);
+            ajaxCall('/api/mihomo/dashboard/select_proxy', {group: $item.attr('data-group'), member: $item.attr('data-member')}, function (data, status) {
+                $button.prop('disabled', false);
+                if (status === 'success' && data && data.status === 'ok') { $('#dashboard-action-state').empty(); groupsPoller.refresh(); }
+                else { actionFailed(data); }
+            });
+        });
+
+        function loadGroups(done) {
+            if (testing) { done(true); return; }
+            ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
+                const ok = status === 'success' && data && data.ready;
+                if (data && status === 'success') { renderGroups(data); }
+                if (!ok) { $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }}); }
+                done(!!ok);
+            });
         }
 
         /* ------------------------------------------------------------------ *
@@ -268,12 +243,14 @@
         $('#mode-select').change(function () {
             const mode = $(this).val();
             $(this).data('user-changed', true);
-            ajaxCall('/api/mihomo/dashboard/set_mode', { mode: mode }, function (data) {
-                if (data['status'] === 'ok') {
-                    loadOverview();
-                }
+            ajaxCall('/api/mihomo/dashboard/set_mode', { mode: mode }, function (data, status) {
+                if (status === 'success' && data && data.status === 'ok') { $('#dashboard-action-state').empty(); }
+                else { actionFailed(data); }
+                lastMetadata = 0;
+                overviewPoller.refresh();
                 setTimeout(function () {
                     $('#mode-select').data('user-changed', false);
+                    lastMetadata = 0; overviewPoller.refresh();
                 }, 2000);
             });
         });
@@ -302,30 +279,32 @@
                         } else if (seconds >= 60) {
                             human = Math.floor(seconds / 60) + 'm' + (seconds % 60) + 's';
                         }
-                        return '<span data-toggle="tooltip" title="' + started.toLocaleString() + '">' + human + '</span>';
+                        return MihomoUI.element(document, 'span', {'data-toggle': 'tooltip', title: started.toLocaleString()}, human).outerHTML;
                     },
                     'closeformatter': function (column, row) {
-                        return '<button type="button" class="btn btn-xs btn-default cmd-close-connection" data-id="'
-                            + escapeHtml(row.id) + '"><i class="fa fa-times fa-fw"></i></button>';
+                        const button = MihomoUI.element(document, 'button', {type: 'button', class: 'btn btn-xs btn-default cmd-close-connection',
+                            'data-id': MihomoUI.decodeApiText(row.id), 'aria-label': {{ lang._('Close connection') | json_encode }}, title: {{ lang._('Close connection') | json_encode }}});
+                        button.appendChild(MihomoUI.element(document, 'i', {class: 'fa fa-times fa-fw', 'aria-hidden': 'true'}));
+                        return button.outerHTML;
                     }
                 }
             }
         }).on('loaded.rs.jquery.bootgrid', function () {
             $('[data-toggle="tooltip"]').tooltip({ 'container': 'body' });
             $('.cmd-close-connection').off('click').on('click', function () {
-                ajaxCall('/api/mihomo/dashboard/close_connection', { id: $(this).data('id') }, function () {
-                    $('#grid-connections').bootgrid('reload');
-                    loadOverview();
-                });
+                closeConnections($(this).attr('data-id'));
             });
         });
 
-        $('#close-all-connections').click(function () {
-            ajaxCall('/api/mihomo/dashboard/close_connection', { id: '' }, function () {
-                $('#grid-connections').bootgrid('reload');
-                loadOverview();
+        function closeConnections(id) {
+            ajaxCall('/api/mihomo/dashboard/close_connection', {id: id}, function (data, status) {
+                if (status === 'success' && data && data.status === 'ok') {
+                    $('#dashboard-action-state').empty();
+                    $('#grid-connections').bootgrid('reload'); overviewPoller.refresh();
+                } else { actionFailed(data); }
             });
-        });
+        }
+        $('#close-all-connections').click(function () { closeConnections(''); });
 
         /* ------------------------------------------------------------------ *
          * 流量图 + 轮询
@@ -395,19 +374,24 @@
         document.addEventListener('load', function (event) { if (event.target.tagName === 'LINK') { updateChartTheme(); } }, true);
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateChartTheme);
 
-        loadOverview();
-        loadGroups();
-        loadServiceState();
-
-        setInterval(loadOverview, 2000);
-        setInterval(loadGroups, 15000);
-        setInterval(loadServiceState, 30000);
+        const overviewPoller = new MihomoUI.Poller(loadOverview, 2000);
+        const groupsPoller = new MihomoUI.Poller(loadGroups, 15000);
+        const servicePoller = new MihomoUI.Poller(loadServiceState, 30000);
+        const pollers = [overviewPoller, groupsPoller, servicePoller];
+        pollers.forEach(poller => poller.refresh());
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) { trafficHistory.add(Date.now(), null, null, false); }
+            else { lastMetadata = 0; }
+            pollers.forEach(poller => poller.visibilityChanged());
+        });
+        window.addEventListener('pagehide', () => pollers.forEach(poller => poller.stop()));
     });
 </script>
 
 <div class="row">
     <section class="col-xs-12">
         <div id="mihomo-service-state"></div>
+        <p id="dashboard-action-state" class="text-danger" role="alert"></p>
     </section>
 </div>
 
@@ -476,6 +460,7 @@
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
+            <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div style="padding: 12px;" id="proxy-groups">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>
             </div>

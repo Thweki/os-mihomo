@@ -233,7 +233,7 @@
         function formValues() {
             const values = {};
             $('#frm_Settings').find('input[id], select[id], textarea[id]').each(function () {
-                if (this.type === 'button' || this.type === 'submit' || this.type === 'search') { return; }
+                if (this.id === 'version' || this.type === 'button' || this.type === 'submit' || this.type === 'search') { return; }
                 values[this.id] = this.type === 'checkbox' ? this.checked : $(this).val();
             });
             return values;
@@ -288,6 +288,7 @@
 
         /* 开关状态通过这个隐藏字段随表单一起提交（模型里的 mihomo.managed） */
         $('<input type="hidden">').attr('id', MANAGED_INPUT).appendTo('#frm_Settings');
+        $('<input type="hidden">').attr('id', 'version').appendTo('#frm_Settings');
 
         buildManagedSwitches();
         markFixedFields();
@@ -305,21 +306,28 @@
             const $btn = $('#applyAct, #reapplyAct');
             $btn.prop('disabled', true);
             syncManagedHidden();
-            saveFormToEndpoint('/api/mihomo/settings/set', 'frm_Settings', function () {
+            ajaxCall('/api/mihomo/settings/set', getFormData('frm_Settings'), function (saved, status) {
+                if (status !== 'success' || !saved || !saved.version || (saved.result !== 'saved' && saved.status !== 'ok')) {
+                    $btn.prop('disabled', false);
+                    handleFormValidation('frm_Settings', saved && saved.validations || {});
+                    showResult({{ lang._('Save failed') | json_encode }}, MihomoUI.decodeApiText(saved && saved.message) || {{ lang._('The operation failed. Please try again.') | json_encode }}, BootstrapDialog.TYPE_DANGER);
+                    return;
+                }
+                $('#version').val(saved.version);
                 ajaxCall('/api/mihomo/settings/apply', {
+                    'version': saved.version,
                     'restart': formChanges().length && $('#restart-after-apply').prop('checked') ? 1 : 0
                 }, function (data) {
                     $btn.prop('disabled', false);
+                    if (data && data.status === 'partial' && data.version) { $('#version').val(data.version); }
                     if (data && data['status'] === 'ok') {
                         showResult(({{ lang._('Settings applied') | json_encode }}), (data['messages'] || []).join('\n'), BootstrapDialog.TYPE_SUCCESS);
                         loadRawConfig();
                         reloadForm();
                     } else {
-                        showResult(({{ lang._('Apply failed') | json_encode }}), (data || {})['message'] || '', BootstrapDialog.TYPE_DANGER);
+                        showResult(data && data.status === 'partial' ? {{ lang._('Settings partly applied') | json_encode }} : {{ lang._('Apply failed') | json_encode }}, (data || {})['message'] || '', BootstrapDialog.TYPE_DANGER);
                     }
                 });
-            }, true, function () {
-                $btn.prop('disabled', false);
             });
         }
 
@@ -625,13 +633,13 @@
         /* ------------------------------------------------------------------ *
          * 原始配置编辑器
          * ------------------------------------------------------------------ */
-        let rawOriginal = '';
+        let rawOriginal = '', rawVersion = '';
         let rawLoaded = false;
         function loadRawConfig() {
             $('#config-unlock, #config-save, #config-validate').prop('disabled', true);
             ajaxGet('/api/mihomo/settings/config_get', {}, function (data, status) {
                 if (status === 'success' && data && data['status'] === 'ok') {
-                    rawOriginal = MihomoUI.decodeApiText(data['content']); rawLoaded = true;
+                    rawOriginal = MihomoUI.decodeApiText(data['content']); rawVersion = data.version || ''; rawLoaded = true;
                     $('#config-editor').val(rawOriginal).prop('readonly', true);
                     $('#config-save, #config-validate').prop('disabled', true);
                     $('#config-unlock').prop('disabled', false);
@@ -655,7 +663,7 @@
         });
 
         function saveRawConfig(content) {
-            ajaxCall('/api/mihomo/settings/config_set', { 'content': content }, function (data) {
+            ajaxCall('/api/mihomo/settings/config_set', { 'content': content, 'version': rawVersion }, function (data) {
                 showResult(
                     data['status'] === 'ok' ? ({{ lang._('Configuration saved') | json_encode }}) : ({{ lang._('Save failed') | json_encode }}),
                     data['message'] || '',

@@ -4,7 +4,7 @@
  * os-mihomo 二次开发 —— mihomo 配置文件（config.yaml）访问层
  *
  * 设计要点：
- *  - 只读操作（扫描键值）直接由 php-fpm 的 www 用户完成（config.yaml 为 0644）。
+ *  - 只读操作由 OPNsense WebGUI 完成；目标环境以 root 运行，配置权限为 0600。
  *  - 所有写操作必须经 configd（root），本类只负责生成内容 / 给出临时文件路径。
  *
  * Copyright (C) 2026  os-mihomo contributors
@@ -725,7 +725,7 @@ class Config
     }
 
     /**
-     * 生成一个仅 www 可读写的临时文件，供 configd（root）校验并接管写入。
+     * 生成一个仅当前 WebGUI 用户可读写的临时文件，供 configd（root）校验并接管写入。
      * 返回绝对路径，失败抛异常。
      */
     public static function createStagingFile(string $content): string

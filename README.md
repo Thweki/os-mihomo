@@ -94,9 +94,30 @@ service configd restart
 
 ![配置对照：并列查看页面、配置文件与内核运行值](docs/assets/configuration-comparison.png)
 
+### 写入一致性与权限
+
+设置、YAML、策略、订阅安装和恢复共用文件写入锁。页面携带读取时的 SHA-256 基线；文件或模型发生变化时，旧页面提交会被拒绝，请重新载入并检查差异。设置版本也包含 OPNsense 配置文件，因此其他管理页面的保存可能触发重新载入。规则的启用/删除仍是针对当前 UUID 的即时操作。
+
+新内容先在目标文件系统的唯一暂存文件中校验，再保存真正的旧内容并逐文件原子替换。设置的 YAML、订阅 env、自启文件，以及策略的 YAML/模板分别成组提交；可捕获的写入错误会恢复已替换的文件。配置及备份权限为 `0600`，备份名为 `<原文件>.bak.<时间>_<随机后缀>`，每个文件保留最近 20 份。配置历史可校验并恢复 YAML，恢复前也会备份当前文件。跨文件提交不保证断电或进程被强制终止时的整体原子性；此时应根据备份核对两个目标。
+
+动作返回 `state`：`unchanged`（未变化）、`completed`（完成）、`accepted`（任务已接受）、`failed`（失败）或 `partial`（部分完成）。Cron 和服务重载不属于文件事务；失败会显示部分完成，Cron 重载保留待重试标记。已接受重启不等于服务已正常运行，请检查状态。原配置内容只会出现在有配置权限的编辑/历史接口中；日志展示会隐藏 URL 和常见密钥字段。
+
+OPNsense 权限新增 `Mihomo (view)`、`Mihomo (operate)`、`Mihomo (configure)`：分别用于查看状态与脱敏日志、运行控制、配置及凭据管理。按需组合授予；原 `Mihomo` 全权限授权保持兼容。原生设置模型保存/导入仍保留既有的 full-admin 限制。只读用户无法选择节点、切换模式、关闭连接或执行写入。查看权限不授予原始 YAML、订阅凭据和备份内容访问。
+
 ### 订阅更新
 
-订阅更新会根据订阅模板重新生成 `config.yaml`，因此可能覆盖手工编辑的内容。需要持续保留的配置应同时体现在订阅模板中。提交更新任务后，请查看订阅日志确认结果。
+订阅更新会根据订阅模板重新生成 `config.yaml`，因此可能覆盖手工编辑的内容。需要持续保留的配置应同时体现在订阅模板中。下载和校验失败会保留原配置；下载期间发生配置、模板或 env 变更时也会拒绝覆盖。WebUI 默认只更新文件，是否重启由操作时选择；CLI/定时订阅保留原有重启行为。提交更新任务后，请查看轻量任务状态与订阅日志确认结果。
+
+兼容默认转换器为 `https://subconverters.com/sub`。使用转换器时，路由器会将**完整订阅 URL（包括其中的令牌）**发送给该服务，由其获取并转换节点数据；控制器密钥仅在本机合成配置时写入，不作为转换请求参数。转换器属于第三方信任边界，插件日志不记录完整请求或密钥。在 root 管理的 `/usr/local/etc/mihomo/sub/env` 中配置以下变量之一（文件格式为 shell 单引号赋值，保留 `0600`）：
+
+```sh
+# 提供商直接返回含 proxies 的 Clash YAML：不经过转换器。
+MIHOMO_CONVERTER_URL='direct'
+# 或使用自己控制/信任的 HTTPS 转换器：
+# MIHOMO_CONVERTER_URL='https://converter.example.com/sub'
+```
+
+`direct` 模式仍从提供商下载订阅，只提取节点并按本地模板生成配置，不直接采用订阅中的规则或代理组。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -142,7 +163,7 @@ python3 tools/check_publication.py
 python3 tools/validate.py
 ```
 
-在 FreeBSD 15 amd64 上构建，需要 `make`、`pkg`、`tar`、`xz`、`sha256`，以及 `fetch` 或 `curl`：
+在 FreeBSD 15 amd64 上构建，需要 `make`、`pkg`、`tar`、`xz`、`sha256`、`python3`、`git`，以及 `fetch` 或 `curl`：
 
 ```sh
 make package   # 生成 dist/os-mihomo.pkg
@@ -150,6 +171,8 @@ make repo      # 生成 dist/repo/<ABI>/
 ```
 
 这两个命令只构建产物，不安装插件或执行包钩子。CI 在隔离的 FreeBSD 环境中构建和检查包；匹配版本号的 `v<version>` 标签触发 Release 草稿。完整流程见 [CI/CD 说明](docs/ci-cd.md)。
+
+构建以 `SOURCE_DATE_EPOCH`（默认提交时间）固定包时间戳与归档顺序，CI 对两次独立构建逐字节比较。发布包含记录源码与工具链的 `build-info.json`；新的标签流程生成 GitHub 构建来源证明，可用 `gh attestation verify os-mihomo.pkg --repo Thweki/os-mihomo` 验证。已有旧版本不会自动获得证明。软件源支持 `REPO_SIGNING_KEY` / `REPO_PUBLIC_KEY` 签名及 `REQUIRE_SIGNED=yes` 防止未签名回退；生产私钥、公钥信任分发和 HTTPS 托管仍需自行配置，详见 CI/CD 文档。
 
 ### 翻译
 

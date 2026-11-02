@@ -51,9 +51,6 @@ function core_process(): ?array
     return null;
 }
 
-$scan = Config::scan();
-$tun = (string)($scan['tun.device'] ?? 'tun_mihomo');
-[$code, $pf] = read_command(['/sbin/pfctl', '-a', '*', '-sr']);
 $log = '';
 $stream = @fopen('/var/log/mihomo_sub.log', 'rb');
 if ($stream !== false) {
@@ -66,6 +63,13 @@ if ($stream !== false) {
     fclose($stream);
 }
 $task = read_process('/var/run/mihomo-sub-ui.pid', '~(?:/mihomo/sub/sub\.sh|MIHOMO_SERVICE_CMD)~');
+if (($argv[1] ?? '') === 'subscription') {
+    echo json_encode(['status' => 'ok', 'subscription' => RuntimeStatus::task($log, $task !== null)]);
+    exit(0);
+}
+$scan = Config::scan();
+$tun = (string)($scan['tun.device'] ?? 'tun_mihomo');
+[$code, $pf] = read_command(['/sbin/pfctl', '-a', '*', '-sr']);
 echo json_encode([
     'status' => 'ok', 'observed_at' => time(), 'rules_available' => $code === 0,
     'interfaces' => RuntimeStatus::interfaces((string)file_get_contents('/conf/config.xml')),

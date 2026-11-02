@@ -2,7 +2,7 @@
 <script>
 $(document).ready(function () {
     const $root = $(document.getElementById({{ network_id | json_encode }}));
-    let pending = false, snapshot = null, dns = [];
+    let snapshot = null, dns = [], lastDns = 0, dnsPending = false;
     function text(value) { return MihomoUI.decodeApiText(value); }
     function render() {
         if (!snapshot) { return; }
@@ -51,12 +51,10 @@ $(document).ready(function () {
             ? {{ lang._('No TUN forwarding rules were observed in the loaded PF ruleset.') | json_encode }}
             : {{ lang._('The loaded PF ruleset could not be read.') | json_encode }}))); }
     }
-    function refresh() {
-        if (pending) { return; }
-        pending = true;
+    function refresh(done) {
         $root.find('.network-refresh').prop('disabled', true);
         ajaxGet('/api/mihomo/dashboard/runtime_status', {}, function (data, status) {
-            pending = false;
+            done(status === 'success' && data && data.status === 'ok');
             $root.find('.network-refresh').prop('disabled', false);
             if (status !== 'success' || !data || data.status !== 'ok') {
                 $root.find('.network-read-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }});
@@ -67,18 +65,24 @@ $(document).ready(function () {
             $root.find('.network-read-state').text({{ lang._('Updated') | json_encode }} + ' · ' + new Date(data.observed_at * 1000).toLocaleTimeString());
             $(document).trigger('mihomo:runtime', [data]);
         });
-        ajaxGet('/api/mihomo/settings/dns_status', {}, function (data, status) {
-            if (status === 'success' && data && data.status === 'ok') { dns = data.interfaces || []; render(); }
-        });
+        if (!dnsPending && Date.now() - lastDns >= 60000) {
+            dnsPending = true;
+            ajaxGet('/api/mihomo/settings/dns_status', {}, function (data, status) {
+                dnsPending = false;
+                if (status === 'success' && data && data.status === 'ok') { lastDns = Date.now(); dns = data.interfaces || []; render(); }
+            });
+        }
     }
-    $root.find('.network-refresh').click(refresh);
+    const poller = new MihomoUI.Poller(refresh, 30000);
+    $root.find('.network-refresh').click(function () { lastDns = 0; poller.refresh(); });
     $root.find('.network-details-toggle').click(function () {
         const $details = $root.find('.network-details');
         $details.toggleClass('hidden');
         $(this).attr('aria-expanded', !$details.hasClass('hidden'));
     });
-    refresh();
-    setInterval(function () { if (!document.hidden) { refresh(); } }, 30000);
+    poller.refresh();
+    document.addEventListener('visibilitychange', () => poller.visibilityChanged());
+    window.addEventListener('pagehide', () => poller.stop());
 });
 </script>
 <div class="content-box" id="{{ network_id }}" style="padding:14px; margin-bottom:15px;">

@@ -21,6 +21,8 @@ use OPNsense\Core\Backend;
 use OPNsense\Core\Config as CoreConfig;
 use OPNsense\Mihomo\Config;
 use OPNsense\Mihomo\RequestParamsTrait;
+use OPNsense\Mihomo\WriteCoordinator;
+use OPNsense\Mihomo\ActionResult;
 
 class RoutingController extends ApiMutableModelControllerBase
 {
@@ -40,26 +42,43 @@ class RoutingController extends ApiMutableModelControllerBase
 
     public function getRuleAction($uuid = null)
     {
-        return $this->asDialogChoices($this->getBase('mihomo', 'policyRouting.rule', $uuid));
+        $lock = new WriteCoordinator();
+        $result = $this->asDialogChoices($this->getBase('mihomo', 'policyRouting.rule', $uuid));
+        $result['version'] = WriteCoordinator::revision('/conf/config.xml');
+        return $result;
     }
 
     public function setRuleAction($uuid)
     {
+        $this->throwReadOnly();
+        $lock = new WriteCoordinator();
+        if (!hash_equals(WriteCoordinator::revision('/conf/config.xml'), $this->stringParam('version'))) {
+            return ['result' => 'failed'] + ActionResult::make('failed', false, 'conflict', 'Policy changed; reload before saving.');
+        }
         return $this->setBase('mihomo', 'policyRouting.rule', $uuid);
     }
 
     public function addRuleAction()
     {
+        $this->throwReadOnly();
+        $lock = new WriteCoordinator();
+        if (!hash_equals(WriteCoordinator::revision('/conf/config.xml'), $this->stringParam('version'))) {
+            return ['result' => 'failed'] + ActionResult::make('failed', false, 'conflict', 'Policy changed; reload before saving.');
+        }
         return $this->addBase('mihomo', 'policyRouting.rule');
     }
 
     public function delRuleAction($uuid)
     {
+        $this->throwReadOnly();
+        $lock = new WriteCoordinator();
         return $this->delBase('policyRouting.rule', $uuid);
     }
 
     public function toggleRuleAction($uuid, $enabled = null)
     {
+        $this->throwReadOnly();
+        $lock = new WriteCoordinator();
         return $this->toggleBase('policyRouting.rule', $uuid, $enabled);
     }
 
@@ -161,6 +180,7 @@ class RoutingController extends ApiMutableModelControllerBase
      */
     public function previewAction()
     {
+        $lock = new WriteCoordinator();
         $rules = $this->collectRows();
         $subnets = Config::interfaceSubnets();
         $lines = Config::renderPolicyRules($rules, $subnets);
@@ -201,6 +221,7 @@ class RoutingController extends ApiMutableModelControllerBase
             'rules' => $lines,
             'warnings' => $warnings,
             'sample' => $sample,
+            'version' => WriteCoordinator::version([Config::FILE, '/usr/local/etc/mihomo/sub/template_config.yaml', '/conf/config.xml']),
             'targets' => $known,
         ];
     }
@@ -225,11 +246,16 @@ class RoutingController extends ApiMutableModelControllerBase
             return $result;
         }
 
+        $expected = WriteCoordinator::revisions([Config::FILE, '/usr/local/etc/mihomo/sub/template_config.yaml', '/conf/config.xml']);
+        ksort($expected);
+        if (!hash_equals(hash('sha256', json_encode($expected, JSON_UNESCAPED_SLASHES)), $this->stringParam('version'))) {
+            return ActionResult::make('failed', false, 'conflict', 'Policy or configuration changed; preview again.');
+        }
         $lines = Config::renderPolicyRules($this->collectRows(), Config::interfaceSubnets());
 
         try {
             $staging = Config::createStagingFile(json_encode(
-                ['rules' => $lines],
+                ['rules' => $lines, 'expected' => $expected],
                 JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             ));
         } catch (\Throwable $e) {
@@ -596,6 +622,7 @@ class RoutingController extends ApiMutableModelControllerBase
         if (!$this->request->isPost()) {
             return ['status' => 'failed', 'message' => gettext('POST required.')];
         }
+        $this->throwReadOnly();
         $subnets = Config::interfaceSubnets();
         $tests = [];
         foreach ($this->collectRows(true) as $row) {
@@ -647,12 +674,13 @@ class RoutingController extends ApiMutableModelControllerBase
                 'current_size' => $current,
             ];
         }
-        return ['status' => 'ok', 'rows' => $rows, 'current_ts' => date('Ymd_His')];
+        return ['status' => 'ok', 'rows' => $rows, 'current_ts' => date('Ymd_His'), 'version' => WriteCoordinator::revision(Config::FILE)];
     }
 
     /** 配置历史：某个备份的内容与差异 */
     public function historyShowAction($ts = '')
     {
+        $lock = new WriteCoordinator();
         $file = $this->backupPath($ts);
         if ($file === null) {
             return ['status' => 'failed', 'message' => gettext('Backup not found.')];
@@ -663,6 +691,7 @@ class RoutingController extends ApiMutableModelControllerBase
             'status' => 'ok',
             'ts' => $ts,
             'content' => $old,
+            'version' => WriteCoordinator::revision(Config::FILE),
             'diff' => $this->lineDiff($old, $new),
         ];
     }
@@ -683,19 +712,20 @@ class RoutingController extends ApiMutableModelControllerBase
             return $result;
         }
         $backend = new Backend();
-        $output = trim((string)$backend->configdpRun('mihomo config-restore', [$file]));
-        $result['status'] = stripos($output, 'Restored from') !== false ? 'ok' : 'failed';
-        $result['messages'][] = $output === '' ? gettext('(no output)') : $output;
-        return $result;
+        $version = $this->stringParam('version');
+        if ($version === '') {
+            return ActionResult::make('failed', false, 'conflict', 'Reload configuration history before restoring.');
+        }
+        return ActionResult::parse((string)$backend->configdpRun('mihomo config-restore', [$file, $version]));
     }
 
     private function backupPath(string $ts): ?string
     {
-        if (!preg_match('/^[0-9_]{8,20}$/', $ts)) {
+        if (!preg_match('/^[A-Za-z0-9_]{8,64}$/', $ts)) {
             return null;
         }
         $file = Config::FILE . '.bak.' . $ts;
-        return is_file($file) ? $file : null;
+        return is_file($file) && !is_link($file) ? $file : null;
     }
 
     /** 极简逐行差异（给界面看，不追求 patch 精度） */

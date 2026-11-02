@@ -46,9 +46,13 @@ def main():
                     target.write_text(script, encoding='utf-8')
                     subprocess.run(['node', '--check', str(target)], check=True)
     subprocess.run(['node', str(ROOT / 'tests/test_ui.js')], check=True)
+    subprocess.run([sys.executable, str(ROOT / 'tests/test_build.py')], check=True)
     if not frontend:
         subprocess.run(['php', str(ROOT / 'tests/test_runtime.php')], check=True)
-    for path in [*(ROOT / name for name in ['build.sh', 'scripts/deploy.sh', 'scripts/rollback.sh', 'scripts/ci_build.sh', 'scripts/make_repo.sh']), *sorted((ROOT / 'packaging/freebsd').glob('+*INSTALL'))]:
+        subprocess.run(['php', str(ROOT / 'tests/test_patch.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_writes.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_api.php')], check=True)
+    for path in [*(ROOT / name for name in ['build.sh', 'scripts/deploy.sh', 'scripts/rollback.sh', 'scripts/ci_build.sh', 'scripts/make_repo.sh', 'tests/test_repository.sh']), *sorted((ROOT / 'src').rglob('*.sh')), *sorted((ROOT / 'packaging/freebsd').glob('+*INSTALL'))]:
         shell = shutil.which('sh') or ('C:/Program Files/Git/usr/bin/sh.exe' if sys.platform == 'win32' else 'sh')
         subprocess.run([shell, '-n', str(path)], check=True)
     for path in (ROOT / 'packaging/freebsd').glob('+*INSTALL'):

@@ -13,21 +13,20 @@
  * All rights reserved. 详见 Config.php 头部 BSD 许可条款。
  */
 
+require_once __DIR__ . '/write_common.php';
+use OPNsense\Mihomo\WriteCoordinator;
+
 $value = strtolower(trim($argv[1] ?? ''));
 if (!in_array($value, ['yes', 'no'], true)) {
-    fwrite(STDERR, "usage: service_enable.php <yes|no>\n");
-    exit(2);
+    mihomo_fail('invalid_value', 'Autostart must be yes or no');
 }
 
 $file = '/etc/rc.conf.d/mihomo';
 $content = sprintf("mihomo_enable=\"%s\"\n", strtoupper($value));
 
-if (@file_put_contents($file, $content) === false) {
-    fwrite(STDERR, "unable to write {$file}\n");
-    exit(3);
+try {
+    $writer = new WriteCoordinator();
+    mihomo_result($writer->commit([$file => $content]));
+} catch (Throwable $error) {
+    mihomo_fail('write_failed', $error->getMessage());
 }
-chmod($file, 0644);
-chown($file, 'root');
-chgrp($file, 'wheel');
-
-echo sprintf("mihomo boot-time autostart set to %s.\n", strtoupper($value));

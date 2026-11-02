@@ -1,8 +1,8 @@
-<?xml version="1.0"?>
+<?xml version='1.0' encoding='utf-8'?>
 <acl>
     <page-vpn-mihomo>
         <name>VPN: Proxy Suite: Mihomo</name>
-        <description>Allow access to the 'VPN: Proxy Suite: Mihomo' pages.</description>
+        <description>Compatibility: full plugin access for existing grants. For new users prefer separate view, operate and configure privileges.</description>
         <patterns>
             <pattern>ui/mihomo/*</pattern>
             <pattern>api/mihomo/*</pattern>
@@ -18,4 +18,51 @@
             <pattern>mihomo_sub_log.php*</pattern>
         </patterns>
     </page-vpn-mihomo-legacy>
+    <page-vpn-mihomo-view>
+        <name>VPN: Proxy Suite: Mihomo (view)</name>
+        <description>Read status and redacted logs; does not expose raw configurations or credentials.</description>
+        <patterns>
+            <pattern>ui/mihomo/index</pattern>
+            <pattern>ui/mihomo/log</pattern>
+            <pattern>ui/mihomo/routing</pattern>
+            <pattern>api/mihomo/dashboard/overview</pattern>
+            <pattern>api/mihomo/dashboard/proxies</pattern>
+            <pattern>api/mihomo/dashboard/connections</pattern>
+            <pattern>api/mihomo/dashboard/runtime_status</pattern>
+            <pattern>api/mihomo/dashboard/safety</pattern>
+            <pattern>api/mihomo/service/status</pattern>
+            <pattern>api/mihomo/service/safety</pattern>
+            <pattern>api/mihomo/log/tail</pattern>
+            <pattern>api/mihomo/subscription/status</pattern>
+            <pattern>api/mihomo/subscription/log</pattern>
+            <pattern>api/mihomo/routing/status</pattern>
+            <pattern>api/mihomo/routing/netstatus</pattern>
+        </patterns>
+    </page-vpn-mihomo-view>
+    <page-vpn-mihomo-operate>
+        <name>VPN: Proxy Suite: Mihomo (operate)</name>
+        <description>Combine with view for runtime controls; read-only users remain unable to mutate.</description>
+        <patterns>
+            <pattern>api/mihomo/dashboard/select_proxy</pattern>
+            <pattern>api/mihomo/dashboard/set_mode</pattern>
+            <pattern>api/mihomo/dashboard/close_connection</pattern>
+            <pattern>api/mihomo/dashboard/test_delay</pattern>
+            <pattern>api/mihomo/service/start</pattern>
+            <pattern>api/mihomo/service/stop</pattern>
+            <pattern>api/mihomo/service/restart</pattern>
+            <pattern>api/mihomo/service/reconfigure</pattern>
+            <pattern>api/mihomo/subscription/run</pattern>
+        </patterns>
+    </page-vpn-mihomo-operate>
+    <page-vpn-mihomo-configure>
+        <name>VPN: Proxy Suite: Mihomo (configure)</name>
+        <description>Manage plugin settings, credentials, YAML, policy, backups and subscription configuration. Combine with view as needed.</description>
+        <patterns>
+            <pattern>ui/mihomo/*</pattern>
+            <pattern>api/mihomo/settings/*</pattern>
+            <pattern>api/mihomo/routing/*</pattern>
+            <pattern>api/mihomo/subscription/*</pattern>
+            <pattern>api/mihomo/log/*</pattern>
+        </patterns>
+    </page-vpn-mihomo-configure>
 </acl>

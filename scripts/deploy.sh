@@ -13,6 +13,7 @@
 #           /usr/local/opnsense/version/mihomo, /usr/local/etc/inc/plugins.inc.d/mihomo.inc,
 #           /usr/local/etc/newsyslog.conf.d/mihomo.conf, /usr/bin/mihomo_sub
 set -eu
+umask 077
 
 STAGE=/tmp/mihomo-stage/src
 BAK_ROOT=/usr/local/opnsense/_bak/os-mihomo
@@ -131,6 +132,9 @@ for rel in \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Mihomo.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Mihomo.xml \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Config.php \
+    usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/WriteCoordinator.php \
+    usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/ActionResult.php \
+    usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/CronApply.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Controller.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Logs.php \
@@ -187,6 +191,8 @@ done
 # 2.2 可执行脚本
 for rel in \
     usr/local/opnsense/scripts/mihomo/config_apply.php \
+    usr/local/opnsense/scripts/mihomo/write_common.php \
+    usr/local/opnsense/scripts/mihomo/subscription_install.php \
     usr/local/opnsense/scripts/mihomo/env.php \
     usr/local/opnsense/scripts/mihomo/logclear.php \
     usr/local/opnsense/scripts/mihomo/logtail.php \
@@ -207,7 +213,7 @@ done
 
 # 2.3 配置文件（仅在不存在时安装，避免覆盖用户配置）
 if [ ! -f /usr/local/etc/mihomo/config.yaml ] && [ -f "$STAGE/usr/local/etc/mihomo/config.yaml" ]; then
-    install_file "$STAGE/usr/local/etc/mihomo/config.yaml" /usr/local/etc/mihomo/config.yaml 0644
+    install_file "$STAGE/usr/local/etc/mihomo/config.yaml" /usr/local/etc/mihomo/config.yaml 0600
     log "  installed default config.yaml"
 elif [ -f "$STAGE/usr/local/etc/mihomo/config.yaml" ]; then
     log "  kept existing config.yaml (not overwritten)"
@@ -245,7 +251,12 @@ if [ ! -f /etc/rc.conf.d/mihomo ]; then
     log "  created /etc/rc.conf.d/mihomo (mihomo_enable=NO)"
 fi
 
-chmod 0644 /usr/local/etc/mihomo/config.yaml 2>/dev/null || true
+for private in /usr/local/etc/mihomo/config.yaml /usr/local/etc/mihomo/sub/env /usr/local/etc/mihomo/sub/template_config.yaml; do
+    [ ! -f "$private" ] || [ -L "$private" ] || chmod 0600 "$private"
+    for backup in "$private".bak.*; do
+        [ ! -f "$backup" ] || [ -L "$backup" ] || chmod 0600 "$backup"
+    done
+done
 chmod 0755 /usr/local/etc/mihomo/sub/sub.sh 2>/dev/null || true
 mkdir -p /usr/local/etc/mihomo/sub/temp
 

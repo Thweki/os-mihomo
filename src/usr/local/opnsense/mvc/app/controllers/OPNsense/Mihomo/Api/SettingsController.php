@@ -27,6 +27,10 @@ use OPNsense\Mihomo\Config;
 use OPNsense\Mihomo\Inspector;
 use OPNsense\Mihomo\RequestParamsTrait;
 use OPNsense\Mihomo\Safety;
+use OPNsense\Mihomo\WriteCoordinator;
+use OPNsense\Mihomo\ActionResult;
+use OPNsense\Mihomo\Subscription;
+use OPNsense\Mihomo\CronApply;
 
 class SettingsController extends ApiMutableModelControllerBase
 {
@@ -34,8 +38,37 @@ class SettingsController extends ApiMutableModelControllerBase
 
     protected static $internalModelName = 'mihomo';
     protected static $internalModelClass = '\OPNsense\Mihomo\Mihomo';
-    /** 不在保存时做全模型校验，避免首屏空模型无法落盘 */
+    /** Preserve the existing full-admin requirement for native model persistence. */
     protected static $internalSaveRequiresAdmin = true;
+
+    private static function versionPaths(): array
+    {
+        return [Config::FILE, Subscription::ENV_FILE, '/etc/rc.conf.d/mihomo', '/conf/config.xml'];
+    }
+
+    public function getAction()
+    {
+        $lock = new WriteCoordinator();
+        $result = parent::getAction();
+        // The subscription page writes the authoritative env file independently.
+        $env = Subscription::env();
+        $result['mihomo']['subscription']['url'] = (string)($env['mihomo_URL'] ?? '');
+        $result['mihomo']['subscription']['secret'] = (string)($env['mihomo_secret'] ?? '');
+        $result['version'] = WriteCoordinator::version(self::versionPaths());
+        return $result;
+    }
+
+    public function setAction()
+    {
+        $this->throwReadOnly();
+        $lock = new WriteCoordinator();
+        if (!$this->request->isPost() || !hash_equals(WriteCoordinator::version(self::versionPaths()), $this->stringParam('version'))) {
+            return ['result' => 'failed'] + ActionResult::make('failed', false, 'conflict', 'Settings changed; reload before saving.');
+        }
+        $result = parent::setAction();
+        $result['version'] = WriteCoordinator::version(self::versionPaths());
+        return $result;
+    }
 
     /**
      * 本插件管理的键：yaml 键 => [值, 来自哪个页面字段, 显示名]。
@@ -108,143 +141,104 @@ class SettingsController extends ApiMutableModelControllerBase
      */
     public function applyAction()
     {
-        $result = ['status' => 'failed', 'messages' => []];
         if (!$this->request->isPost()) {
-            $result['message'] = gettext('POST required.');
-            return $result;
+            return ActionResult::make('failed', false, 'method', gettext('POST required.'));
         }
         $this->throwReadOnly();
-
-        if (!Config::exists()) {
-            $result['message'] = sprintf(
-                gettext('Configuration file %s is missing. Install the plugin first.'),
-                Config::FILE
-            );
-            return $result;
+        // Snapshot before reading content. The worker rechecks every hash under the shared lock.
+        $expected = WriteCoordinator::revisions(self::versionPaths());
+        ksort($expected);
+        if (!hash_equals(hash('sha256', json_encode($expected, JSON_UNESCAPED_SLASHES)), $this->stringParam('version'))) {
+            return ActionResult::make('failed', false, 'conflict', 'Settings changed; reload before applying.');
         }
-
         $mdl = $this->getModel();
-        $backend = new Backend();
-
-        /* ---- 0. 「不修改」开关：只写用户交给插件的项 ----
-         * 页面上 config.yaml 的键都有「不修改」勾（默认勾上）：
-         *   勾上   = 插件完全不碰这一项 —— 文件里原本怎么写就怎么用（也不会把已有的键删掉）；
-         *   取消勾 = 这一项由页面负责写入。
-         * 插件自己的状态（开机自启 / 订阅凭据 / 自动更新）与写死的项（设备名 / 协议栈）
-         * 没有开关，始终随「应用」同步 —— 见 Config::fieldsWithoutSwitch()。
-         * 开关状态存在模型的 managed 字段里（逗号分隔的页面字段 id）。
-         */
-        $managedFields = Config::ownedFieldsWithDefaults(array_map(
-            'trim',
-            explode(',', (string)$mdl->managed)
-        ));
-        $touched = fn (string $field): bool => in_array($field, $managedFields, true);
-        [$write, $writtenLabels, $skippedLabels] = Config::selectManagedKeys(
-            $this->managedKeys(),
-            $managedFields,
-            Config::scan()
-        );
-
-        /* ---- 1. config.yaml ---- */
-        /* DNS 上游是列表/嵌套映射，不能走 patchKeys 的单行标量通道：
-           它由下面的 applyDnsUpstreamBlock() 以受管区块整块替换。 */
-        $upstreamOwned = $touched('mihomo.dns.upstream');
-        $upstreamFragment = (string)$mdl->dns->upstream;
-        if ($write === [] && !$upstreamOwned) {
-            $result['messages'][] = gettext('Every item is set to "leave alone", so the configuration file was not touched.');
-        } else {
-            $patch = [];
-            foreach ($write as $key => $info) {
-                $patch[$key] = $info['value'];
+        $managedFields = Config::ownedFieldsWithDefaults(array_map('trim', explode(',', (string)$mdl->managed)));
+        [$write] = Config::selectManagedKeys($this->managedKeys(), $managedFields, Config::scan());
+        $files = [];
+        try {
+            $content = Config::rawText();
+            if ($write !== []) {
+                $content = Config::patchKeys($content, array_map(fn ($info) => $info['value'], $write));
             }
-            try {
-                $content = Config::patchKeys(Config::rawText(), $patch);
-                if ($upstreamOwned) {
-                    $content = Config::applyDnsUpstreamBlock($content, $upstreamFragment);
+            if (in_array('mihomo.dns.upstream', $managedFields, true)) {
+                $content = Config::applyDnsUpstreamBlock($content, (string)$mdl->dns->upstream);
+            }
+            if ($content !== Config::rawText()) {
+                $files[Config::FILE] = $content;
+            }
+            $enabled = (string)$mdl->general->enabled === '1';
+            if (Safety::bootEnabled() !== $enabled) {
+                $files['/etc/rc.conf.d/mihomo'] = 'mihomo_enable="' . ($enabled ? 'YES' : 'NO') . '"' . "\n";
+            }
+            $vars = Subscription::env();
+            $url = trim((string)$mdl->subscription->url);
+            $secret = trim((string)$mdl->subscription->secret);
+            if (($url !== '' && !preg_match('@^https?://\S+$@i', $url))
+                || !preg_match('/^[0-9a-zA-Z_.\-]{0,128}$/', $secret)) {
+                return ActionResult::make('failed', false, 'input', 'Invalid subscription URL or secret.');
+            }
+            $vars['mihomo_URL'] = $url;
+            $vars['mihomo_secret'] = $secret;
+            $lines = [];
+            foreach ($vars as $key => $value) {
+                if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $key)) {
+                    $lines[] = $key . "='" . str_replace("'", "'\"'\"'", (string)$value) . "'";
                 }
-                $staging = Config::createStagingFile($content);
-            } catch (\Throwable $e) {
-                $result['message'] = $e->getMessage();
-                return $result;
             }
-
-            $output = trim((string)$backend->configdpRun('mihomo config-install', [$staging]));
-            if (stripos($output, 'installed successfully') === false) {
-                $result['message'] = sprintf(
-                    gettext('The configuration file was not written. mihomo rejected it:%s'),
-                    $output === '' ? ' ' . gettext('(no output)') : "\n" . $output
-                );
-                return $result;
-            }
-            if ($upstreamOwned) {
-                $writtenLabels[] = gettext('DNS upstream');
-            }
-            $writtenLabels = array_values(array_unique($writtenLabels));
-            $result['messages'][] = sprintf(
-                gettext('Configuration file updated: %d item(s) written — %s'),
-                count($writtenLabels),
-                implode('、', $writtenLabels)
-            );
-        }
-        if ($skippedLabels !== []) {
-            $result['messages'][] = sprintf(
-                gettext('The page and the file disagree on %d item(s), but those are still set to "leave alone", so the file keeps its own values: %s — clear "leave alone" on them to write the page values, or press Import to load the file values into the page.'),
-                count($skippedLabels),
-                implode('、', $skippedLabels)
-            );
-        }
-
-        /* ---- 2. 开机自启（插件自己的状态，没有「不修改」开关；值没变就不重复写、不刷屏）---- */
-        $enabled = (string)$mdl->general->enabled === '1';
-        if ($touched('mihomo.general.enabled') && Safety::bootEnabled() !== $enabled) {
-            $backend->configdpRun('mihomo set-enabled', [$enabled ? 'yes' : 'no']);
-            $result['messages'][] = $enabled
-                ? gettext('Service will start automatically on boot.')
-                : gettext('Service will not start automatically on boot.');
-        }
-
-        /* ---- 3. 订阅凭据（仅在填写时写入，避免清空既有值）---- */
-        $url = trim((string)$mdl->subscription->url);
-        $secret = trim((string)$mdl->subscription->secret);
-        if (($touched('mihomo.subscription.url') || $touched('mihomo.subscription.secret')) && ($url !== '' || $secret !== '')) {
-            $out = trim((string)$backend->configdpRun('mihomo env-set', [$url, $secret]));
-            if ($out !== '') {
-                $result['messages'][] = $out;
-            }
-        }
-
-        /* ---- 4. 订阅自动更新（写 OPNsense 原生 Cron 任务）---- */
-        if ($touched('mihomo.subscription.updateEnabled') || $touched('mihomo.subscription.updateInterval')) {
+            $files[Subscription::ENV_FILE] = implode("\n", $lines) . "\n";
+            $staging = Config::createStagingFile(json_encode(['files' => $files, 'expected' => $expected], JSON_THROW_ON_ERROR));
             try {
-                $cronMessage = $this->syncSubscriptionCron(
-                    (string)$mdl->subscription->updateEnabled === '1',
-                    (string)$mdl->subscription->updateInterval
-                );
-                if ($cronMessage !== '') {
-                    $result['messages'][] = $cronMessage;
-                }
-            } catch (\Throwable $e) {
-                $result['messages'][] = sprintf(gettext('Scheduled task could not be updated: %s'), $e->getMessage());
+                $result = ActionResult::parse((string)(new Backend())->configdpRun('mihomo config-bundle', [$staging]));
+            } finally {
+                @unlink($staging);
+            }
+        } catch (\Throwable $e) {
+            return ActionResult::make('failed', false, 'apply', $e->getMessage());
+        }
+        if ($result['status'] !== 'ok') { return $result; }
+        // Reacquire only after configd releases its lock. Never refresh a stale UI's
+        // token to another writer's state: that would make a later retry overwrite it.
+        $postLock = new WriteCoordinator();
+        \OPNsense\Core\Config::getInstance()->lock();
+        $afterFiles = array_replace($expected, $result['versions'] ?? []);
+        foreach ($afterFiles as $path => $version) {
+            if (!hash_equals($version, WriteCoordinator::revision($path))) {
+                return ActionResult::make('partial', (bool)$result['changed'], 'conflict',
+                    'Settings files were committed, then another writer changed the configuration. Reload before continuing.',
+                    ['backups' => $result['backups'] ?? []]);
             }
         }
-
-        /* ---- 5. 显式重启 ---- */
+        $result['steps'] = ['files' => $result['state']];
+        $result['messages'] = [$result['message']];
+        try {
+            $cronMessage = $this->syncSubscriptionCron((string)$mdl->subscription->updateEnabled === '1', (string)$mdl->subscription->updateInterval);
+            $result['steps']['cron'] = $cronMessage === '' ? 'unchanged' : 'completed';
+            if ($cronMessage !== '') {
+                $result['messages'][] = $cronMessage;
+                $result['changed'] = true;
+                $result['state'] = 'completed';
+            }
+        } catch (\Throwable $e) {
+            return ActionResult::make('partial', true, 'cron_failed',
+                'Settings files committed, but scheduled task update failed: ' . $e->getMessage(),
+                ['steps' => $result['steps'] + ['cron' => 'failed'], 'backups' => $result['backups'] ?? [],
+                    'version' => WriteCoordinator::version(self::versionPaths())]);
+        }
         if ($this->boolParam('restart')) {
-            if (!$enabled) {
-                $result['messages'][] = gettext('Service is not enabled; nothing to restart.');
-            } else {
-                $out = trim((string)$backend->configdRun('mihomo restart'));
-                $result['messages'][] = $out === ''
-                    ? gettext('Service restart requested.')
-                    : $out;
+            $out = trim((string)(new Backend())->configdRun('mihomo restart'));
+            if (!in_array(strtolower($out), ['ok', 'ok.'], true)) {
+                return ActionResult::make('partial', (bool)$result['changed'], 'restart_unconfirmed',
+                    'Settings saved, but the restart request was not confirmed.',
+                    ['steps' => $result['steps'] + ['restart' => 'failed'], 'version' => WriteCoordinator::version(self::versionPaths())]);
             }
+            // configd accepting an action does not prove the service became ready.
+            $result['state'] = 'accepted';
+            $result['steps']['restart'] = 'accepted';
+            $result['messages'][] = gettext('Service restart requested.');
         } else {
-            $result['messages'][] = gettext(
-                'The running service keeps its current in-memory configuration until it is restarted.'
-            );
+            $result['messages'][] = gettext('The running service keeps its current in-memory configuration until it is restarted.');
         }
-
-        $result['status'] = 'ok';
+        $result['version'] = WriteCoordinator::version(self::versionPaths());
         return $result;
     }
 
@@ -254,6 +248,8 @@ class SettingsController extends ApiMutableModelControllerBase
      */
     private function syncSubscriptionCron(bool $enabled, string $interval): string
     {
+        // applyAction holds both plugin and core configuration locks here.
+        $reload = fn () => (new Backend())->configdRun('cron restart');
         $hours = ['v6' => '0,6,12,18', 'v12' => '0,12', 'v24' => '0'][$interval] ?? '0';
         $cron = new \OPNsense\Cron\Cron();
         $uuid = null;
@@ -273,7 +269,7 @@ class SettingsController extends ApiMutableModelControllerBase
                 && (string)$existing->minutes === '0'
                 && (string)$existing->who === 'root'
             ) {
-                return '';
+                return CronApply::run(false, fn () => null, $reload) ? 'Scheduled task reload completed.' : '';
             }
         }
 
@@ -295,7 +291,7 @@ class SettingsController extends ApiMutableModelControllerBase
         } elseif ($uuid !== null) {
             $cron->jobs->job->del($uuid);
         } else {
-            return '';
+            return CronApply::run(false, fn () => null, $reload) ? 'Scheduled task reload completed.' : '';
         }
 
         $messages = $cron->performValidation();
@@ -304,10 +300,10 @@ class SettingsController extends ApiMutableModelControllerBase
                 throw new \RuntimeException((string)$message);
             }
         }
-        $cron->serializeToConfig();
-        \OPNsense\Core\Config::getInstance()->save();
-        $backend = new Backend();
-        $backend->configdRun('cron restart');
+        CronApply::run(true, function () use ($cron): void {
+            $cron->serializeToConfig();
+            \OPNsense\Core\Config::getInstance()->save();
+        }, $reload);
 
         return $enabled
             ? sprintf(gettext('Scheduled task enabled: subscription update (%s).'), $hours)
@@ -397,6 +393,7 @@ class SettingsController extends ApiMutableModelControllerBase
             return $result;
         }
 
+        $lock = new WriteCoordinator();
         $scan = Config::scan();
         $mdl = $this->getModel();
         $yesNo = fn ($value, string $default = 'false') => in_array(
@@ -461,10 +458,12 @@ class SettingsController extends ApiMutableModelControllerBase
      */
     public function configGetAction()
     {
+        $lock = new WriteCoordinator();
         return [
             'status' => Config::exists() ? 'ok' : 'failed',
             'file' => Config::FILE,
             'content' => Config::rawText(),
+            'version' => WriteCoordinator::revision(Config::FILE),
             'bytes' => Config::exists() ? filesize(Config::FILE) : 0,
             'editable' => Config::exists(),
         ];
@@ -487,12 +486,11 @@ class SettingsController extends ApiMutableModelControllerBase
         } catch (\Throwable $e) {
             return ['status' => 'failed', 'message' => $e->getMessage()];
         }
-        $output = trim((string)(new Backend())->configdpRun('mihomo config-check', [$staging]));
-        $ok = str_contains($output, 'validation passed');
-        return [
-            'status' => $ok ? 'ok' : 'failed',
-            'message' => $output === '' ? gettext('No output from the configuration test.') : $output,
-        ];
+        try {
+            return ActionResult::parse((string)(new Backend())->configdpRun('mihomo config-check', [$staging]));
+        } finally {
+            @unlink($staging);
+        }
     }
 
     /**
@@ -513,12 +511,19 @@ class SettingsController extends ApiMutableModelControllerBase
         } catch (\Throwable $e) {
             return ['status' => 'failed', 'message' => $e->getMessage()];
         }
-        $output = trim((string)(new Backend())->configdpRun('mihomo config-install', [$staging]));
-        $ok = str_contains($output, 'installed successfully');
-        return [
-            'status' => $ok ? 'ok' : 'failed',
-            'message' => $output === '' ? gettext('No output from the configuration test.') : $output,
-        ];
+        try {
+            $version = $this->stringParam('version');
+            if ($version === '') {
+                return ActionResult::make('failed', false, 'conflict', 'Reload the configuration before saving.');
+            }
+            $result = ActionResult::parse((string)(new Backend())->configdpRun('mihomo config-install', [$staging, $version]));
+            if (isset($result['versions'][Config::FILE])) {
+                $result['version'] = $result['versions'][Config::FILE];
+            }
+            return $result;
+        } finally {
+            @unlink($staging);
+        }
     }
 
     /**
@@ -526,13 +531,6 @@ class SettingsController extends ApiMutableModelControllerBase
      */
     public function configTestAction()
     {
-        $output = trim((string)(new Backend())->configdRun('mihomo config-current'));
-        $ok = !str_contains($output, 'invalid') && !str_contains($output, 'error');
-        return [
-            'status' => $ok ? 'ok' : 'failed',
-            'message' => $output === ''
-                ? gettext('No output from the configuration test.')
-                : Safety::shorten($output, 12),
-        ];
+        return ActionResult::parse((string)(new Backend())->configdRun('mihomo config-current'));
     }
 }

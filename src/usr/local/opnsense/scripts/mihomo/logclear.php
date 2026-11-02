@@ -31,5 +31,5 @@ if (file_put_contents($file, '', LOCK_EX) === false) {
     fwrite(STDERR, "unable to truncate {$file}\n");
     exit(3);
 }
-chmod($file, 0640);
+chmod($file, 0600);
 echo "Log file cleared.\n";

@@ -84,6 +84,7 @@
             });
         }
 
+        $('<input type="hidden">').attr('id', 'version').appendTo($(document.getElementById('frm_' + {{ formGridPolicy['edit_dialog_id'] | json_encode }})));
         $("#{{formGridPolicy['table_id']}}").UIBootgrid({
             search: '/api/mihomo/routing/search_rule/',
             get: '/api/mihomo/routing/get_rule/',
@@ -104,6 +105,7 @@
                         return;
                     }
                     lastPlan = {
+                        version: preview.version,
                         rules: preview.rules || [],
                         warnings: preview.warnings || [],
                         changes: net.changes || [],
@@ -160,7 +162,7 @@
                             'cssClass': 'btn-primary',
                             'action': function (d) {
                                 d.close();
-                                ajaxCall('/api/mihomo/routing/apply', {}, function (r1) {
+                                ajaxCall('/api/mihomo/routing/apply', {version: lastPlan.version}, function (r1) {
                                     if (r1['status'] !== 'ok') {
                                         dialog(({{ lang._('Apply failed') | json_encode }}), decode(r1['message'] || ''), BootstrapDialog.TYPE_DANGER);
                                         return;
@@ -270,7 +272,7 @@
                             .append($('<button>').addClass('btn btn-xs btn-default __mr').text(({{ lang._('Diff') | json_encode }}))
                                 .click(function () { showDiff(row.ts); }))
                             .append($('<button>').addClass('btn btn-xs btn-default').text(({{ lang._('Restore') | json_encode }}))
-                                .click(function () { confirmRestore(row.ts); }))));
+                                .click(function () { confirmRestore(row.ts, data.version); }))));
                 });
             });
         }
@@ -285,7 +287,7 @@
             });
         }
 
-        function confirmRestore(ts) {
+        function confirmRestore(ts, version) {
             BootstrapDialog.show({
                 'type': BootstrapDialog.TYPE_WARNING,
                 'title': ({{ lang._('Restore') | json_encode }}),
@@ -297,8 +299,8 @@
                         'cssClass': 'btn-primary',
                         'action': function (d) {
                             d.close();
-                            ajaxCall('/api/mihomo/routing/history_restore', { 'ts': ts }, function (data) {
-                                dialog(({{ lang._('Restore') | json_encode }}), (data['messages'] || []).join('\n'),
+                            ajaxCall('/api/mihomo/routing/history_restore', { 'ts': ts, 'version': version }, function (data) {
+                                dialog(({{ lang._('Restore') | json_encode }}), data.message || (data['messages'] || []).join('\n'),
                                     data['status'] === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER);
                                 loadHistory();
                             });
