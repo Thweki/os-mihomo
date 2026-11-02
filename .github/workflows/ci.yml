@@ -38,7 +38,7 @@ jobs:
           envs: BUILD_REF
           prepare: |
             env ASSUME_ALWAYS_YES=yes pkg bootstrap -f
-            env ASSUME_ALWAYS_YES=yes pkg install python3 php84 php84-simplexml git
+            env ASSUME_ALWAYS_YES=yes pkg install python3 php84 php84-ctype php84-filter php84-simplexml git
           run: sh scripts/ci_build.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
