@@ -1,5 +1,5 @@
 ﻿PKG_NAME?=	os-mihomo
-VERSION?=	1.1.0
+VERSION?=	1.1.1
 # OPNsense 插件仓库按 ABI 分目录，默认构建本机 ABI（FreeBSD:15:amd64 之类）。
 # 只做单文件分发（pkg add -f）时可改为 ABI=universal。
 ABI?=		native

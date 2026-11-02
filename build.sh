@@ -4,7 +4,7 @@ export LC_ALL=C TZ=UTC
 umask 022
 
 PKG_NAME="${PKG_NAME:-os-mihomo}"
-VERSION="${VERSION:-1.1.0}"
+VERSION="${VERSION:-1.1.1}"
 ORIGIN="${ORIGIN:-opnsense/os-mihomo}"
 COMMENT="${COMMENT:-Mihomo proxy integration for OPNsense}"
 MAINTAINER="${MAINTAINER:-https://github.com/Thweki/}"
