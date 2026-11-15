@@ -121,14 +121,24 @@
             drawTraffic();
         });
 
+        let latestTotals = null;
+        function renderTrafficTotals() {
+            if (!latestTotals) { return; }
+            const rawBytes = $('#traffic-totals-bytes').prop('checked');
+            $('#stat-download').text(MihomoUI.formatTrafficTotal(latestTotals.downloadTotal, rawBytes));
+            $('#stat-upload').text(MihomoUI.formatTrafficTotal(latestTotals.uploadTotal, rawBytes));
+        }
+        // Page visit only; also reset browsers that restore checkbox state on reload.
+        $('#traffic-totals-bytes').prop('checked', false).on('change', renderTrafficTotals);
+
         function renderOverview(data) {
             const runtime = data['runtime'] || {};
             const controller = data['controller'] || {};
             const config = data['config'] || {};
 
             $('#stat-connections').text(fmtCount(runtime['connections']));
-            $('#stat-download').text(fmtBytes(runtime['downloadTotal']));
-            $('#stat-upload').text(fmtBytes(runtime['uploadTotal']));
+            latestTotals = runtime;
+            renderTrafficTotals();
             $('#stat-memory').text(processMemory !== null ? fmtBytes(processMemory) : {{ lang._('Unavailable') | json_encode }});
 
             if (controller['alive']) {
@@ -447,6 +457,9 @@
 <div class="row"><section class="col-xs-12"><div class="content-box" style="padding:10px 14px; display:flex; flex-wrap:wrap; gap:12px 24px; margin-bottom:15px;">
     <span>{{ lang._('Downloaded') }}: <span id="stat-download">—</span></span>
     <span>{{ lang._('Uploaded') }}: <span id="stat-upload">—</span></span>
+    <label for="traffic-totals-bytes" style="font-weight:normal; margin:0;">
+        <input type="checkbox" id="traffic-totals-bytes"> {{ lang._('Show totals in bytes') }}
+    </label>
     <span>{{ lang._('Core version') }}: <span id="mihomo-version">—</span></span>
 </div></section></div>
 
