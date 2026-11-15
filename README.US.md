@@ -25,6 +25,8 @@ Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, wit
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
+Experimental automatic proxy selection defaults **OFF**. In Overview → Proxy Groups, enable **Automatically select the fastest proxy after a group test (experimental)**, then click a Selector group’s test button. After the bounded latency test completes, the page selects the lowest positive latency from that run; equal latency keeps the current selection. Failed/untested nodes, direct/reject targets and nested groups cannot win. Individual node tests and ordinary polling never switch groups. The option resets on reload and writes no plugin settings. Disabling it, hiding/leaving the page, manually selecting a node, or a changed group cancels a pending switch. A switch already submitted cannot be cancelled. This is a live runtime selection, not a continuous background service; other clients can still change the group between the final read and write.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.

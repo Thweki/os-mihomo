@@ -1805,3 +1805,19 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatically select the fastest proxy after a group test (experimental)"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Off by default; enabled only for this page visit. Applies to Selector groups and fresh group tests. Direct, reject and nested groups are excluded. A submitted switch cannot be cancelled."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatic switch skipped: cancelled, changed group, failed read, or no faster responding proxy."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatically selected"
+msgstr ""

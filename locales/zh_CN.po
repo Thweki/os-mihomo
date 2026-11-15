@@ -1389,3 +1389,19 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatically select the fastest proxy after a group test (experimental)"
+msgstr "分组测速后自动选择最快的代理（实验性）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Off by default; enabled only for this page visit. Applies to Selector groups and fresh group tests. Direct, reject and nested groups are excluded. A submitted switch cannot be cancelled."
+msgstr "默认关闭，仅在本次页面访问中启用。适用于 Selector 分组及本次分组测速结果。排除直连、拒绝和嵌套分组。已提交的切换无法取消。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatic switch skipped: cancelled, changed group, failed read, or no faster responding proxy."
+msgstr "已跳过自动切换：操作已取消、分组已更改、读取失败或没有响应更快的代理。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatically selected"
+msgstr "已自动选择"
