@@ -217,7 +217,7 @@ echo "\n=== 14. Inspector（配置对照，只读纯函数） ===\n";
 check('normalize 布尔/数字/引号', Inspector::normalize(true) === 'true'
     && Inspector::normalize('0') === 'false'
     && Inspector::normalize('"Yes"') === 'true'
-    && Inspector::normalize(' Info ') === 'info'
+    && Inspector::normalize(' Info ') === 'Info'
     && Inspector::normalize(null) === null);
 
 $inspYaml = <<<YAML
@@ -378,6 +378,117 @@ $fixedKeys = [
 ];
 [$w6, , ] = Config::selectManagedKeys($fixedKeys, ['mihomo.tun.device', 'mihomo.tun.stack'], []);
 check('写死项始终写入', count($w6) === 2, (string)count($w6));
+
+echo "\n=== 16. B5 scalar fidelity (synthetic values only) ===\n";
+check('case-only string changes differ', !Config::valuesEqual('FixtureToken', 'fixturetoken'));
+check('literal quotes and whitespace are significant', !Config::valuesEqual('"Fixture"', 'Fixture')
+    && !Config::valuesEqual(' Fixture ', 'Fixture'));
+check('boolean targets retain equivalent spellings', Config::valuesEqual('TRUE', true)
+    && Config::valuesEqual('OFF', false) && Config::valuesEqual('1', true)
+    && Config::valuesEqual(false, false));
+check('string targets remain case-sensitive even for boolean words', !Config::valuesEqual('ON', 'on'));
+
+/* Each raw scalar is read, patched unchanged, then replaced. Check the entire
+ * document so false comments, lost comments and unrelated rewrites all fail. */
+$scalarCases = [
+    'double quotes and escaped quote' => [
+        '"Fixture \"Quoted\" #inside"', 'Fixture "Quoted" #inside', " \t# keep-double",
+    ],
+    'single quotes and doubled apostrophe' => [
+        "'Fixture''s #inside'", "Fixture's #inside", "\t# keep-single",
+    ],
+    'escaped backslash before closing quote' => [
+        '"Fixture \\\\"', 'Fixture \\', '  # keep-slash',
+    ],
+    'backslashes before escaped quote' => [
+        '"Fixture \\\\\" #inside"', 'Fixture \\" #inside', ' # keep-escaped',
+    ],
+    'literal backslash in single quotes' => [
+        "'Fixture\\n #inside'", 'Fixture\n #inside', ' # keep-literal',
+    ],
+    'quoted spaces' => ['" Fixture "', ' Fixture ', ' # keep-spaces'],
+    'quoted literal quotes' => ['"\"Fixture\""', '"Fixture"', ' # keep-quotes'],
+    'quoted Unicode' => ['" 喵 "', ' 喵 ', ' # keep-unicode'],
+    'empty quoted scalar' => ["''", '', ' # keep-empty'],
+    'plain hash' => ['Fixture#fragment', 'Fixture#fragment', ' # keep-fragment'],
+    'plain apostrophe' => ["Fixture's", "Fixture's", "\t# keep-plain"],
+    'comment order with mixed spacing' => ['Fixture', 'Fixture', "\t# first # second"],
+    'hash without a comment' => ['"Fixture #inside"', 'Fixture #inside', ''],
+    'YAML escape sequences' => [
+        '"Fixture\tLine\nNext\rEnd\x21\u4e2d\U0001f642"',
+        "Fixture\tLine\nNext\rEnd!中🙂", ' # keep-escapes',
+    ],
+    'YAML named escapes' => [
+        '"Fixture\0\a\b\v\f\e\/\ \N\_\L\P"',
+        "Fixture\0\x07\x08\x0b\x0c\x1b/ \xc2\x85\xc2\xa0\xe2\x80\xa8\xe2\x80\xa9",
+        ' # keep-named',
+    ],
+];
+foreach (["\n", "\r\n"] as $eol) {
+    foreach ($scalarCases as $label => [$rawScalar, $decoded, $comment]) {
+        $prefix = '# untouched header' . $eol;
+        $suffix = $eol . "tun: # keep-parent" . $eol . "  device: 'TunFixture' # keep-device"
+            . $eol . "rules:" . $eol . "  - MATCH,DIRECT" . $eol;
+        $yaml = $prefix . 'secret: ' . $rawScalar . $comment . $suffix;
+        $scanScalar = Config::scanText($yaml);
+        check("scalar read: {$label}", ($scanScalar['secret'] ?? null) === $decoded);
+        check("Inspector raw scalar: {$label}", Inspector::yamlValue($yaml, 'secret') === $rawScalar);
+        check("Inspector decoded scalar: {$label}", Inspector::normalize($rawScalar) === $decoded);
+        check("scalar no-op bytes: {$label}", Config::patchKeys($yaml, ['secret' => $decoded]) === $yaml);
+        $changed = Config::patchKeys($yaml, ['secret' => 'ReplacementFixture']);
+        check("scalar replacement bytes: {$label}", $changed === $prefix . 'secret: ReplacementFixture' . $comment . $suffix);
+        check("scalar replacement idempotent: {$label}", Config::patchKeys($changed, ['secret' => 'ReplacementFixture']) === $changed);
+    }
+}
+
+$caseYaml = "secret: FixtureToken # keep\nexternal-ui: /Fixture/UI\nexternal-ui-url: https://example.invalid/Fixture.zip\ntun: # keep-parent\n  device: TunFixture # keep-device\n";
+$caseWanted = [
+    'secret' => 'fixturetoken',
+    'external-ui' => '/fixture/ui',
+    'external-ui-url' => 'https://example.invalid/fixture.zip',
+    'tun.device' => 'tunfixture',
+];
+$casePatched = Config::patchKeys($caseYaml, $caseWanted);
+check('case-only patches change strings and retain surrounding bytes', $casePatched ===
+    "secret: fixturetoken # keep\nexternal-ui: /fixture/ui\nexternal-ui-url: https://example.invalid/fixture.zip\ntun: # keep-parent\n  device: tunfixture # keep-device\n");
+foreach ($caseWanted as $key => $value) {
+    check("case-sensitive read after patch: {$key}", (Config::scanText($casePatched)[$key] ?? null) === $value);
+}
+check('case-only patch idempotent', Config::patchKeys($casePatched, $caseWanted) === $casePatched);
+[$caseWrites, , $caseSkipped] = Config::selectManagedKeys([
+    'secret' => ['value' => 'fixturetoken', 'fields' => ['fixture.secret'], 'label' => 'Fixture secret'],
+], [], Config::scanText($caseYaml));
+check('unmanaged case difference is reported', $caseWrites === [] && $caseSkipped === ['Fixture secret']);
+
+$renderCases = [
+    'Fixture #comment', "Fixture\t#comment", 'Fixture#fragment', '"Fixture"',
+    "Fixture's #inside", ' Fixture ', '', "Fixture\nLine\tTab\rEnd\0",
+    'Fixture \\ "Quoted" #inside', 'Fixture \n #literal',
+];
+foreach ($renderCases as $index => $value) {
+    $renderedYaml = "secret: " . Config::renderValue($value) . " # keep-render\n";
+    check("patch renders scalar {$index}", Config::patchKeys("secret: OldFixture # keep-render\n", ['secret' => $value]) === $renderedYaml);
+    check("render/read scalar round trip {$index}", (Config::scanText($renderedYaml)['secret'] ?? null) === $value);
+    check("render/patch scalar no-op {$index}", Config::patchKeys($renderedYaml, ['secret' => $value]) === $renderedYaml);
+    check("render stays on one line {$index}", substr_count($renderedYaml, "\n") === 1);
+}
+
+foreach ([
+    ['TunFixture', 'tunfixture', Inspector::STATE_DIFFERS],
+    ['ON', 'on', Inspector::STATE_DIFFERS],
+    ['"Fixture"', 'Fixture', Inspector::STATE_DIFFERS],
+    [' Fixture ', 'Fixture', Inspector::STATE_DIFFERS],
+    ['Fixture "Q" #inside', 'Fixture "Q" #inside', Inspector::STATE_MATCH],
+    ["Fixture's #inside", "Fixture's #inside", Inspector::STATE_MATCH],
+] as $index => [$fileDevice, $modelDevice, $expectedState]) {
+    $deviceYaml = "tun:\n  device: " . Config::renderValue($fileDevice) . " # keep\n";
+    $deviceRows = Inspector::compare($deviceYaml, ['tun.device' => $modelDevice], null);
+    $deviceRow = array_values(array_filter($deviceRows, fn ($row) => $row['key'] === 'tun.device'))[0];
+    check("Inspector string comparison {$index}", $deviceRow['state'] === $expectedState);
+}
+$booleanRows = Inspector::compare("allow-lan: TRUE\n", ['allow-lan' => '1'], null);
+$booleanRow = array_values(array_filter($booleanRows, fn ($row) => $row['key'] === 'allow-lan'))[0];
+check('Inspector boolean comparison still normalizes spellings', $booleanRow['state'] === Inspector::STATE_MATCH);
 
 echo "\n=== 汇总: {$failures} 个失败 ===\n";
 exit($failures === 0 ? 0 : 1);
