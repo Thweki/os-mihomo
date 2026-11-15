@@ -212,3 +212,15 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// B7: render the real routing state labels, including disabled and unreadable PF.
+const routingView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt'), 'utf8');
+const stateRenderer = routingView.match(/function stateText\(row\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{\s*lang\._\('([^']+)'\)\s*\|\s*json_encode\s*\}\}/g, (_, value) => JSON.stringify(value));
+const renderState = vm.runInNewContext('(' + stateRenderer + ')');
+for (const [state, label] of Object.entries({active: 'PF rule observed', pending: 'Not confirmed',
+    disabled: 'Disabled', unknown: 'Unavailable', inactive: 'TUN off', manual: 'Manual'})) {
+    assert.equal(renderState({state}), label, 'Binding state must not imply verified traffic: ' + state);
+}
+console.log('B7 routing labels distinguish observed PF, pending, unavailable and disabled bindings: passed');

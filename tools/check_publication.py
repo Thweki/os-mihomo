@@ -14,7 +14,10 @@ FILES = {'.gitattributes', '.gitignore', '.github/workflows/ci.yml', '.github/de
          'tools/extract_strings.py', 'tools/mo_editor.py', 'tools/validate.py',
          'tools/check_publication.py', 'tools/reproducible_archive.py',
          'tools/build_provenance.py', 'tests/test_writes.php', 'tests/test_build.py',
-         'tests/test_repository.sh', 'tests/test_api.php'}
+         'tests/test_repository.sh', 'tests/test_api.php', 'tests/test_routing_status.php',
+         'docs/audit-b7.md', 'tests/fixtures/routing/fresh.xml',
+         'tests/fixtures/routing/native.xml', 'tests/fixtures/routing/legacy.xml',
+         'tests/fixtures/routing/native.pf', 'tests/fixtures/routing/legacy.pf'}
 ROOTS = ('src/', 'locales/', 'packaging/freebsd/')
 
 # These exact images were visually reviewed after local privacy blurring.

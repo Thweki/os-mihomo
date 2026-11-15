@@ -16,6 +16,7 @@ images/
 # Keep public documentation separate from local reports and screenshots
 /docs/*
 !/docs/ci-cd.md
+!/docs/audit-b7.md
 
 # Only reviewed, sanitized README images may be published.
 !/docs/assets/
@@ -42,6 +43,16 @@ images/
 !/tests/test_patch.php
 !/tests/test_ui.js
 !/tests/test_runtime.php
+!/tests/test_routing_status.php
+!/tests/fixtures/
+/tests/fixtures/*
+!/tests/fixtures/routing/
+/tests/fixtures/routing/*
+!/tests/fixtures/routing/fresh.xml
+!/tests/fixtures/routing/native.xml
+!/tests/fixtures/routing/legacy.xml
+!/tests/fixtures/routing/native.pf
+!/tests/fixtures/routing/legacy.pf
 !/tests/test_writes.php
 !/tests/test_api.php
 !/tests/test_build.py

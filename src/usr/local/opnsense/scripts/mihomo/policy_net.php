@@ -34,6 +34,8 @@
  * All rights reserved. 详见 models/OPNsense/Mihomo/Config.php 头部 BSD 许可条款。
  */
 
+require_once '/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/RoutingStatus.php';
+
 $CONFIG_FILE = '/conf/config.xml';
 $BACKUP_GLOB = '/conf/config.xml.mihomo-bak.*';
 $GATEWAY_NAME = 'MIHOMO_TUN';
@@ -158,21 +160,9 @@ function current_state(): array
     $interfaceName = interface_name_for_device($raw, $device);
     $gateway = detect_gateway($device);
 
-    /* 已有哪些接口有我们的策略路由规则 */
-    $rules = [];
-    if (preg_match_all('@<rule\b[^>]*>.*?</rule>@s', $raw, $m)) {
-        foreach ($m[0] as $block) {
-            if (!str_contains($block, $RULE_MARKER)) {
-                continue;
-            }
-            preg_match('@<interface>([^<]+)</interface>@', $block, $mm);
-            preg_match('@<gateway>([^<]+)</gateway>@', $block, $gg);
-            $rules[] = [
-                'interface' => $mm[1] ?? '?',
-                'gateway' => $gg[1] ?? '?',
-            ];
-        }
-    }
+    /* Read both native floating rules and pre-migration inline rules. */
+    $cfg = simplexml_load_string($raw, \SimpleXMLElement::class, LIBXML_NONET);
+    $rules = $cfg === false ? [] : \OPNsense\Mihomo\RoutingStatus::configuredRules($cfg);
 
     $backups = glob($GLOBALS['BACKUP_GLOB']) ?: [];
     sort($backups);

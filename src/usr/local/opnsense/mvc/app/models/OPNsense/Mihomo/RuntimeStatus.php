@@ -14,7 +14,7 @@ class RuntimeStatus
                 || $next[1] !== $tun) {
                 continue;
             }
-            preg_match('/\bon\s+([A-Za-z0-9_.:-]+)/', $line, $iface);
+            preg_match('/\bon\s+(!\s*)?(\{[^}]+\}|[A-Za-z0-9_.:-]+)/', $line, $iface);
             preg_match('/\bproto\s+(\{[^}]+\}|[^\s]+)/', $line, $proto);
             $protocols = preg_split('/[\s,{}]+/', $proto[1] ?? 'any', -1, PREG_SPLIT_NO_EMPTY);
             $protocols = array_map(fn ($p) => ['6' => 'tcp', '17' => 'udp'][$p] ?? strtolower($p), $protocols);
@@ -23,7 +23,8 @@ class RuntimeStatus
             $destination = trim($scope[2] ?? '');
             preg_match('/\bport\s+(.+)$/', $destination, $ports);
             $rows[] = [
-                'device' => $iface[1] ?? '',
+                'device' => isset($iface[2]) ? trim(($iface[1] ?? '') . $iface[2]) : '',
+                'unrestricted' => !preg_match('/\b(?:tagged|user|group|os|probability|received-on)\b/', preg_split('/\s+label\b/', $line, 2)[0]),
                 'family' => preg_match('/\binet6\b/', $line) ? 'IPv6' : (preg_match('/\binet\b/', $line) ? 'IPv4' : 'IPv4/IPv6'),
                 'direction' => preg_match('/\bpass\s+out\b/', $line) ? 'out' : (preg_match('/\bpass\s+in\b/', $line) ? 'in' : 'any'),
                 'protocols' => array_values($protocols),
