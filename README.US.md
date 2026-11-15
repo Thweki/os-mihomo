@@ -23,6 +23,8 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+The overview **Mode** selector includes a short explanation of the displayed choice: rule-based routing follows matching rules, global mode uses the GLOBAL group selection (which may itself be DIRECT), and direct mode connects without a proxy. The hint updates when you select a mode or the overview refreshes its mode value. It explains the choice, not whether a requested switch succeeded; failures still appear in the action status. These modes affect traffic handled by Mihomo, not every connection through the firewall.
+
 Each **Proxy Groups** card shows **Members: N**, the number of direct entries reported by the controller, including nested groups and DIRECT/REJECT choices. Empty groups show zero. Counts refresh with the group list, making changes after subscription updates easy to spot; they do not indicate how many proxies are healthy.
 
 Use **Test all groups** in **Proxy Groups** to manually test every member in the displayed group cards, including collapsed groups. Shared names are tested once per run, with at most three requests in flight. The progress line shows completed tests and failures; results refresh when the batch finishes. Node, group and all-group test controls stay disabled during the batch. The action is unavailable until groups load successfully or when there are no members. It does not select proxies, change settings or schedule automatic tests.
