@@ -23,6 +23,8 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+**Experimental automatic latency tests (default OFF):** Under **Proxy Groups**, enable **Automatically test latency on overview load (experimental)**. This starts one sweep when groups are available and repeats once on each overview visit while enabled. The opt-in is stored in this tab's session storage; if storage is blocked, it applies only to the current page. Each distinct concrete proxy shown in the groups is tested once, with at most three requests in flight; nested groups and built-in actions such as DIRECT/REJECT are excluded. Probes use the existing latency-test endpoint and require the operate privilege. Progress and failures appear above the groups; polling does not repeat or retry the sweep. Disable the checkbox to opt out. Disabling, hiding or leaving the page stops queued tests while active requests finish; reload to run a stopped sweep again. No service, routing or YAML settings are changed.
+
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)

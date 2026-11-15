@@ -1765,3 +1765,15 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "…"
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatically test latency on overview load (experimental)"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Off by default. Remembered for this tab. Tests each proxy once per visit, up to three at a time. Sends probe traffic; disabling or hiding the page stops queued tests. In-flight tests finish."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatic tests stopped; reload to run again."
+msgstr ""

@@ -1349,3 +1349,15 @@ msgstr "订阅更新任务已提交"
 
 msgid "Settings partly applied"
 msgstr "设置部分应用，仍需处理失败步骤"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatically test latency on overview load (experimental)"
+msgstr "加载概览时自动测试延迟（实验性）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Off by default. Remembered for this tab. Tests each proxy once per visit, up to three at a time. Sends probe traffic; disabling or hiding the page stops queued tests. In-flight tests finish."
+msgstr "默认关闭，选择保存在当前标签页中。每次访问时对每个代理测试一次，最多同时测试三个。会发送探测流量；关闭选项或隐藏页面会停止排队的测试，已发送的测试继续完成。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Automatic tests stopped; reload to run again."
+msgstr "自动测试已停止；重新加载页面可再次运行。"

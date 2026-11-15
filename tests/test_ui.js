@@ -212,3 +212,139 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// Run the overview's real proxy controls, request callbacks and lifecycle handlers.
+// Fake transport keeps probes pending so cancellation and concurrency are observable.
+const proxyScript = indexView.match(/        function renderGroups[\s\S]*?(?=        \/\* ---)/)[0];
+const lifecycleScript = indexView.slice(indexView.indexOf('        const overviewPoller ='), indexView.lastIndexOf('    });'));
+function autoTestPage(saved, storageBlocked = false) {
+    const elements = new Map(), reads = [], probes = [], events = {}, storage = new Map();
+    if (saved !== undefined) { storage.set('mihomo.autoTest.v1', saved); }
+    const pageDocument = {hidden: false, addEventListener: (name, fn) => { events[name] = fn; }, createTextNode: text => text};
+    function element(selector) {
+        if (!elements.has(selector)) {
+            elements.set(selector, {
+                checked: false, disabled: false, label: '', handlers: {},
+                prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+                on(event, selectorOrFn, fn) { this.handlers[fn ? event + ':' + selectorOrFn : event] = fn || selectorOrFn; return this; },
+                text(value) { this.label = value; return this; }, append(text) { this.label += text; return this; },
+                attr(key) { return this[key]; }
+            });
+        }
+        return elements.get(selector);
+    }
+    const context = vm.createContext({
+        MihomoUI: UI, document: pageDocument, window: {addEventListener: (name, fn) => { events[name] = fn; }},
+        $: selector => typeof selector === 'string' ? element(selector) : selector,
+        sessionStorage: {
+            getItem(key) { if (storageBlocked) { throw new Error('blocked'); } return storage.get(key); },
+            setItem(key, value) { if (storageBlocked) { throw new Error('blocked'); } storage.set(key, value); }
+        },
+        ajaxGet: (url, data, done) => reads.push({url, data, done}),
+        ajaxCall: (url, data, done) => probes.push({url, data, done}),
+        loadOverview: done => done(true), loadServiceState: done => done(true),
+        trafficHistory: {add: () => {}}, lastMetadata: 0
+    });
+    // The production Poller defaults live in its module scope; inject fake timers
+    // and visibility while retaining the actual non-overlapping poll behavior.
+    context.MihomoUI = {...UI, Poller: class extends UI.Poller {
+        constructor(request, interval) { super(request, interval, {
+            hidden: () => pageDocument.hidden, schedule: () => 1, cancel: () => {}
+        }); }
+    }};
+    const source = (proxyScript + '\nrenderGroups = () => {};\n' + lifecycleScript)
+        .replace(/\{\{[\s\S]*?\}\}/g, match => JSON.stringify(match.match(/lang\._\('([^']*)'\)/)[1]));
+    vm.runInContext(source, context);
+    return {
+        reads, probes, storage, element,
+        refresh() { vm.runInContext('groupsPoller.refresh();', context); },
+        reply(data, status = 'success') { assert(reads.length); reads.shift().done(data, status); },
+        toggle(enabled) { const input = element('#auto-test-latency'); input.checked = enabled; input.handlers.change.call(input); },
+        visibility(hidden) { pageDocument.hidden = hidden; events.visibilitychange(); },
+        leave() { events.pagehide(); },
+        manual(name) { element('#proxy-groups').handlers['click:.cmd-test'].call({attr: () => name}); }
+    };
+}
+const autoGroups = [
+    {name: 'outer', members: [
+        {name: 'nested', type: 'Selector'}, {name: 'DIRECT', type: 'Direct'},
+        {name: 'REJECT', type: 'Reject'}, {name: 'drop', type: 'RejectDrop'},
+        {name: 'PASS', type: 'Pass'}, {name: 'unknown', type: ''},
+        {name: 'dns', type: 'Dns'}, {name: 'empty group', type: 'URLTest'},
+        {name: 'fallback', type: 'Fallback'}, {name: 'balance', type: 'LoadBalance'},
+        {name: 'relay', type: 'Relay'}, {name: 'compat', type: 'Compatible'},
+        {name: 'a&amp;&lt;b&gt;', type: 'Shadowsocks'}]},
+    {name: 'nested', members: [{name: 'a&amp;&lt;b&gt;', type: 'Shadowsocks'},
+        ...Array.from({length: 7}, (_, i) => ({name: 'node' + i, type: 'Vmess'}))]}
+];
+const readyGroups = {ready: true, groups: autoGroups};
+assert.deepEqual(UI.automaticTestNames(autoGroups), ['a&<b>', ...Array.from({length: 7}, (_, i) => 'node' + i)]);
+assert.deepEqual(UI.automaticTestNames([{name: 'g', members: []}]), []);
+assert(!/checked/.test(indexView.match(/<input[^>]*id="auto-test-latency"[^>]*>/)[0]), 'HTML also defaults off');
+for (const saved of [undefined, '0', 'true', 'garbage']) {
+    const page = autoTestPage(saved);
+    assert.equal(page.element('#auto-test-latency').checked, false);
+    page.reply(readyGroups); page.refresh(); page.reply(readyGroups);
+    assert.equal(page.probes.length, 0, 'No opt-in means no automatic probes');
+    page.manual('node0');
+    assert.equal(page.probes.length, 1, 'Manual tests still work with the experiment off');
+}
+const blockedPage = autoTestPage('1', true);
+blockedPage.reply(readyGroups);
+assert.equal(blockedPage.probes.length, 0, 'Storage failures default off');
+blockedPage.toggle(true); blockedPage.reply(readyGroups);
+assert.equal(blockedPage.probes.length, 3, 'Explicit opt-in still works without storage');
+
+const autoPage = autoTestPage('1');
+assert.equal(autoPage.element('#auto-test-latency').checked, true);
+autoPage.reply(null, 'error');
+autoPage.refresh(); autoPage.reply({ready: false, groups: autoGroups});
+autoPage.refresh(); autoPage.reply({ready: true, groups: []});
+assert.equal(autoPage.probes.length, 0, 'Failed, unreachable and empty reads do not consume the one run');
+autoPage.refresh(); autoPage.reply(readyGroups);
+assert.equal(autoPage.probes.length, 3);
+autoPage.manual('extra'); autoPage.refresh();
+assert.equal(autoPage.probes.length, 3, 'Manual actions and polls cannot overlap the sweep');
+assert.equal(autoPage.reads.length, 0);
+for (let i = 0; i < 8; i++) {
+    assert.equal(autoPage.probes.length, Math.min(i + 3, 8), 'At most three requests are in flight');
+    assert.equal(autoPage.probes[i].url, '/api/mihomo/dashboard/test_delay');
+    autoPage.probes[i].done(i === 0 ? null : {status: 'ok'}, i === 0 ? 'error' : 'success');
+}
+assert.equal(new Set(autoPage.probes.map(probe => probe.data.name)).size, 8);
+assert.match(autoPage.element('#proxy-test-state').label, /8\/8.*Failed: 1/);
+autoPage.reply(readyGroups); autoPage.refresh(); autoPage.reply(readyGroups);
+autoPage.toggle(false); autoPage.toggle(true);
+assert.equal(autoPage.probes.length, 8, 'Completion refresh, polling and toggling cannot repeat the sweep');
+assert.equal(autoPage.reads.length, 0);
+
+for (const stop of ['disable', 'hide', 'leave']) {
+    const page = autoTestPage();
+    page.toggle(true); // While the initial read is still pending.
+    assert.equal(page.storage.get('mihomo.autoTest.v1'), '1');
+    page.reply(readyGroups);
+    assert.equal(page.probes.length, 3);
+    if (stop === 'disable') { page.toggle(false); assert.equal(page.storage.get('mihomo.autoTest.v1'), '0'); }
+    if (stop === 'hide') { page.visibility(true); page.visibility(false); }
+    if (stop === 'leave') { page.leave(); }
+    page.probes.forEach(probe => probe.done({status: 'ok'}, 'success'));
+    assert.equal(page.probes.length, 3, 'Stop discards queued probes: ' + stop);
+    assert.match(page.element('#proxy-test-state').label, /3\/8.*Automatic tests stopped/);
+    assert.equal(page.element('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').disabled, false);
+    while (page.reads.length) { page.reply(readyGroups); }
+    assert.equal(page.probes.length, 3);
+}
+const hiddenPage = autoTestPage('1');
+hiddenPage.visibility(true); hiddenPage.reply(readyGroups);
+assert.equal(hiddenPage.probes.length, 0, 'A response arriving in a hidden tab must not start probes');
+hiddenPage.visibility(false); hiddenPage.reply(readyGroups);
+assert.equal(hiddenPage.probes.length, 3, 'First visible successful read starts the sweep');
+const disabledBeforeRead = autoTestPage('1');
+disabledBeforeRead.toggle(false); disabledBeforeRead.reply(readyGroups);
+assert.equal(disabledBeforeRead.probes.length, 0, 'Check the current opt-in when the read completes');
+disabledBeforeRead.toggle(true); disabledBeforeRead.reply(readyGroups);
+assert.equal(disabledBeforeRead.probes.length, 3, 'Disabling before any probes does not consume the one run');
+const leftBeforeRead = autoTestPage('1');
+leftBeforeRead.leave(); leftBeforeRead.reply(readyGroups);
+assert.equal(leftBeforeRead.probes.length, 0, 'Late responses after navigation cannot start probes');
+console.log('Experimental automatic latency: default-off, storage, opt-in, deduplication, bounded concurrency, one run, recovery and cancellation passed');
