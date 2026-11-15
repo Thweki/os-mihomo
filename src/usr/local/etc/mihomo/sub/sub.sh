@@ -168,12 +168,12 @@ fi
 
 # 只提取 proxies 顶层段，避免订阅里的 proxy-groups/rules 覆盖模板策略。
 awk '
-  /^[[:space:]]*proxies[[:space:]]*:/ {
+  /^proxies[[:space:]]*:/ {
       in_proxies = 1
       print
       next
   }
-  in_proxies && /^[^[:space:]][^:]*[[:space:]]*:/ {
+  in_proxies && /^[^[:space:]#-][^:]*[[:space:]]*:/ {
       exit
   }
   in_proxies {
@@ -189,7 +189,7 @@ fi
 NODE_COUNT=$(awk '
   BEGIN { count = 0 }
   /^[[:space:]]*proxies[[:space:]]*:/ { in_proxies = 1; next }
-  in_proxies && /^[^[:space:]]/ { in_proxies = 0 }
+  in_proxies && /^[^[:space:]#-]/ { in_proxies = 0 }
   in_proxies && /^[[:space:]]*-[[:space:]]/ { count++ }
   END { print count }
 ' "$TMP_PROXIES" | tr -d ' ')
@@ -221,20 +221,58 @@ awk '
           print "      - \"" s "\""
       }
   }
-  /^[[:space:]]*-[[:space:]]*\{/ {
-      line = $0
-      sub(/^[[:space:]]*-[[:space:]]*\{[[:space:]]*name:[[:space:]]*/, "", line)
-      sub(/[[:space:]]*,[[:space:]]*server:.*/, "", line)
-      emit(line)
-      next
+  # Split one-line flow maps only at unquoted, top-level commas. Field order
+  # and nested maps/lists must not affect which value belongs to name.
+  function flow_name(s, i, c, quote, depth, field) {
+      for (i = 1; i <= length(s); i++) {
+          c = substr(s, i, 1)
+          if (quote != "") {
+              field = field c
+              if (quote == "\"" && c == "\\") {
+                  field = field substr(s, ++i, 1)
+              } else if (c == quote) {
+                  if (quote == "\047" && substr(s, i + 1, 1) == quote)
+                      field = field substr(s, ++i, 1)
+                  else
+                      quote = ""
+              }
+          } else if ((c == "\"" || c == "\047") &&
+                     field ~ /(^|:|,|\[|\{)[[:space:]]*$/) {
+              quote = c
+              field = field c
+          } else if (depth == 0 && (c == "," || c == "}")) {
+              if (field ~ /^[[:space:]]*name[[:space:]]*:/) {
+                  sub(/^[[:space:]]*name[[:space:]]*:[[:space:]]*/, "", field)
+                  emit(field)
+                  return
+              }
+              field = ""
+          } else {
+              if (c == "{" || c == "[") depth++
+              if (c == "}" || c == "]") depth--
+              field = field c
+          }
+      }
   }
-  /^[[:space:]]*-[[:space:]]*name[[:space:]]*:/ {
-      line = $0
-      sub(/^[[:space:]]*-[[:space:]]*name[[:space:]]*:[[:space:]]*/, "", line)
-      emit(line)
+  /^[[:space:]]*-[[:space:]]/ {
+      match($0, /^[[:space:]]*/)
+      indent = RLENGTH
+      if (!have_item) { item_indent = indent; have_item = 1 }
+      if (indent != item_indent) next
+      match($0, /^[[:space:]]*-[[:space:]]*/)
+      property_indent = RLENGTH
+      line = substr($0, property_indent + 1)
+      if (line ~ /^\{/) {
+          flow_name(substr(line, 2))
+      } else if (line ~ /^name[[:space:]]*:/) {
+          sub(/^name[[:space:]]*:[[:space:]]*/, "", line)
+          emit(line)
+      }
       next
   }
   /^[[:space:]]*name[[:space:]]*:/ {
+      match($0, /^[[:space:]]*/)
+      if (!have_item || RLENGTH != property_indent) next
       line = $0
       sub(/^[[:space:]]*name[[:space:]]*:[[:space:]]*/, "", line)
       emit(line)
