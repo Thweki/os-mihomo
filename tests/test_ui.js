@@ -396,7 +396,7 @@ function dashboardFixture() {
         ajaxGet: (url, data, done) => reads.push({url, data, done}),
         loadGroups: done => done(true), loadServiceState: done => done(true)
     });
-    vm.runInContext('let lastMetadata = 0;\n' + translate(overviewRenderScript) + overviewFunction
+    vm.runInContext('let lastMetadata = 0;\nfunction renderModeHint() {}\n' + translate(overviewRenderScript) + overviewFunction
         + translate(dashboardPollingScript), context);
     return {timers, reads, instances, traffic, element,
         click: () => element('#overview-pause').handler.call(element('#overview-pause')),
