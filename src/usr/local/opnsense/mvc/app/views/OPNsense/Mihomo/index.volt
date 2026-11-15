@@ -171,9 +171,11 @@
         /* ------------------------------------------------------------------ *
          * 代理分组
          * ------------------------------------------------------------------ */
+        let renderedGroups = null;
         function renderGroups(data) {
             const $box = $('#proxy-groups');
             if (!data['ready']) {
+                renderedGroups = null;
                 $box.html('<div class="text-muted" style="padding: 12px;">'
                     + ('<i class="fa fa-plug fa-fw"></i> ' + {{ lang._('The controller is not reachable. Start the service to see proxy groups.') | json_encode }})
                     + '</div>');
@@ -181,14 +183,19 @@
             }
             const groups = data['groups'] || [];
             if (groups.length === 0) {
+                renderedGroups = null;
                 $box.html(('<div class="text-muted" style="padding: 12px;">' + {{ lang._('No proxy groups are defined in the configuration.') | json_encode }} + '</div>'));
                 return;
             }
 
+            // Polls return fresh objects; retain the DOM while their data is unchanged.
+            const snapshot = JSON.stringify(groups);
+            if (snapshot === renderedGroups) { return; }
             MihomoUI.renderProxyGroups($box[0], groups, {
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }}
             }, delayText, delayClass);
+            renderedGroups = snapshot;
         }
 
         let testing = false;
