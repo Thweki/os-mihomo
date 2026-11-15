@@ -341,6 +341,55 @@ console.log('Recent settings applies: bounded history, captured labels, outcomes
 // Exercise the real overview request function, including its metadata cadence.
 const indexView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt'), 'utf8');
+// Run the actual connection-grid setup and change handler. The grid owns text
+// search and paging; we must retain its request fields when adding the scope.
+const connectionScript = indexView.match(/        \$\("#grid-connections"\)\.UIBootgrid\([\s\S]*?(?=        function closeConnections)/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+let connectionConfig, scopeChange, connectionScope = 'all', connectionReloads = 0;
+const connectionGrid = {
+    UIBootgrid(config) { connectionConfig = config; return this; },
+    on() { return this; },
+    bootgrid(command) { assert.equal(command, 'reload'); connectionReloads++; }
+};
+const processDoc = {createElement(tag) {
+    const node = new DomNode(this, tag);
+    // Inspect the DOM before serialization; DomNode rejects innerHTML writes.
+    Object.defineProperty(node, 'outerHTML', {get: () => JSON.stringify({tag, attrs: node.attrs, text: node.textContent})});
+    return node;
+}};
+vm.runInNewContext(connectionScript, {
+    $: selector => {
+        if (selector === '#grid-connections') { return connectionGrid; }
+        assert.equal(selector, '#connection-search-scope');
+        return {val: () => connectionScope, change: handler => { scopeChange = handler; }};
+    },
+    MihomoUI: UI, document: processDoc
+});
+assert.equal(connectionConfig.search, '/api/mihomo/dashboard/connections');
+assert(indexView.includes('<label for="connection-search-scope">'), 'Scope selector has a native accessible label');
+assert(indexView.includes('<option value="all" selected>'), 'Default scope preserves broad search');
+assert(indexView.includes('data-column-id="process" data-type="string" data-formatter="processformatter"'));
+const searchText = '<literal>& 中文 2001:db8::1';
+for (const scope of ['all', 'address', 'host', 'process']) {
+    connectionScope = scope;
+    const before = connectionReloads;
+    scopeChange();
+    assert.equal(connectionReloads, before + 1, 'Changing scope refreshes the current search');
+    const request = {current: 2, rowCount: 10, sort: {start: 'desc'}, searchPhrase: searchText};
+    assert.equal(connectionConfig.options.requestHandler(request), request);
+    assert.deepEqual(request, {current: 2, rowCount: 10, sort: {start: 'desc'}, searchPhrase: searchText, connectionScope: scope},
+        'Scope augments requests without losing search, pagination or sorting');
+}
+for (const [row, expected, path] of [
+    [{process: 'Browser &lt;&amp;&gt;', processPath: '/opt/应用/&lt;path&gt;'}, 'Browser <&>', '/opt/应用/<path>'],
+    [{processPath: '/opt/path-only'}, '/opt/path-only', '/opt/path-only'],
+    [{}, '—', ''],
+    [{process: 'literal &amp;gt;'}, 'literal &gt;', '']
+]) {
+    const rendered = JSON.parse(connectionConfig.options.formatters.processformatter({}, row));
+    assert.deepEqual(rendered, {tag: 'span', attrs: {title: path}, text: expected}, 'Process names and paths use text nodes with one decode');
+}
+console.log('Connection search scope requests, controls and safe process rendering: all checks passed');
 const overviewFunction = indexView.match(/        function loadOverview\(done\) \{[\s\S]*?\n        \}/)[0];
 const overviewRequests = [];
 let now = 100000;

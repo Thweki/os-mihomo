@@ -83,6 +83,74 @@ namespace {
         public function getQuery($name, $filter = null, $default = null) { return $default; }
         public function getJsonRawBody() { return []; }
     }
+    // Exercise the real connection decoder and endpoint; spy only on the
+    // framework search boundary (OPNsense owns matching, sorting and paging).
+    class ConnectionSearchRequest extends Request {
+        public function __construct(private array $params) {}
+        public function getPost($name, $filter = null, $default = null) { return $this->params[$name] ?? $default; }
+    }
+    class ConnectionSearchController extends \OPNsense\Mihomo\Api\DashboardController {
+        public array $searchInput = [];
+        protected function searchRecordsetBase($records, $fields = null, $defaultSort = null) {
+            $this->searchInput = [$records, $fields, $defaultSort];
+            // A sentinel page proves the endpoint preserves the framework result.
+            return ['rows' => [$records[1] ?? []], 'total' => 2, 'current' => 2, 'rowCount' => 1];
+        }
+    }
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    $connections = [
+        ['id' => 'first', 'metadata' => ['host' => 'Example.test', 'sniffHost' => 'sniffed.test',
+            'sourceIP' => '2001:db8::1', 'sourcePort' => '50000',
+            'destinationIP' => '198.51.100.10', 'destinationPort' => '443',
+            'process' => 'Browser <&>', 'processPath' => '/opt/应用/Browser <&>'],
+            'chains' => ['DIRECT'], 'start' => '2026-01-01T00:00:01Z'],
+        ['id' => 'second', 'metadata' => ['processPath' => '/opt/path-only'], 'chains' => []],
+        ['id' => 'third', 'metadata' => [], 'chains' => []],
+    ];
+    try {
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode([
+            'connections' => $connections, 'downloadTotal' => 1234, 'uploadTotal' => 567, 'memory' => 890,
+        ]);
+        $allFields = ['host', 'sniffHost', 'source', 'destination', 'process', 'processPath',
+            'network', 'type', 'rule', 'rulePayload', 'chain', 'outbound'];
+        foreach ([
+            [[], $allFields],
+            [['connectionScope' => 'all'], $allFields],
+            [['connectionScope' => 'address'], ['source', 'destination']],
+            [['connectionScope' => 'host'], ['host', 'sniffHost']],
+            [['connectionScope' => 'process'], ['process', 'processPath']],
+            [['connectionScope' => 'unknown'], $allFields],
+            [['connectionScope' => ['process']], $allFields],
+        ] as [$params, $fields]) {
+            $search = new ConnectionSearchController();
+            $search->request = new ConnectionSearchRequest($params);
+            $page = $search->connectionsAction();
+            [$records, $actualFields, $sort] = $search->searchInput;
+            expect($actualFields === $fields, 'Only allowlisted scope fields reach framework search');
+            expect(count($records) === 3 && $sort === 'start', 'Search receives all connections before framework pagination');
+            expect($records[0]['process'] === 'Browser <&>' && $records[0]['processPath'] === '/opt/应用/Browser <&>',
+                'Process metadata retains literal text and UTF-8 for server-side matching');
+            expect($records[0]['host'] === 'Example.test' && $records[0]['sniffHost'] === 'sniffed.test',
+                'Both original and sniffed hosts are searchable');
+            expect($records[0]['source'] === '2001:db8::1:50000' && $records[0]['destination'] === '198.51.100.10:443',
+                'Address search includes IPv6, destination and ports');
+            expect($records[1]['process'] === '' && $records[1]['processPath'] === '/opt/path-only', 'Path-only metadata is retained');
+            expect($records[2]['process'] === '' && $records[2]['processPath'] === '' && $records[2]['sniffHost'] === '',
+                'Missing optional metadata stays empty');
+            expect($page['rows'] === [$records[1]] && $page['total'] === 2 && $page['current'] === 2 && $page['rowCount'] === 1,
+                'Endpoint preserves filtered page and match count from framework');
+            expect($page['downloadTotal'] === 1234 && $page['uploadTotal'] === 567 && $page['memory'] === 890,
+                'Search does not turn global counters into filtered totals');
+            expect($page['ready'] === true && $page['error'] === '', 'Successful search retains readiness');
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+        $page = $search->connectionsAction();
+        expect($search->searchInput[0] === [] && $page['ready'] === false, 'Unavailable controller provides no stale connections');
+    } finally {
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Connection search scopes, metadata and framework paging contract: passed\n";
     $guarded = [
         'Dashboard' => ['selectProxy', 'setMode', 'closeConnection', 'testDelay'],
         'Settings' => ['set', 'apply', 'import', 'configSet'],

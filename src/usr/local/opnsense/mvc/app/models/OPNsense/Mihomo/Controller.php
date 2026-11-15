@@ -236,6 +236,9 @@ class Controller
             $rows[] = [
                 'id' => (string)($conn['id'] ?? ''),
                 'host' => $host,
+                'sniffHost' => (string)($meta['sniffHost'] ?? ''),
+                'process' => (string)($meta['process'] ?? ''),
+                'processPath' => (string)($meta['processPath'] ?? ''),
                 'source' => (string)($meta['sourceIP'] ?? '') . (isset($meta['sourcePort']) ? ':' . $meta['sourcePort'] : ''),
                 'destination' => (string)($meta['destinationIP'] ?? '') . (isset($meta['destinationPort']) ? ':' . $meta['destinationPort'] : ''),
                 'network' => strtoupper((string)($meta['network'] ?? '')),

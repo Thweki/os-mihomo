@@ -1404,3 +1404,15 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+msgid "Search connections in"
+msgstr "连接搜索范围"
+
+msgid "All fields"
+msgstr "所有字段"
+
+msgid "Process"
+msgstr "进程"
+
+msgid "Use the table search box. Address matches source or destination IP and port; Host includes sniffed names; Process matches name or path when reported by Mihomo. Close all still closes every connection."
+msgstr "请使用表格搜索框。地址匹配源或目标 IP 及端口；主机包含嗅探到的名称；进程匹配 Mihomo 提供的进程名或路径。“关闭全部”仍会关闭所有连接。"

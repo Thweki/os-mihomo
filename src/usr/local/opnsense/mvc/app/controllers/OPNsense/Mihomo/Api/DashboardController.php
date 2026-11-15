@@ -152,10 +152,19 @@ class DashboardController extends ApiControllerBase
     public function connectionsAction()
     {
         $result = Controller::connectionRows();
+        $searchFields = [
+            'all' => ['host', 'sniffHost', 'source', 'destination', 'process', 'processPath',
+                'network', 'type', 'rule', 'rulePayload', 'chain', 'outbound'],
+            'address' => ['source', 'destination'],
+            'host' => ['host', 'sniffHost'],
+            'process' => ['process', 'processPath'],
+        ];
+        $scope = $this->param('connectionScope', 'all');
+        $fields = is_string($scope) && isset($searchFields[$scope]) ? $searchFields[$scope] : $searchFields['all'];
 
         $rows = $this->searchRecordsetBase(
             $result['rows'],
-            ['host', 'source', 'destination', 'network', 'type', 'rule', 'rulePayload', 'chain', 'outbound'],
+            $fields,
             'start'
         );
 
