@@ -311,7 +311,16 @@
             'options': {
                 'rowSelect': false,
                 'multiSelect': false,
+                'requestHandler': function (request) {
+                    request.connectionScope = $('#connection-search-scope').val();
+                    return request;
+                },
                 'formatters': {
+                    'processformatter': function (column, row) {
+                        const name = MihomoUI.decodeApiText(row.process || '');
+                        const path = MihomoUI.decodeApiText(row.processPath || '');
+                        return MihomoUI.element(document, 'span', {title: path}, name || path || '—').outerHTML;
+                    },
                     'bytesformatter': function (column, row) {
                         return fmtBytes(row[column.id]);
                     },
@@ -342,6 +351,10 @@
             $('.cmd-close-connection').off('click').on('click', function () {
                 closeConnections($(this).attr('data-id'));
             });
+        });
+
+        $('#connection-search-scope').change(function () {
+            $('#grid-connections').bootgrid('reload');
         });
 
         function closeConnections(id) {
@@ -531,12 +544,23 @@
                 </span>
             </div>
             <div style="padding: 12px;">
+                <div class="form-inline">
+                    <label for="connection-search-scope">{{ lang._('Search connections in') }}</label>
+                    <select id="connection-search-scope" class="form-control" aria-describedby="connection-search-help">
+                        <option value="all" selected>{{ lang._('All fields') }}</option>
+                        <option value="address">{{ lang._('Address') }}</option>
+                        <option value="host">{{ lang._('Host') }}</option>
+                        <option value="process">{{ lang._('Process') }}</option>
+                    </select>
+                </div>
+                <p id="connection-search-help" class="help-block">{{ lang._('Use the table search box. Address matches source or destination IP and port; Host includes sniffed names; Process matches name or path when reported by Mihomo. Close all still closes every connection.') }}</p>
                 <div class="table-responsive">
                 <table id="grid-connections" class="table table-condensed table-hover table-striped table-responsive" data-editDialog="">
                     <thead>
                         <tr>
                             <th data-column-id="host" data-type="string">{{ lang._('Host') }}</th>
                             <th data-column-id="source" data-width="11em" data-type="string">{{ lang._('Source') }}</th>
+                            <th data-column-id="process" data-type="string" data-formatter="processformatter">{{ lang._('Process') }}</th>
                             <th data-column-id="network" data-width="5em" data-type="string">{{ lang._('Network') }}</th>
                             <th data-column-id="type" data-width="5em" data-type="string">{{ lang._('Type') }}</th>
                             <th data-column-id="rule" data-width="10em" data-type="string">{{ lang._('Rule') }}</th>
