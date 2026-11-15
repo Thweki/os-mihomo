@@ -202,6 +202,7 @@
                 expandGroup: {{ lang._('Expand group') | json_encode }},
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }},
+                latencyHistory: {{ lang._('Recent latency, oldest first') | json_encode }},
                 favoriteGroup: {{ lang._('Favorite group') | json_encode }},
                 favoriteProxy: {{ lang._('Favorite proxy') | json_encode }}
             }, delayText, delayClass, favorites, collapsedGroups);
@@ -510,6 +511,7 @@
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <p class="text-muted" style="padding:0 12px;">{{ lang._('Recent latency: up to 10 controller tests, oldest first. Each chart has its own scale; crosses mark timeouts. Hover for values. No extra tests are run.') }}</p>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
             <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div style="padding: 12px;" id="proxy-groups">

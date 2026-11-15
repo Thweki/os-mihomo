@@ -159,12 +159,16 @@ class DomNode {
     }
     focus(options) { assert.equal(options.preventScroll, true); this.ownerDocument.activeElement = this; }
 }
-const doc = {activeElement: null, createElement(tag) { return new DomNode(this, tag); }};
+const doc = {activeElement: null, createElement(tag) { return new DomNode(this, tag); },
+    createElementNS(namespace, tag) { assert.equal(namespace, 'http://www.w3.org/2000/svg'); return this.createElement(tag); }};
 const groupBox = doc.createElement('div');
 const names = ['name" data-unexpected="value', "single' quote", '<tag>&value', '001', '中文\\name'];
 const encode = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 const groups = names.map(name => ({name: encode(name), type: 'Selector', members: [{name: encode(name), type: 'test', selected: true, delay: 20}]}));
-const render = () => UI.renderProxyGroups(groupBox, groups, {testGroup: 'Test group', testNode: 'Test node', memberCount: 'Members: %s'}, value => value + ' ms', () => 'label-success');
+const latencyText = value => value === null ? 'Not tested' : value <= 0 ? 'Timeout' : value + ' ms';
+const render = () => UI.renderProxyGroups(groupBox, groups, {
+    testGroup: 'Test group', testNode: 'Test node', memberCount: 'Members: %s', latencyHistory: 'Recent latency, oldest first'
+}, latencyText, () => 'label-success');
 render();
 const lists = groupBox.querySelectorAll('ul[data-group]');
 assert.deepEqual(lists.map(node => node.getAttribute('data-group')), names);
@@ -184,6 +188,27 @@ assert.equal(groupBox.querySelectorAll('ul[data-group]')[0].scrollTop, 172);
 assert.notEqual(doc.activeElement, buttons[1], 'Refresh replaces nodes');
 assert.equal(doc.activeElement.attrs['data-focus-key'], buttons[1].attrs['data-focus-key'], 'Refresh restores keyboard focus by exact name');
 assert(groupBox.contains(doc.activeElement));
+
+// Real renderer: bounded controller samples, independent scales, gaps and accessible values.
+assert.equal(groupBox.querySelectorAll('svg[role]')[0].attrs['aria-label'], 'Recent latency, oldest first: Not tested');
+groups[0].members[0].delay_history = [999, 888, 100, 200, 0, 50, 50, -1, null, 'bad', 25, 100];
+groups[1].members[0].delay_history = [500];
+groups[2].members[0].delay_history = [0, -1];
+groups[3].members[0].delay_history = [null, NaN, Infinity, '<script>'];
+render();
+const charts = groupBox.querySelectorAll('svg[role]');
+assert.equal(charts[0].attrs['aria-label'], 'Recent latency, oldest first: 100 ms → 200 ms → Timeout → 50 ms → 50 ms → Timeout → Not tested → Not tested → 25 ms → 100 ms');
+assert.deepEqual(charts[0].querySelectorAll('polyline[points]').map(line => line.attrs.points), ['4,12 12,4', '28,16 36,16', '68,18 76,12'], 'Lines never bridge failed or unknown samples');
+assert.equal(charts[0].querySelectorAll('circle[cx]').length, 6);
+assert.equal(charts[0].querySelectorAll('path[d]').length, 2, 'Timeouts have crosses, not zero latency dots');
+assert.equal(charts[1].querySelectorAll('circle[cx]')[0].attrs.cy, '4', 'Single samples are visible and scale independently');
+assert.equal(charts[2].querySelectorAll('circle[cx]').length, 0);
+assert.equal(charts[2].querySelectorAll('path[d]').length, 2);
+assert.equal(charts[3].querySelectorAll('path[d]')[0].attrs.d, 'M36 12h8');
+assert(!charts[3].attrs['aria-label'].includes('<script>'));
+assert.equal(groupBox.querySelectorAll('span[title]')[0].attrs.title, charts[0].attrs['aria-label']);
+assert.equal(groups[0].members[0].delay_history.length, 12, 'Rendering does not mutate API data');
+console.log('Latency sparklines: bounded samples, gaps, timeouts, scale and accessible values passed');
 
 // Counts describe direct entries, not recursively expanded or healthy proxies.
 const countBox = doc.createElement('div');
@@ -434,7 +459,7 @@ console.log('Mode hints: all modes, metadata gaps, unknown values, selection, fa
 const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null;\n)?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 let groupAllocations = 0;
-const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
+const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }, createElementNS: doc.createElementNS};
 const pollingBox = pollingDoc.createElement('div');
 let favoriteNotice = '', testsDisabled = false, favoriteHandler, collapseHandler, testGroupHandler;
 const dashboardStorage = new Map();
@@ -497,6 +522,8 @@ assert.equal(pollingBox.children[0], firstRow);
 assert.equal(pollingDoc.activeElement, focusedButton);
 assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 123);
 for (const change of [
+    () => { groupResponse.groups[0].members[0].delay_history = [10, 20]; },
+    () => { groupResponse.groups[0].members[0].delay_history = [30, 20]; },
     () => { groupResponse.groups[0].members[0].delay = 40; },
     () => { groupResponse.groups[0].members[0].selected = false; groupResponse.groups[0].members[1].selected = true; },
     () => { groupResponse.groups[0].members.reverse(); },

@@ -77,6 +77,44 @@ namespace {
         \OPNsense\Mihomo\Config::setFileOverride(null);
     }
     echo "Controller metadata response types: passed\n";
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        $samples = array_map(fn ($delay) => ['delay' => $delay, 'time' => 'fixture', 'extra' => 'omit'],
+            [999, 888, 100, 200, 0, 50, 50, -1, null, 'invalid', 25, 100]);
+        $proxies = [
+            'A' => ['type' => 'Selector', 'all' => ['Node', 'Empty', 'Missing', 'Unknown'], 'now' => 'Node'],
+            'B' => ['type' => 'Selector', 'all' => ['Node']],
+            'Node' => ['type' => 'test', 'history' => $samples],
+            'Empty' => ['history' => []],
+            'Unknown' => ['history' => [['time' => 'fixture']]],
+        ];
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['proxies' => $proxies]);
+        $dashboard = new \OPNsense\Mihomo\Api\DashboardController();
+        $result = $dashboard->proxiesAction();
+        $members = $result['groups'][0]['members'];
+        expect($result['ready'] === true, 'Proxy history uses the existing read endpoint');
+        expect($members[0]['delay_history'] === [100, 200, 0, 50, 50, -1, null, null, 25, 100],
+            'Only the last ten measurements are exposed in controller order, with unknown gaps');
+        expect($members[0]['delay'] === 100 && $members[0]['selected'] && $members[0]['alive'],
+            'History leaves the existing delay and selection contract intact');
+        expect($members[1]['delay_history'] === [] && $members[2]['delay_history'] === [],
+            'Untested and missing proxies have no invented measurements');
+        expect($members[3]['delay_history'] === [null], 'Unknown samples retain their position');
+        expect($result['groups'][1]['members'][0]['delay_history'] === $members[0]['delay_history'],
+            'Shared proxies show identical history in every group');
+        expect($dashboard->proxiesAction() === $result, 'Repeated polls do not append measurements');
+        $proxies['Node']['history'] = [['delay' => 42]];
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['proxies' => $proxies]);
+        expect($dashboard->proxiesAction()['groups'][0]['members'][0]['delay_history'] === [42],
+            'A controller history reset replaces old samples');
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+        expect($dashboard->proxiesAction()['ready'] === false, 'Failed reads do not invent history');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+    }
+    echo "Proxy latency history API: passed\n";
     class Request {
         public function isPost() { return true; }
         public function getPost($name, $filter = null, $default = null) { return $default; }

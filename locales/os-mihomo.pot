@@ -1815,6 +1815,12 @@ msgid "Outcome"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Recent latency, oldest first"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Recent latency: up to 10 controller tests, oldest first. Each chart has its own scale; crosses mark timeouts. Hover for values. No extra tests are run."
+
 msgid "Favorite group"
 msgstr ""
 
