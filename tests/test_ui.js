@@ -28,13 +28,18 @@ console.log('UI history, formatting and API text decoding: all checks passed');
 // or an appliance. Requests and controls are the boundary, not copied queue logic.
 const fs = require('node:fs');
 const vm = require('node:vm');
-const controls = new Map(), requests = [], fakeDocument = {hidden: false};
+const controls = new Map(), requests = [], downloads = [], blobs = [], revoked = [];
+const fakeDocument = {hidden: false, createElement(tag) {
+    assert.equal(tag, 'a');
+    return {click() { downloads.push({filename: this.download, url: this.href}); }};
+}};
 function control(selector) {
     if (!controls.has(selector)) {
         const item = {value: '', checked: false, label: '', handlers: {}, top: 100,
             0: {scrollHeight: 100}, val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
             text(value) { this.label = value; return this; },
-            prop(key) { return this[key]; }, on(event, fn) { this.handlers[event] = fn; return this; },
+            prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+            on(event, fn) { this.handlers[event] = fn; return this; },
             change(fn) { return this.on('change', fn); }, click(fn) { return this.on('click', fn); },
             scrollTop(value) { if (value === undefined) { return this.top; } this.top = value; return this; },
             outerHeight() { return 50; }};
@@ -52,8 +57,17 @@ vm.runInNewContext(logScript, {
     document: fakeDocument,
     $: selector => selector === fakeDocument ? {ready: fn => fn()} : control(selector),
     ajaxGet: (url, params, done) => requests.push({params, done}),
-    setInterval: () => {}, MihomoUI: {decodeApiText: decode}
+    setInterval: () => {}, MihomoUI: {decodeApiText: decode},
+    Blob: class { constructor(parts, options) { this.content = parts.join(''); this.type = options.type; } },
+    URL: {
+        createObjectURL(blob) { blobs.push(blob); return 'blob:log-' + blobs.length; },
+        revokeObjectURL(url) { revoked.push(url); }
+    }
 });
+assert.equal(typeof control('#download-filteredAct').handlers.click, 'function', 'Filtered export must be wired to the log view');
+assert.equal(control('#download-filteredAct').disabled, true, 'No export before a log has loaded');
+control('#download-filteredAct').handlers.click();
+assert.equal(downloads.length, 0);
 assert.equal(requests.length, 1);
 control('#log-source').value = 'subscription';
 control('#log-source').handlers.change();
@@ -78,6 +92,56 @@ assert.equal(requests.length, 5);
 requests[4].done(null, 'error');
 assert.equal(control('#log-viewer').value, 'current log', 'Read failures retain the last valid content');
 console.log('Log source/line switching, paused refresh, filtering and slow responses: all checks passed');
+
+// Download exactly the visible snapshot, without another read or a second entity
+// decode. Exercise the actual event handler, including in-flight source changes.
+control('#refreshAct').handlers.click();
+requests[5].done({status: 'ok', content: 'skip this\nMATCH 中文 &lt;tag&gt; &amp;gt; [redacted]\nmatch second\n'}, 'success');
+control('#log-filter').value = 'match';
+control('#log-filter').handlers.input();
+assert.equal(control('#download-filteredAct').disabled, false);
+control('#download-filteredAct').handlers.click();
+assert.equal(requests.length, 6, 'Filtered export must not fetch a different tail');
+assert.equal(blobs[0].content, 'MATCH 中文 <tag> &gt; [redacted]\nmatch second');
+assert.equal(blobs[0].content, control('#log-viewer').value);
+assert.equal(blobs[0].type, 'text/plain;charset=utf-8');
+assert.deepEqual(downloads[0], {filename: 'subscription-filtered.log', url: 'blob:log-1'});
+assert.deepEqual(revoked, ['blob:log-1']);
+control('#log-filter').value = 'no matches';
+control('#log-filter').handlers.input();
+assert.equal(control('#download-filteredAct').disabled, true);
+control('#download-filteredAct').handlers.click();
+assert.equal(downloads.length, 1, 'No empty download when the filter matches nothing');
+control('#log-filter').value = '';
+control('#log-filter').handlers.input();
+control('#refreshAct').handlers.click();
+control('#download-filteredAct').handlers.click();
+assert.equal(blobs[1].content, control('#log-viewer').value, 'An empty filter exports all loaded lines while refresh is pending');
+assert(blobs[1].content.startsWith('skip this\n'));
+control('#log-source').value = 'mihomo';
+control('#log-source').handlers.change();
+assert.equal(control('#download-filteredAct').disabled, true);
+control('#download-filteredAct').handlers.click();
+assert.equal(downloads.length, 2, 'Source changes cannot export old content under a new filename');
+requests[6].done({status: 'ok', content: 'stale subscription content'}, 'success');
+assert.equal(control('#download-filteredAct').disabled, true);
+requests[7].done({status: 'ok', content: ''}, 'success');
+assert.equal(control('#download-filteredAct').disabled, true, 'Empty logs cannot be exported');
+control('#refreshAct').handlers.click();
+requests[8].done({status: 'ok', content: 'core snapshot\n'}, 'success');
+control('#refreshAct').handlers.click();
+requests[9].done(null, 'error');
+control('#download-filteredAct').handlers.click();
+assert.equal(blobs[2].content, 'core snapshot', 'Failed refreshes retain an exportable visible snapshot');
+assert.equal(downloads[2].filename, 'mihomo-filtered.log');
+assert.equal(blobs[0].content, 'MATCH 中文 <tag> &gt; [redacted]\nmatch second', 'Later refreshes cannot alter a downloaded snapshot');
+control('#downloadAct').handlers.click();
+assert.equal(requests[10].params.lines, 5000, 'The original download still fetches the larger tail');
+requests[10].done({status: 'ok', content: 'full &lt;log&gt;\n'}, 'success');
+assert.equal(blobs[3].content, 'full <log>\n');
+assert.equal(downloads[3].filename, 'mihomo.log');
+assert.deepEqual(revoked, downloads.map(download => download.url), 'Every download releases its object URL');
+console.log('Filtered log exports: snapshot, Unicode, redaction, empty results, source races and full download passed');
 
 // The same renderer used by the dashboard runs against a strict DOM fixture.
 // HTML parsing is deliberately unavailable: dynamic names must be text/attributes.

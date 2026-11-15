@@ -1349,3 +1349,9 @@ msgstr "订阅更新任务已提交"
 
 msgid "Settings partly applied"
 msgstr "设置部分应用，仍需处理失败步骤"
+
+msgid "Download filtered log"
+msgstr "下载筛选后的日志"
+
+msgid "Download only the currently visible log lines"
+msgstr "仅下载当前可见的日志行"

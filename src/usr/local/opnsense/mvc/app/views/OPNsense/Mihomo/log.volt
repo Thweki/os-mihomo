@@ -17,7 +17,9 @@
         function renderLog() {
             const query = $('#log-filter').val().toLocaleLowerCase();
             const lines = allLines.filter(line => !query || line.toLocaleLowerCase().includes(query));
-            $('#log-viewer').val(lines.join('\n'));
+            const content = lines.join('\n');
+            $('#log-viewer').val(content);
+            $('#download-filteredAct').prop('disabled', !content);
             $('#log-match-state').text(!allLines.length ? {{ lang._('No log entries yet.') | json_encode }}
                 : !lines.length ? {{ lang._('No matching log entries.') | json_encode }} : String(lines.length) + ' / ' + String(allLines.length));
         }
@@ -61,16 +63,24 @@
         });
         $('#log-lines').change(function () { refreshLogs(true); });
         $('#refreshAct').click(function () { refreshLogs(true); });
+        function downloadLog(content, filename) {
+            const blob = new Blob([content], { 'type': 'text/plain;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+        $('#download-filteredAct').click(function () {
+            const content = $('#log-viewer').val();
+            if (!content) { return; }
+            downloadLog(content, $('#log-source').val() + '-filtered.log');
+        });
         $('#downloadAct').click(function () {
             const key = $('#log-source').val();
             ajaxGet('/api/mihomo/log/tail', { 'key': key, 'lines': 5000 }, function (data, status) {
                 if (status !== 'success' || !data || data.status !== 'ok') { $('#log-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }}); return; }
-                const blob = new Blob([MihomoUI.decodeApiText(data['content'])], { 'type': 'text/plain' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = key + '.log';
-                link.click();
-                URL.revokeObjectURL(link.href);
+                downloadLog(MihomoUI.decodeApiText(data['content']), key + '.log');
             });
         });
         $('#clearAct').click(function () {
@@ -89,6 +99,7 @@
             });
         });
 
+        renderLog();
         refreshLogs(true);
         setInterval(function () { if ($('#log-auto-refresh').prop('checked') && !document.hidden) { refreshLogs(false); } }, 5000);
     });
@@ -119,6 +130,7 @@
                 <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:12px;">
                     <label for="log-filter" style="flex:0 0 auto; white-space:nowrap;">{{ lang._('Filter log') }}</label>
                     <input id="log-filter" type="search" class="form-control" style="flex:1 1 200px; width:auto; max-width:100%;" placeholder="{{ lang._('Filter the loaded lines') }}">
+                    <button type="button" class="btn btn-xs btn-default" id="download-filteredAct" disabled title="{{ lang._('Download only the currently visible log lines') }}"><i class="fa fa-download fa-fw" aria-hidden="true"></i> {{ lang._('Download filtered log') }}</button>
                     <label style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-auto-refresh" type="checkbox" checked> {{ lang._('Auto refresh') }}</label>
                     <span id="log-match-state" class="text-muted" role="status"></span>
                 </div>

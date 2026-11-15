@@ -21,6 +21,8 @@ Open **VPN → Proxy Suite** after installation.
 | Subscription | Submit updates; view task state, last success, exit code and execution logs |
 | Log File | Filter loaded lines, pause refresh, switch sources and line counts, download or clear logs |
 
+On the log page, **Download filtered log** saves the currently visible, redacted lines as a UTF-8 `.log` file without fetching again. An empty filter exports all loaded lines; no matches disables the button. **Download log** still fetches the latest 5,000 lines independently of the filter.
+
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
