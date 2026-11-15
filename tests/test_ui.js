@@ -539,3 +539,121 @@ assert(favoriteNotice.includes('only for this page visit'));
 assert.equal(displayedGroups()[0], specialName);
 assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
 console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
+
+// Run the real connection controls against rendered-page and delayed-request fixtures.
+// Rows outside the current page/search never enter the DOM selection.
+const connectionView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt'), 'utf8');
+const connectionScript = connectionView.slice(connectionView.indexOf('        let closingVisible'),
+    connectionView.indexOf('        gTrafficChart ='))
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+assert(connectionScript.includes('close-visible-connections'), 'The visible-close feature must be present');
+assert.match(connectionView, /id="close-visible-connections"[^>]* disabled>/, 'Disabled before the first load');
+const connectionControls = new Map(), closeRequests = [], confirmations = [];
+let pageButtons = [], reloads = 0, overviewRefreshes = 0, failures = 0, gridOptions;
+class ConnectionControl {
+    constructor(id) { this.id = id; this.handlers = {}; this.disabled = false; this.label = ''; }
+    on(event, handler) { this.handlers[event] = handler; return this; }
+    off(event) { delete this.handlers[event]; return this; }
+    click(handler) { return this.on('click', handler); }
+    prop(key, value) { this[key] = value; return this; }
+    attr(key) { assert.equal(key, 'data-id'); return this.id; }
+    text(value) { this.label = value; return this; }
+    empty() { this.label = ''; return this; }
+    tooltip() { return this; }
+    UIBootgrid(options) { gridOptions = options; return this; }
+    bootgrid(action) {
+        assert.equal(action, 'reload'); reloads++;
+        this.handlers['load.rs.jquery.bootgrid']();
+        return this;
+    }
+}
+function connectionControl(selector) {
+    if (selector instanceof ConnectionControl) { return selector; }
+    if (selector === '#grid-connections tbody .cmd-close-connection') {
+        return {each(fn) { pageButtons.forEach(button => fn.call(button)); }};
+    }
+    if (selector === '.cmd-close-connection' || selector === '#close-all-connections, #grid-connections .cmd-close-connection') {
+        const nodes = selector.startsWith('#close-all') ? [connectionControl('#close-all-connections'), ...pageButtons] : pageButtons;
+        return {
+            prop(key, value) { nodes.forEach(node => node.prop(key, value)); return this; },
+            off(event) { nodes.forEach(node => node.off(event)); return this; },
+            on(event, fn) { nodes.forEach(node => node.on(event, fn)); return this; }
+        };
+    }
+    if (!connectionControls.has(selector)) { connectionControls.set(selector, new ConnectionControl()); }
+    return connectionControls.get(selector);
+}
+vm.runInNewContext(connectionScript, {
+    $: connectionControl, MihomoUI: UI, fmtBytes: UI.formatBytes,
+    BootstrapDialog: {TYPE_WARNING: 'warning', confirm: options => confirmations.push(options)},
+    ajaxCall: (url, data, done) => closeRequests.push({url, data, done}),
+    overviewPoller: {refresh: () => overviewRefreshes++}, actionFailed: () => failures++
+});
+const connectionGrid = connectionControl('#grid-connections');
+const visibleClose = connectionControl('#close-visible-connections');
+const allClose = connectionControl('#close-all-connections');
+function loadConnectionPage(ids) {
+    connectionGrid.handlers['load.rs.jquery.bootgrid']();
+    assert.equal(visibleClose.disabled, true);
+    pageButtons = ids.map(id => new ConnectionControl(id));
+    connectionGrid.handlers['loaded.rs.jquery.bootgrid']();
+}
+const clickVisible = () => visibleClose.handlers.click();
+clickVisible();
+assert.equal(confirmations.length, 0, 'No action before loading');
+loadConnectionPage([]); clickVisible();
+loadConnectionPage(['', ' \t ', '\0', '\0 \0', undefined, null]); clickVisible();
+assert.equal(visibleClose.disabled, true);
+assert.equal(confirmations.length, 0, 'Empty/invalid IDs must never invoke close-all');
+loadConnectionPage(['one']); clickVisible();
+assert.equal(allClose.disabled, true, 'Other close controls are disabled during confirmation');
+confirmations.at(-1).callback(false);
+assert.equal(closeRequests.length, 0, 'Cancellation sends no requests');
+assert.equal(visibleClose.disabled, false);
+assert.equal(allClose.disabled, false);
+
+const targets = ['one', 'two', 'three', 'four', 'five'];
+loadConnectionPage([...targets, 'one', '', '  ', undefined]);
+clickVisible();
+assert(confirmations.at(-1).message.includes('Close 5 connections'), 'Confirmation counts unique valid IDs');
+clickVisible(); allClose.handlers.click(); pageButtons[0].handlers.click.call(pageButtons[0]);
+assert.equal(confirmations.length, 2, 'Repeated clicks cannot open a second batch');
+assert.equal(closeRequests.length, 0, 'No writes before confirmation, including other close controls');
+// Search/page changes and new arrivals while the modal is open must not alter its snapshot.
+loadConnectionPage(['other-page', 'new-arrival']);
+assert.equal(visibleClose.disabled, true);
+assert(pageButtons.every(button => button.disabled));
+confirmations.at(-1).callback(true);
+assert.equal(closeRequests.length, 3, 'Bounded concurrency starts three requests');
+assert.equal(connectionControl('#close-visible-state').label, 'Close requests completed: 0/5; failed or unconfirmed: 0.');
+closeRequests[1].done({status: 'failed'}, 'success'); // Already gone or controller failure.
+assert.equal(closeRequests.length, 4, 'A failed request frees its slot');
+closeRequests[0].done(null, 'error');
+assert.equal(closeRequests.length, 5);
+loadConnectionPage(['yet-another-page']);
+assert.equal(visibleClose.disabled, true, 'Loaded events cannot re-enable an active batch');
+closeRequests[2].done({status: 'ok'}, 'success');
+closeRequests[3].done({status: 'ok'}, 'success');
+assert.equal(reloads, 0, 'Do not reload for each result');
+closeRequests[4].done({status: 'ok'}, 'success');
+assert.deepEqual(closeRequests.map(request => request.data.id), targets,
+    'Only the original visible page is closed, once per ID');
+assert(closeRequests.every(request => request.url === '/api/mihomo/dashboard/close_connection' && request.data.id.trim() !== ''));
+assert.equal(connectionControl('#close-visible-state').label, 'Close requests completed: 5/5; failed or unconfirmed: 2.');
+assert.equal(reloads, 1); assert.equal(overviewRefreshes, 1);
+assert.equal(visibleClose.disabled, true, 'Wait for the refreshed table before allowing another batch');
+loadConnectionPage([]);
+assert.equal(visibleClose.disabled, true);
+loadConnectionPage(['remaining']);
+assert.equal(visibleClose.disabled, false, 'Controls recover after partial failure');
+pageButtons[0].handlers.click.call(pageButtons[0]);
+assert.equal(closeRequests.at(-1).data.id, 'remaining', 'Existing single-close still works');
+closeRequests.at(-1).done({status: 'ok'}, 'success');
+loadConnectionPage(['remaining']);
+allClose.handlers.click();
+assert.equal(closeRequests.at(-1).data.id, '', 'Only explicit Close all uses the empty ID');
+closeRequests.at(-1).done({status: 'failed'}, 'success');
+assert.equal(failures, 1);
+assert.equal(gridOptions.search, '/api/mihomo/dashboard/connections');
+console.log('Close visible: page snapshot, confirmation/cancel, empty IDs, deduplication, bounded requests, partial failure and recovery passed');

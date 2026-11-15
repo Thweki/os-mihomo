@@ -1404,3 +1404,19 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Close visible"
+msgstr "关闭可见连接"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Close visible connections?"
+msgstr "关闭可见连接？"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Close %s connections shown on this page? Hidden rows, other pages and new connections are excluded. Applications may reconnect."
+msgstr "关闭此页显示的 %s 个连接？不包含隐藏行、其他页面和新连接。应用程序可能重新连接。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Close requests completed: %s; failed or unconfirmed: %s."
+msgstr "关闭请求已完成：%s；失败或未确认：%s。"
