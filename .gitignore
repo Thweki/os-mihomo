@@ -49,6 +49,7 @@ images/
 !/tests/fixtures/network/
 !/tests/test_api.php
 !/tests/test_build.py
+!/tests/test_subscription.py
 !/tests/test_packaging.py
 !/tests/test_repository.sh
 !/tests/test_validate.py
