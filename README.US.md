@@ -19,7 +19,9 @@ Open **VPN → Proxy Suite** after installation.
 | Settings | Native forms, write locks, change previews and discard, reapply, advanced options, YAML editing and validation, configuration comparison and DNS status |
 | Policy Routing | Current forwarding and rule details; interface policies, change previews, network bindings, configuration history and restore |
 | Subscription | Submit updates; view task state, last success, exit code and execution logs |
-| Log File | Filter loaded lines, pause refresh, switch sources and line counts, download or clear logs |
+| Log File | Filter loaded lines by text and severity, pause refresh, switch sources and line counts, download or clear logs |
+
+In **Log File**, choose **Log severity** to show one exact level (Debug, Info, Warning, Error, Fatal or Panic), combined with the text filter. **All levels** is the default on each page visit. The filter recognizes Mihomo's `time=… level=…` file headers and logrus console headers, including colored output; words inside messages do not determine severity. **Unknown level** shows unrecognized lines, including unstructured subscription output and continuation lines. Choices survive refreshes and source/line-count changes during the visit. Only loaded lines are filtered, counts show visible/loaded lines, and downloads still include all levels. This does not change the core's logging configuration.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 

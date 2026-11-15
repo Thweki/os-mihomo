@@ -1410,3 +1410,33 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+msgid "Log severity"
+msgstr "日志级别"
+
+msgid "All levels"
+msgstr "所有级别"
+
+msgid "Debug"
+msgstr "调试"
+
+msgid "Info"
+msgstr "信息"
+
+msgid "Warning"
+msgstr "警告"
+
+msgid "Error"
+msgstr "错误"
+
+msgid "Fatal"
+msgstr "致命错误"
+
+msgid "Panic"
+msgstr "恐慌"
+
+msgid "Unknown level"
+msgstr "未知级别"
+
+msgid "Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Downloads include all levels."
+msgstr "级别筛选仅作用于已载入的行。无法识别级别的行显示在“未知级别”中。下载包含所有级别。"
