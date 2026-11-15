@@ -23,7 +23,11 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+The overview **Mode** selector includes a short explanation of the displayed choice: rule-based routing follows matching rules, global mode uses the GLOBAL group selection (which may itself be DIRECT), and direct mode connects without a proxy. The hint updates when you select a mode or the overview refreshes its mode value. It explains the choice, not whether a requested switch succeeded; failures still appear in the action status. These modes affect traffic handled by Mihomo, not every connection through the firewall.
+
 Each **Proxy Groups** card shows **Members: N**, the number of direct entries reported by the controller, including nested groups and DIRECT/REJECT choices. Empty groups show zero. Counts refresh with the group list, making changes after subscription updates easy to spot; they do not indicate how many proxies are healthy.
+
+Use the chevron beside a group's member count to **Collapse group** or **Expand group** (also available with Enter or Space). Collapsing folds away the member list while keeping the group name, type, count, favorite and group latency-test controls visible. Choices are remembered by exact group name for this page visit, including after polling, reordering or controller recovery; reloading starts with all groups expanded. Collapsing does not change routing or selections, and group latency tests still test every member.
 
 In **Proxy Groups**, click the star beside a group to pin its card first, or beside a proxy to pin it first in every group containing it. Click again to restore its normal order. Stars do not change the selected proxy or routing. Favorites are remembered by exact name in this browser for this WebGUI address (shared by users of the same browser profile); clearing site data removes them. Missing nodes retain their stars if the same names return after a subscription update. If browser storage is unavailable, stars work for the current page visit and a notice explains that they could not be saved.
 
