@@ -129,6 +129,37 @@
         }));
         return Array.from(names);
     }
+    // Browser-local display preferences; names are decoded once at the API boundary.
+    class ProxyFavorites {
+        constructor(storage) {
+            this.storage = storage || (() => localStorage);
+            this.groups = new Set();
+            this.proxies = new Set();
+            try {
+                const saved = JSON.parse(this.storage().getItem('mihomo.favorites.v1'));
+                for (const kind of ['groups', 'proxies']) {
+                    if (saved && Array.isArray(saved[kind])) {
+                        this[kind] = new Set(saved[kind].filter(name => typeof name === 'string'));
+                    }
+                }
+            } catch (error) { /* Invalid or unavailable storage starts with no favorites. */ }
+        }
+        has(kind, name) { return this[kind].has(name); }
+        toggle(kind, name) {
+            if (this.has(kind, name)) { this[kind].delete(name); }
+            else { this[kind].add(name); }
+            try {
+                this.storage().setItem('mihomo.favorites.v1', JSON.stringify({groups: [...this.groups], proxies: [...this.proxies]}));
+                return true;
+            } catch (error) { return false; } // Keep the in-memory choice for this visit.
+        }
+        order(items, kind) {
+            // Stable partition leaves controller order intact within each section.
+            const starred = [], rest = [];
+            items.forEach(item => (this.has(kind, decodeApiText(item.name)) ? starred : rest).push(item));
+            return starred.concat(rest);
+        }
+    }
     // Every dynamic value reaches textContent/setAttribute, never HTML parsing.
     function element(doc, tag, attrs, text) {
         const node = doc.createElement(tag);
@@ -136,30 +167,57 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
-    function renderProxyGroups(container, groups, labels, delayText, delayClass) {
+    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, collapsedGroups) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
+        function favoriteButton(kind, name, group) {
+            const starred = favorites.has(kind, name);
+            const label = kind === 'groups' ? labels.favoriteGroup : labels.favoriteProxy;
+            const button = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-favorite',
+                'data-kind': kind, 'data-name': name, 'aria-pressed': starred ? 'true' : 'false',
+                'data-focus-key': JSON.stringify(['favorite', kind, group, name]), 'aria-label': label + ': ' + name, title: label});
+            button.appendChild(el('i', {class: 'fa ' + (starred ? 'fa-star text-warning' : 'fa-star-o') + ' fa-fw', 'aria-hidden': 'true'}));
+            return button;
+        }
         const scroll = new Map();
         container.querySelectorAll('ul[data-group]').forEach(node => scroll.set(node.getAttribute('data-group'), node.scrollTop));
         const active = doc.activeElement;
         const focusKey = active && container.contains(active) ? active.getAttribute('data-focus-key') : null;
         const row = el('div', {class: 'row'});
-        groups.forEach(group => {
+        (favorites ? favorites.order(groups, 'groups') : groups).forEach((group, index) => {
             const name = decodeApiText(group.name);
+            const members = group.members || [];
+            const collapsed = collapsedGroups && collapsedGroups.has(name);
+            const listId = 'mihomo-group-members-' + index;
             const column = el('div', {class: 'col-md-6', style: 'margin-bottom:15px'});
-            const card = el('div', {class: 'content-box', style: 'height:300px;margin-bottom:0;display:flex;flex-direction:column'});
+            const card = el('div', {class: 'content-box', style: 'height:' + (collapsed ? 'auto' : '300px') + ';margin-bottom:0;display:flex;flex-direction:column'});
             const header = el('div', {style: 'padding:10px 12px;flex:0 0 auto'});
+            if (favorites) { header.appendChild(favoriteButton('groups', name, name)); }
             header.appendChild(el('b', {}, name + ' '));
             header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-info'}, decodeApiText(group.type)));
+            header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-default',
+                style: 'margin-left:6px', 'data-member-count': members.length}, labels.memberCount.replace('%s', members.length)));
+            if (collapsedGroups) {
+                const label = collapsed ? labels.expandGroup : labels.collapseGroup;
+                const toggle = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-collapse-group',
+                    style: 'margin-left:6px', 'data-group': name, 'aria-expanded': collapsed ? 'false' : 'true',
+                    'aria-controls': listId, 'aria-label': label + ': ' + name, title: label,
+                    'data-focus-key': JSON.stringify(['collapse', name])});
+                toggle.appendChild(el('i', {class: 'fa fa-chevron-' + (collapsed ? 'right' : 'down') + ' fa-fw', 'aria-hidden': 'true'}));
+                header.appendChild(toggle);
+            }
             const test = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-test-group pull-right',
                 'data-group': name, 'data-focus-key': JSON.stringify(['group', name]), 'aria-label': labels.testGroup + ': ' + name, title: labels.testGroup});
             test.appendChild(el('i', {class: 'fa fa-tachometer fa-fw', 'aria-hidden': 'true'}));
             header.appendChild(test);
-            const list = el('ul', {class: 'list-group', 'data-group': name, 'aria-label': name,
+            const list = el('ul', {id: listId, class: 'list-group', 'data-group': name, 'aria-label': name,
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
-            (group.members || []).forEach(member => {
+            // Keep members in the DOM so full-group latency tests still include them.
+            if (collapsed) { list.setAttribute('hidden', ''); }
+            (favorites ? favorites.order(members, 'proxies') : members).forEach(member => {
                 const memberName = decodeApiText(member.name);
                 const item = el('li', {class: 'list-group-item' + (member.selected ? ' active' : ''),
                     style: 'padding:8px 12px;display:flex;align-items:center;gap:6px', 'data-group': name, 'data-member': memberName});
+                if (favorites) { item.appendChild(favoriteButton('proxies', memberName, name)); }
                 // Separate buttons avoid nested controls; native buttons support Enter and Space.
                 const select = el('button', {type: 'button', class: 'btn btn-link cmd-select',
                     style: 'color:inherit;white-space:normal;text-align:left;padding:0;flex:1;min-width:0;overflow-wrap:anywhere',
@@ -197,5 +255,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, automaticTestNames, element, renderProxyGroups};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, automaticTestNames, element, renderProxyGroups, ProxyFavorites};
 }));
