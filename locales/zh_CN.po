@@ -1404,3 +1404,15 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Pause statistics"
+msgstr "暂停统计刷新"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Resume statistics"
+msgstr "恢复统计刷新"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Statistics auto refresh is paused. In-flight reads may finish; actions can still refresh results. Other panels remain live."
+msgstr "统计自动刷新已暂停。正在进行的读取可能完成；操作仍可刷新结果。其他面板继续实时更新。"

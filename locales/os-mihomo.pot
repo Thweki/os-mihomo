@@ -1825,3 +1825,15 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged."
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Pause statistics"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Resume statistics"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Statistics auto refresh is paused. In-flight reads may finish; actions can still refresh results. Other panels remain live."
+msgstr ""
