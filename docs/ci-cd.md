@@ -30,6 +30,8 @@ Without PHP CLI, use `python3 tools/validate.py --frontend-only`; this skips PHP
 
 `build.sh` sets `SOURCE_DATE_EPOCH` to the checked-out commit time unless explicitly supplied. The archive writer sorts paths and fixes uid/gid, owner names, file times and the gzip header. Staged file modes are normalized, including 0600 for configuration samples. Source checkout timestamps and staging locations are not archive inputs.
 
+Each tree copy finishes a temporary tar archive before extraction, so a source read failure aborts packaging even if tar produced a readable partial archive. This requires temporary disk space for one uncompressed tree under `WORKDIR`. Portable `tests/test_packaging.py` fixtures run the build with a synthetic core and stubbed FreeBSD commands, checking failures in both copy stages and successful payload/sample preservation without downloads or package installation. They run through `tools/validate.py`; real pkg validation remains in the FreeBSD job.
+
 The byte-for-byte reproducibility claim applies to `os-mihomo.pkg` built from identical source, pinned assets, build variables, Python/zlib toolchain and ABI. `build-info.json` records the commit/tree, dirty state, epoch, pinned input metadata, OS, Python/zlib/pkg versions and output hashes. It is an inventory, not a signature. The repository archive has deterministic outer packaging, but internal `pkg repo` catalogues/signatures may vary with pkg version or signing setup; CI does not claim byte-for-byte repository catalogue reproducibility. Toolchain changes can also change compressed package bytes; use the recorded versions when reproducing.
 
 ```sh
