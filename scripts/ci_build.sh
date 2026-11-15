@@ -15,6 +15,7 @@ esac
 php tests/test_patch.php
 php tests/test_writes.php
 php tests/test_api.php
+php tests/test_routing_status.php
 VERSION="$version" make package
 core_fixture=$(mktemp -d "$PWD/work/core-test.XXXXXX")
 trap 'rm -rf "$core_fixture"' EXIT HUP INT TERM

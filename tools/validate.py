@@ -93,6 +93,7 @@ def main():
     subprocess.run([sys.executable, str(ROOT / 'tests/test_packaging.py')], check=True)
     if not frontend:
         subprocess.run(['php', str(ROOT / 'tests/test_runtime.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_routing_status.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_patch.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_writes.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_api.php')], check=True)

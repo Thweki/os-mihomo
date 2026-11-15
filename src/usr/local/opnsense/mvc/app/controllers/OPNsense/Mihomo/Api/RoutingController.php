@@ -20,6 +20,7 @@ use OPNsense\Base\ApiMutableModelControllerBase;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config as CoreConfig;
 use OPNsense\Mihomo\Config;
+use OPNsense\Mihomo\RoutingStatus;
 use OPNsense\Mihomo\RequestParamsTrait;
 use OPNsense\Mihomo\WriteCoordinator;
 use OPNsense\Mihomo\ActionResult;
@@ -283,60 +284,24 @@ class RoutingController extends ApiMutableModelControllerBase
         $tunEnabled = Config::bool('tun.enable');
         $autoRoute = Config::bool('tun.auto-route');
 
-        /* OPNsense 侧是否已经存在策略路由（P12-2 才会创建，这里只做只读判断） */
-        $gatewayExists = false;
-        $ruleExists = false;
+        $tun = (string)(Config::scan()['tun.device'] ?? 'tun_mihomo');
+        $cfg = new \SimpleXMLElement('<opnsense/>');
+        $snapshot = [];
         try {
             $cfg = CoreConfig::getInstance()->object();
-            /* 网关：模型挂载点是 //OPNsense/Gateways */
-            if (isset($cfg->OPNsense->Gateways)) {
-                foreach ($cfg->OPNsense->Gateways->gateway_item as $item) {
-                    if ((string)$item->name === 'MIHOMO_TUN') {
-                        $gatewayExists = true;
-                    }
-                }
-            }
-            if (isset($cfg->filter->rule)) {
-                foreach ($cfg->filter->rule as $rule) {
-                    if (
-                        (string)$rule->gateway === 'MIHOMO_TUN'
-                        && stripos((string)$rule->descr, 'Mihomo policy routing') !== false
-                    ) {
-                        $ruleExists = true;
-                    }
-                }
-            }
+            $snapshot = json_decode((string)(new Backend())->configdRun('mihomo runtime-status'), true) ?: [];
         } catch (\Throwable $e) {
-            /* 只读判断失败不阻塞页面 */
+            // Missing observations must never be reported as active.
         }
-
-        $rows = [];
-        foreach ($this->collectRows(true) as $row) {
-            if ($row['source'] === '') {
-                $row['source'] = (string)($subnets[$row['interface']] ?? '');
-            }
-            if (!$tunEnabled) {
-                $row['state'] = 'inactive';
-                $row['note'] = gettext('TUN is disabled: traffic does not reach mihomo.');
-            } elseif ($row['firewall'] === 'auto' && !($gatewayExists && $ruleExists)) {
-                $row['state'] = 'pending';
-                $row['note'] = gettext('Waiting for the OPNsense side: interface, gateway and policy routing rule.');
-            } elseif ($row['firewall'] === 'manual') {
-                $row['state'] = 'manual';
-                $row['note'] = gettext('Manual: make sure the interface is policy routed into the TUN device.');
-            } else {
-                $row['state'] = 'active';
-                $row['note'] = gettext('Policy routing is in place.');
-            }
-            $rows[] = $row;
-        }
+        $rows = RoutingStatus::rows($cfg, is_array($snapshot) ? $snapshot : [], $tun, $tunEnabled,
+            $this->collectRows(true), $subnets);
 
         return [
             'status' => 'ok',
             'tun_enabled' => $tunEnabled,
             'auto_route' => $autoRoute,
-            'gateway' => $gatewayExists,
-            'firewall_rule' => $ruleExists,
+            'gateway' => RoutingStatus::gateway($cfg, $tun) !== null,
+            'firewall_rule' => RoutingStatus::configuredRules($cfg) !== [],
             'rows' => $rows,
         ];
     }

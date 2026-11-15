@@ -1,0 +1,7 @@
+<opnsense>
+  <interfaces>
+    <lan><if>vtnet1</if><descr>Clients</descr><ipaddr>192.0.2.1</ipaddr><subnet>24</subnet></lan>
+    <opt1><if>vtnet2</if><descr>Guests</descr><ipaddr>203.0.113.1</ipaddr><subnet>24</subnet></opt1>
+  </interfaces>
+  <OPNsense><Firewall><Filter><rules/></Filter></Firewall></OPNsense>
+</opnsense>
