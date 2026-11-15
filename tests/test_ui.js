@@ -358,6 +358,61 @@ now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
 
+const formatUptime = require('../src/usr/local/www/js/mihomo/ui.js').formatUptime;
+for (const [seconds, expected] of [[0, '00:00:00'], [59, '00:00:59'], [60, '00:01:00'],
+    [3599, '00:59:59'], [3600, '01:00:00'], [90061, '25:01:01'], [360000, '100:00:00']]) {
+    assert.equal(formatUptime(seconds), expected);
+}
+for (const value of [null, undefined, '', '60', -1, 1.5, NaN, Infinity]) {
+    assert.equal(formatUptime(value), null, 'Unknown uptime must not look like a newly started core');
+}
+const timingLabels = new Map(), timingHandlers = {}, timingDocument = {};
+const timingScript = indexView.slice(indexView.indexOf('        let processMemory = null;'),
+    indexView.indexOf('        let storedHistory = []'))
+    .replace(/\{\{[\s\S]*?\}\}/g, '"Unavailable"');
+const timingContext = {
+    document: timingDocument, Date, MihomoUI: {formatUptime}, fmtBytes: String,
+    $: selector => selector === timingDocument
+        ? {on: (event, handler) => { timingHandlers[event] = handler; }}
+        : {text: value => timingLabels.set(selector, value)}
+};
+vm.runInNewContext(timingScript, timingContext);
+const runtimeTiming = (seconds, lastReload = 1700000000) => timingHandlers['mihomo:runtime'](null,
+    {process: {rss: 1024, uptime_seconds: seconds}, last_reload_at: lastReload});
+runtimeTiming(90061);
+assert.equal(timingLabels.get('#stat-uptime'), '25:01:01');
+assert.equal(timingLabels.get('#stat-last-reload'), new Date(1700000000000).toLocaleString());
+runtimeTiming(0, 1700000060);
+assert.equal(timingLabels.get('#stat-uptime'), '00:00:00', 'Restart resets age without retaining the old uptime');
+assert.equal(timingLabels.get('#stat-last-reload'), new Date(1700000060000).toLocaleString());
+timingHandlers['mihomo:runtime'](null, {process: null, last_reload_at: 1700000060});
+assert.equal(timingLabels.get('#stat-uptime'), 'Unavailable', 'Stopped core has no age');
+assert.equal(timingLabels.get('#stat-last-reload'), new Date(1700000060000).toLocaleString(), 'Stopping retains last success');
+for (const value of [null, undefined, 0, -1, '1700000000', '<img src=x>', Number.MAX_SAFE_INTEGER]) {
+    timingHandlers['mihomo:runtime'](null, {process: null, last_reload_at: value});
+    assert.equal(timingLabels.get('#stat-uptime'), 'Unavailable');
+    assert.equal(timingLabels.get('#stat-last-reload'), 'Unavailable');
+}
+// Drive the shared runtime poll's real failure path and its overview event handler.
+const networkView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt'), 'utf8');
+const runtimeRefresh = networkView.match(/    function refresh\(done\) \{[\s\S]*?\n    \}/)[0]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+for (const [data, status] of [[null, 'error'], [{status: 'unavailable'}, 'success']]) {
+    runtimeTiming(90);
+    vm.runInNewContext('let lastDns = 0, dnsPending = false;\n' + runtimeRefresh + '\nrefresh(done);', {
+        Date: {now: () => 0}, document: timingDocument,
+        $root: {find: () => ({prop: () => {}, text: () => {}})},
+        $: () => ({trigger: event => timingHandlers[event]()}),
+        ajaxGet: (url, params, done) => done(data, status), done: ok => assert.equal(!!ok, false)
+    });
+    assert.equal(timingLabels.get('#stat-uptime'), 'Unavailable', 'Failed polls must clear old age');
+    assert.equal(timingLabels.get('#stat-last-reload'), 'Unavailable');
+}
+runtimeTiming(120);
+assert.equal(timingLabels.get('#stat-uptime'), '00:02:00', 'Polling recovery restores timing');
+assert(indexView.includes('id="stat-uptime"') && indexView.includes('id="stat-last-reload"'));
+console.log('Core uptime, reload timestamps, stopped cores, failed polls and recovery: all checks passed');
 // Exercise the actual mode hint, overview renderer and mode-change handler together.
 const translateModeScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
     (_, label) => JSON.stringify(label));

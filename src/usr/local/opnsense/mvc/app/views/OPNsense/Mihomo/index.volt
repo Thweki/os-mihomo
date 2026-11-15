@@ -94,7 +94,18 @@
         $(document).on('mihomo:runtime', function (event, data) {
             processMemory = data.process && data.process.rss > 0 ? data.process.rss : null;
             $('#stat-memory').text(processMemory !== null ? fmtBytes(processMemory) : {{ lang._('Unavailable') | json_encode }});
+            renderCoreTiming(data);
         });
+        $(document).on('mihomo:runtime-unavailable', function () { renderCoreTiming({}); });
+        function renderCoreTiming(data) {
+            const unavailable = {{ lang._('Unavailable') | json_encode }};
+            const uptime = MihomoUI.formatUptime(data.process && data.process.uptime_seconds);
+            $('#stat-uptime').text(uptime === null ? unavailable : uptime);
+            const timestamp = data.last_reload_at;
+            const date = new Date(timestamp * 1000);
+            $('#stat-last-reload').text(Number.isSafeInteger(timestamp) && timestamp > 0 && Number.isFinite(date.getTime())
+                ? date.toLocaleString() : unavailable);
+        }
         let storedHistory = [];
         try { storedHistory = JSON.parse(sessionStorage.getItem('mihomo.traffic.v1') || '[]'); } catch (error) { /* Optional cache. */ }
         const trafficHistory = new MihomoUI.TrafficHistory(storedHistory);
@@ -466,6 +477,8 @@
     <span>{{ lang._('Downloaded') }}: <span id="stat-download">—</span></span>
     <span>{{ lang._('Uploaded') }}: <span id="stat-upload">—</span></span>
     <span>{{ lang._('Core version') }}: <span id="mihomo-version">—</span></span>
+    <span title="{{ lang._('Verified core process age in hours:minutes:seconds, sampled every 30 seconds. Hours may exceed 24.') }}">{{ lang._('Core uptime') }}: <span id="stat-uptime">—</span></span>
+    <span title="{{ lang._('Recorded after a verified service start or restart during this boot. Failed starts and file saves do not change it. External controller reloads are not tracked.') }}">{{ lang._('Last successful start / reload') }}: <span id="stat-last-reload">—</span></span>
 </div></section></div>
 
 <div class="row">

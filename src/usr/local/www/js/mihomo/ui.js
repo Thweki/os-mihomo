@@ -14,6 +14,12 @@
         while (scaled >= 1024 && index < units.length - 1) { scaled /= 1024; index++; }
         return scaled.toLocaleString(locale || undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' ' + units[index];
     }
+    // Total hours (not a clock time) remain unbounded across multiple days.
+    function formatUptime(seconds) {
+        if (!Number.isSafeInteger(seconds) || seconds < 0) { return null; }
+        return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+            .map(value => String(value).padStart(2, '0')).join(':');
+    }
     // Internal OPNsense API responses use htmlspecialchars(..., ENT_NOQUOTES).
     // Decode exactly one layer, preserving entities that are literal file data.
     function decodeApiText(value) {
@@ -237,5 +243,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatUptime, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
 }));

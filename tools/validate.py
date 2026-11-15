@@ -90,6 +90,7 @@ def main():
     subprocess.run(['node', str(ROOT / 'tests/test_ui.js')], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tests/test_build.py')], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tests/test_subscription.py')], check=True)
+    subprocess.run([sys.executable, str(ROOT / 'tests/test_service.py')], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tests/test_packaging.py')], check=True)
     if not frontend:
         subprocess.run(['php', str(ROOT / 'tests/test_runtime.php')], check=True)

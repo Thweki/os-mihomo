@@ -33,6 +33,8 @@ In **Proxy Groups**, click the star beside a group to pin its card first, or bes
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
+**Core uptime** on the overview shows the verified core process age as hours:minutes:seconds (hours can exceed 24), sampled with Current forwarding every 30 seconds. **Last successful start / reload** shows the browser-local time of the last service start or restart that passed the rc.d startup check; this plugin applies reloads by restarting the core. The record survives stops and failed starts during the current boot, resets on reboot, and is unavailable until the first recorded success after upgrading. Saving a file does not update it; reloads through an external controller are not tracked. A stopped or unidentified core has no uptime, and a failed runtime read clears both timing values until polling recovers. These are observations, not health checks.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.
