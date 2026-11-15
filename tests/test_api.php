@@ -16,6 +16,28 @@ namespace OPNsense\Core {
     }
 }
 namespace OPNsense\Mihomo {
+    // Keep the Apply failure fixture independent of appliance paths and services.
+    class WriteCoordinator {
+        public static function revisions(array $paths): array {
+            $result = array_fill_keys($paths, 'missing');
+            ksort($result);
+            return $result;
+        }
+    }
+    class BootSettingsProbe {
+        public static int $calls = 0;
+        public static bool $reject = true;
+    }
+    function is_readable(string $path): bool {
+        if ($path === '/etc/rc.conf.d/mihomo') {
+            BootSettingsProbe::$calls++;
+            if (BootSettingsProbe::$reject) {
+                throw new \LogicException('Rejected YAML must not reach boot settings');
+            }
+            return false;
+        }
+        return \is_readable($path);
+    }
     // Namespace-local transport doubles exercise the real JSON decoder without
     // opening sockets or requiring the cURL extension on portable PHP runners.
     class ControllerHttpFixture {
@@ -100,6 +122,63 @@ namespace {
         }
     }
     expect(\OPNsense\Core\Backend::$calls === 0, 'Read-only calls never reach configd');
+
+    // Exercise real Apply selection and patching with locked TUN siblings. The
+    // always-written device/stack already match, but must still fail safely.
+    $flow = "log-level: info\ntun: {enable: true, device: tun_mihomo, stack: gvisor, auto-route: false}\n";
+    $flowFile = tempnam(sys_get_temp_dir(), 'mihomo-flow-test-');
+    file_put_contents($flowFile, $flow);
+    \OPNsense\Mihomo\Config::setFileOverride($flowFile);
+    try {
+        $apply = new class extends \OPNsense\Mihomo\Api\SettingsController {
+            public $model;
+            public function throwReadOnly() {}
+            public function getModel() { return $this->model; }
+        };
+        $apply->model = (object)[
+            'managed' => '',
+            'general' => (object)[
+                'logLevel' => 'debug', 'mode' => 'rule', 'allowLan' => '0',
+                'controllerBind' => '127.0.0.1', 'controllerPort' => '9090',
+                'secret' => '', 'ipv6' => '0', 'sniffer' => '0', 'enabled' => '1',
+            ],
+            'tun' => (object)[
+                'enabled' => '0', 'device' => 'tun_mihomo', 'stack' => 'gvisor',
+                'autoRoute' => '1', 'strictRoute' => '0', 'mtu' => '1500',
+            ],
+            'dns' => (object)[
+                'enabled' => '0', 'listen' => '127.0.0.1:1053', 'enhancedMode' => 'redir-host', 'ipv6' => '0',
+            ],
+        ];
+        $apply->request = new class extends Request {
+            public function getJsonRawBody() {
+                $expected = \OPNsense\Mihomo\WriteCoordinator::revisions([
+                    \OPNsense\Mihomo\Config::FILE, \OPNsense\Mihomo\Subscription::ENV_FILE,
+                    '/etc/rc.conf.d/mihomo', '/conf/config.xml',
+                ]);
+                return ['version' => hash('sha256', json_encode($expected, JSON_UNESCAPED_SLASHES))];
+            }
+        };
+        foreach (['', 'mihomo.general.logLevel'] as $managed) {
+            $apply->model->managed = $managed;
+            $result = $apply->applyAction();
+            expect($result['state'] === 'failed' && $result['changed'] === false && $result['code'] === 'apply',
+                'Flow parent rejection is an explicit unchanged Apply failure');
+            expect(str_contains($result['message'], '"tun"') && str_contains($result['message'], 'block mapping'),
+                'Apply explains how to resolve the unsupported parent without exposing its contents');
+            expect(\OPNsense\Core\Backend::$calls === 0 && \OPNsense\Mihomo\BootSettingsProbe::$calls === 0,
+                'Flow parent rejection precedes other file preparation and configd commit');
+            expect(file_get_contents($flowFile) === $flow, 'Locked siblings and earlier selected settings remain byte-identical');
+            expect(glob($flowFile . '.bak.*') === [], 'Rejected Apply creates no configuration backup');
+        }
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        unlink($flowFile);
+    }
+    // Safety report fixtures use the real class with boot settings disabled.
+    \OPNsense\Mihomo\BootSettingsProbe::$reject = false;
+    echo "Settings Apply flow mappings: fixed TUN fields reject without writes\n";
+
     $settings = new \OPNsense\Mihomo\Api\SettingsController();
     foreach (['', 'FATAL: invalid config', 'Configuration is valid.', '{"status":"ok"}', '{"state":"failed","status":"ok","changed":"no","code":[],"message":"invalid"}'] as $output) {
         \OPNsense\Core\Backend::$output = $output;

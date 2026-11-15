@@ -330,10 +330,17 @@ class Config
         $blockEnd = self::findBlockEnd($lines, $lineNo, $to, $indent);
         $subIndent = self::childIndent($lines, $lineNo + 1, $blockEnd, $indent);
 
-        /* 若该行写成 `tun: {}` 或标量，无法安全下钻，改写为块形式 */
+        /* Only an empty flow mapping can be expanded without losing siblings.
+         * Reject other inline values before callers stage or commit any files. */
         $afterColon = trim((string)preg_replace('/^[^:]+:/', '', $lines[$lineNo]));
-        if ($afterColon !== '') {
-            $lines[$lineNo] = $indentStr . $key . ':';
+        if ($afterColon !== '' && !str_starts_with($afterColon, '#')) {
+            if (!preg_match('/^\{\s*\}(\s+#.*)?$/', $afterColon, $emptyMapping)) {
+                throw new \RuntimeException(
+                    'Cannot safely edit a child of "' . $key . '" with an inline value. '
+                    . 'Convert this parent to a block mapping, preserving all entries, then retry.'
+                );
+            }
+            $lines[$lineNo] = $indentStr . $key . ':' . ($emptyMapping[1] ?? '');
         }
 
         return self::setPathInRange($lines, $segments, $rendered, $lineNo + 1, $blockEnd, $subIndent);
@@ -347,6 +354,7 @@ class Config
      *   2) 需要改动时，只替换该行的值，并保留行尾注释。
      * 不重排、不删除、不解析列表，最大限度保留用户手写内容。
      * 结果仍会交给 `mihomo -t` 校验，校验不过就不会落盘。
+     * @throws \RuntimeException When a parent has an unsupported inline value.
      */
     public static function patchKeys(string $content, array $values): string
     {
