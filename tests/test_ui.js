@@ -212,3 +212,89 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// Run the subscription page with delayed saves. An acknowledgement belongs to
+// the submitted snapshot, even when the user has already typed the next edit.
+const subscriptionControls = new Map(), subscriptionReads = [], subscriptionWrites = [], subscriptionPollers = [];
+const subscriptionDocument = {addEventListener() {}};
+function subscriptionControl(selector) {
+    if (typeof selector === 'object') { return selector; }
+    if (!subscriptionControls.has(selector)) {
+        subscriptionControls.set(selector, {
+            value: '', handlers: {},
+            val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
+            prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+            on(event, fn) { this.handlers[event] = fn; return this; },
+            click(fn) { return this.on('click', fn); },
+            text() { return this; }, css() { return this; }, show() { return this; }
+        });
+    }
+    return subscriptionControls.get(selector);
+}
+vm.runInNewContext(subscriptionView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"'), {
+    document: subscriptionDocument, window: {addEventListener() {}},
+    $: selector => selector === subscriptionDocument ? {ready: fn => fn()} : subscriptionControl(selector),
+    ajaxGet: (url, data, done) => subscriptionReads.push({url, data, done}),
+    ajaxCall: (url, data, done) => subscriptionWrites.push({url, data, done}),
+    BootstrapDialog: {show() {}}, setTimeout() {},
+    MihomoUI: {...UI, Poller: class {
+        constructor(request) { subscriptionPollers.push(request); }
+        refresh() {} stop() {} visibilityChanged() {}
+    }}
+});
+const subscriptionUrl = subscriptionControl('[id="mihomo.subscription.url"]');
+const subscriptionSecret = subscriptionControl('[id="mihomo.subscription.secret"]');
+const subscriptionSave = subscriptionControl('#saveAct');
+const subscriptionRun = subscriptionControl('#runAct');
+const envFile = '/usr/local/etc/mihomo/sub/env';
+function editSubscription(url, secret) {
+    subscriptionUrl.val(url); subscriptionSecret.val(secret);
+    subscriptionControl('[id="mihomo.subscription.url"], [id="mihomo.subscription.secret"]').handlers['input change']();
+}
+function pollSubscription() {
+    subscriptionPollers[0]();
+    subscriptionReads.at(-1).done({status: 'ok', subscription: {state: 'idle'}}, 'success');
+}
+subscriptionReads[0].done({url: 'https://example.invalid/original', secret: 'example-original',
+    version: 'original', envFile, scriptAvailable: true}, 'success');
+pollSubscription();
+editSubscription('https://example.invalid/submitted', 'example-submitted');
+subscriptionSave.handlers.click.call(subscriptionSave);
+assert.equal(subscriptionWrites[0].data.version, 'original');
+editSubscription('https://example.invalid/newer', 'example-newer');
+const readsBeforeSave = subscriptionReads.length;
+subscriptionWrites[0].done({status: 'ok', versions: {[envFile]: 'saved-revision'}}, 'success');
+// Complete any reload the old implementation issued, reproducing the lost edit.
+if (subscriptionReads.length > readsBeforeSave) {
+    subscriptionReads.at(-1).done({url: 'https://example.invalid/submitted', secret: 'example-submitted',
+        version: 'saved-revision', envFile, scriptAvailable: true}, 'success');
+}
+assert.equal(subscriptionUrl.val(), 'https://example.invalid/newer', 'Save acknowledgement must preserve newer URL edits');
+assert.equal(subscriptionSecret.val(), 'example-newer', 'Save acknowledgement must preserve newer secret edits');
+assert.equal(subscriptionReads.length, readsBeforeSave, 'Save uses its committed revision without reloading another writer\'s state');
+assert.equal(subscriptionSave.disabled, false, 'Newer edits remain available to save');
+assert.equal(subscriptionRun.disabled, true, 'Unsaved edits prevent a subscription run');
+subscriptionSave.handlers.click.call(subscriptionSave);
+assert.equal(subscriptionWrites[1].data.version, 'saved-revision', 'Next save uses the acknowledged revision');
+pollSubscription();
+editSubscription('https://example.invalid/newer', 'example-newer');
+assert.equal(subscriptionSave.disabled, true, 'Polling and input events cannot enable a pending save');
+subscriptionSave.handlers.click.call(subscriptionSave);
+assert.equal(subscriptionWrites.length, 2, 'Only one save may be pending');
+subscriptionWrites[1].done({status: 'failed', code: 'conflict'}, 'success');
+assert.equal(subscriptionUrl.val(), 'https://example.invalid/newer', 'Conflicts preserve unsaved input');
+assert.equal(subscriptionSave.disabled, false);
+assert.equal(subscriptionRun.disabled, true);
+subscriptionSave.handlers.click.call(subscriptionSave);
+assert.equal(subscriptionWrites[2].data.version, 'saved-revision', 'Failure cannot advance the saved revision');
+subscriptionWrites[2].done(null, 'error');
+assert.equal(subscriptionSave.disabled, false, 'Transport failure permits retry');
+editSubscription(' https://example.invalid/final ', ' example-final ');
+subscriptionSave.handlers.click.call(subscriptionSave);
+subscriptionWrites[3].done({status: 'ok', versions: {[envFile]: 'final-revision'}}, 'success');
+assert.equal(subscriptionUrl.val(), 'https://example.invalid/final', 'Unchanged input reflects backend trimming');
+assert.equal(subscriptionSecret.val(), 'example-final');
+assert.equal(subscriptionSave.disabled, true, 'Acknowledged input is clean');
+assert.equal(subscriptionRun.disabled, false, 'Clean saved settings allow a subscription run');
+console.log('Subscription delayed saves, edit preservation, revision handoff and failures: all checks passed');
