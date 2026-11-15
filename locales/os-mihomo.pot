@@ -1811,6 +1811,10 @@ msgid "Favorite group"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Members: %s"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Favorite proxy"
 msgstr ""
 
