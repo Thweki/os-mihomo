@@ -1389,3 +1389,24 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+msgid "Source IP"
+msgstr "源 IP"
+
+msgid "Clients shown"
+msgstr "显示的客户端"
+
+msgid "Unknown source"
+msgstr "未知来源"
+
+msgid "No active connections."
+msgstr "没有活动连接。"
+
+msgid "Client traffic is unavailable."
+msgstr "客户端流量不可用。"
+
+msgid "Client traffic"
+msgstr "客户端流量"
+
+msgid "Top 10 source IPs by bytes transferred on currently active connections. Closed connections are excluded; this is not a usage history."
+msgstr "按当前活动连接传输的字节数列出前十个源 IP。不包含已关闭的连接，并非历史用量。"

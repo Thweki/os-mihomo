@@ -23,6 +23,8 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+The overview's **Client traffic** table shows the top ten source IPs by combined download and upload bytes on currently active connections, plus each client's connection count. It combines ports and protocols for the same IP, includes an unknown-source bucket, and refreshes with the overview independently of connection-table searches or pagination. These are active-connection lifetime counters, not rates or per-device usage history: closing a connection removes its bytes, and the source IP is the address Mihomo sees (which may reflect NAT). Unavailable data is labeled separately from an empty snapshot.
+
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)

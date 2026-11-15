@@ -1805,3 +1805,31 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Source IP"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Clients shown"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Unknown source"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "No active connections."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Client traffic is unavailable."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Client traffic"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Top 10 source IPs by bytes transferred on currently active connections. Closed connections are excluded; this is not a usage history."
+msgstr ""

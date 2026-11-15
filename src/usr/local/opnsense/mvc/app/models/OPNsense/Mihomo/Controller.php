@@ -215,6 +215,36 @@ class Controller
         ];
     }
 
+    /** Top clients by transferred bytes on active connections, before any grid paging/filtering. */
+    public static function connectionClients(array $connections): array
+    {
+        $clients = [];
+        foreach ($connections as $connection) {
+            if (!is_array($connection)) {
+                continue;
+            }
+            $metadata = is_array($connection['metadata'] ?? null) ? $connection['metadata'] : [];
+            $source = $metadata['sourceIP'] ?? '';
+            // Canonicalize IPv6 spellings; missing/invalid addresses share an unknown bucket.
+            $source = is_string($source) && filter_var($source, FILTER_VALIDATE_IP)
+                ? inet_ntop(inet_pton($source)) : '';
+            if (!isset($clients[$source])) {
+                $clients[$source] = ['source' => $source, 'connections' => 0, 'download' => 0, 'upload' => 0];
+            }
+            $clients[$source]['connections']++;
+            foreach (['download', 'upload'] as $direction) {
+                $bytes = $connection[$direction] ?? 0;
+                $clients[$source][$direction] += is_numeric($bytes) ? max(0, (int)$bytes) : 0;
+            }
+        }
+        $clients = array_values($clients);
+        usort($clients, static function ($a, $b) {
+            return (($b['download'] + $b['upload']) <=> ($a['download'] + $a['upload']))
+                ?: strcmp($a['source'], $b['source']);
+        });
+        return ['rows' => array_slice($clients, 0, 10), 'total' => count($clients)];
+    }
+
     /**
      * 连接列表 → 前端表格行（含流量格式化所需的原始字节数）。
      * 处理 mihomo 的 metadata 字段差异（host / destinationIP / sniffHost）。
