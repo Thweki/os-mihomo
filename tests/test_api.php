@@ -24,12 +24,19 @@ namespace OPNsense\Mihomo {
             return $result;
         }
     }
-    class Safety {
+    class BootSettingsProbe {
         public static int $calls = 0;
-        public static function bootEnabled(): bool {
-            self::$calls++;
-            throw new \LogicException('Rejected YAML must not reach boot settings');
+        public static bool $reject = true;
+    }
+    function is_readable(string $path): bool {
+        if ($path === '/etc/rc.conf.d/mihomo') {
+            BootSettingsProbe::$calls++;
+            if (BootSettingsProbe::$reject) {
+                throw new \LogicException('Rejected YAML must not reach boot settings');
+            }
+            return false;
         }
+        return \is_readable($path);
     }
 }
 namespace {
@@ -37,7 +44,7 @@ namespace {
         function gettext(string $message): string { return $message; }
     }
     $app = dirname(__DIR__) . '/src/usr/local/opnsense/mvc/app/';
-    foreach (['RequestParamsTrait', 'Logs', 'ActionResult', 'Subscription', 'Config'] as $name) {
+    foreach (['RequestParamsTrait', 'Logs', 'ActionResult', 'Subscription', 'Config', 'Inspector', 'Safety'] as $name) {
         require_once $app . 'models/OPNsense/Mihomo/' . $name . '.php';
     }
     foreach (['Dashboard', 'Settings', 'Subscription', 'Routing', 'Log'] as $name) {
@@ -113,7 +120,7 @@ namespace {
                 'Flow parent rejection is an explicit unchanged Apply failure');
             expect(str_contains($result['message'], '"tun"') && str_contains($result['message'], 'block mapping'),
                 'Apply explains how to resolve the unsupported parent without exposing its contents');
-            expect(\OPNsense\Core\Backend::$calls === 0 && \OPNsense\Mihomo\Safety::$calls === 0,
+            expect(\OPNsense\Core\Backend::$calls === 0 && \OPNsense\Mihomo\BootSettingsProbe::$calls === 0,
                 'Flow parent rejection precedes other file preparation and configd commit');
             expect(file_get_contents($flowFile) === $flow, 'Locked siblings and earlier selected settings remain byte-identical');
             expect(glob($flowFile . '.bak.*') === [], 'Rejected Apply creates no configuration backup');
@@ -122,6 +129,8 @@ namespace {
         \OPNsense\Mihomo\Config::setFileOverride(null);
         unlink($flowFile);
     }
+    // Safety report fixtures use the real class with boot settings disabled.
+    \OPNsense\Mihomo\BootSettingsProbe::$reject = false;
     echo "Settings Apply flow mappings: fixed TUN fields reject without writes\n";
 
     $settings = new \OPNsense\Mihomo\Api\SettingsController();
@@ -136,6 +145,59 @@ namespace {
     }
     \OPNsense\Core\Backend::$output = json_encode(\OPNsense\Mihomo\ActionResult::make('completed'));
     expect($settings->configTestAction()['status'] === 'ok', 'Explicit validated result accepted');
+    $config = tempnam(sys_get_temp_dir(), 'mihomo-safety-');
+    file_put_contents($config, "external-controller: 127.0.0.1:9090\ntun:\n  enable: false\n");
+    \OPNsense\Mihomo\Config::setFileOverride($config);
+    $fixtures = [
+        'empty response' => ['', false, 'The backend did not return a valid action result.'],
+        'whitespace response' => [" \n\t", false, 'The backend did not return a valid action result.'],
+        'malformed JSON' => ['{"state":', false, 'The backend did not return a valid action result.'],
+        'incomplete envelope' => ['{"status":"ok"}', false, 'The backend did not return a valid action result.'],
+        'legacy success text' => ['Configuration is valid.', false, 'The backend did not return a valid action result.'],
+        'rejected configuration' => [
+            '{"status":"failed","state":"failed","changed":false,"code":"configuration_failed","message":"Mihomo rejected the configuration (exit 1)."}',
+            false, 'Mihomo rejected the configuration (exit 1).',
+        ],
+        'missing binary' => [
+            '{"status":"failed","state":"failed","changed":false,"code":"configuration_failed","message":"The mihomo binary is missing."}',
+            false, 'The mihomo binary is missing.',
+        ],
+        'successful validation' => [
+            '{"status":"ok","state":"unchanged","changed":false,"code":"valid","message":"Configuration validation passed."}',
+            true, 'Configuration validation passed.',
+        ],
+    ];
+    foreach (['accepted', 'partial', 'failed', 'completed'] as $state) {
+        $fixtures[$state . ' is not a validation result'] = [
+            json_encode(\OPNsense\Mihomo\ActionResult::make($state, false, 'valid', 'Validation pending.')),
+            false, 'Validation pending.',
+        ];
+    }
+    $fixtures['unrelated successful result'] = [
+        json_encode(\OPNsense\Mihomo\ActionResult::make('unchanged', false, 'unchanged', 'No changes.')),
+        false, 'No changes.',
+    ];
+    $fixtures['success depends on the envelope, not message words'] = [
+        json_encode(\OPNsense\Mihomo\ActionResult::make('unchanged', false, 'valid', 'No invalid syntax or error found.')),
+        true, 'No invalid syntax or error found.',
+    ];
+    try {
+        foreach ($fixtures as $label => [$output, $valid, $message]) {
+            \OPNsense\Core\Backend::$output = $output;
+            $report = \OPNsense\Mihomo\Safety::report(true);
+            $item = $report['items'][count($report['items']) - 1];
+            expect($item['level'] === ($valid ? 'info' : 'danger'), 'Safety validation severity: ' . $label);
+            expect($report['status'] === ($valid ? 'info' : 'danger'), 'Safety report severity: ' . $label);
+            expect($item['title'] === ($valid ? 'Configuration syntax is valid' : 'Configuration syntax is invalid'), 'Safety validation title: ' . $label);
+            expect($item['detail'] === $message, 'Safety validation message: ' . $label);
+        }
+        $report = \OPNsense\Mihomo\Safety::report(false);
+        expect(count($report['items']) === 1, 'Optional validation stays disabled by default');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        unlink($config);
+    }
+    echo "Safety structured validation results: passed\n";
     $raw = "converter https://example.invalid/path?token=fixture-value\nsecret: fixture-secret\nAuthorization: Bearer fixture-auth\n访问密钥：fixture-key\nnormal message";
     $redacted = \OPNsense\Mihomo\Logs::redact($raw);
     foreach (['fixture-value', 'fixture-secret', 'fixture-auth', 'fixture-key'] as $secret) {
