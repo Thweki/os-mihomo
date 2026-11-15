@@ -60,6 +60,9 @@ msgstr "已关闭全部连接。"
 msgid "All destination ports"
 msgstr "全部目标端口"
 
+msgid "All proxies in this group are hidden."
+msgstr "此分组中的所有代理均已隐藏。"
+
 msgid "Allow LAN"
 msgstr "允许局域网"
 
@@ -398,6 +401,15 @@ msgstr "全局模式"
 
 msgid "Group and member are required."
 msgstr "需要提供分组与节点名称。"
+
+msgid "Hidden proxies"
+msgstr "已隐藏的代理"
+
+msgid "Hide proxy until reload"
+msgstr "隐藏代理直到重新加载"
+
+msgid "Hiding only changes this overview until reload. Selected proxies stay visible; routing and group latency tests are unchanged."
+msgstr "隐藏仅影响当前概览，重新加载后恢复。已选代理保持可见；路由和分组延迟测试不受影响。"
 
 msgid "History is collected while this page is open. Gaps indicate missing samples."
 msgstr "仅在本页打开时记录流量，空白处表示数据缺失。"
@@ -777,6 +789,12 @@ msgstr "应用后重启服务"
 msgid "Restore"
 msgstr "恢复"
 
+msgid "Restore all proxies"
+msgstr "恢复所有代理"
+
+msgid "Restore proxy"
+msgstr "恢复代理"
+
 msgid "Restore this configuration backup? The current file is backed up first and the result is validated with mihomo -t."
 msgstr "要用这份备份覆盖当前配置吗？当前文件会先自动备份，结果会用 mihomo -t 校验。"
 
@@ -887,6 +905,9 @@ msgstr "设置已保存"
 
 msgid "Show differences only"
 msgstr "只看差异"
+
+msgid "Show hidden proxies"
+msgstr "显示隐藏的代理"
 
 msgid "Size"
 msgstr "大小"

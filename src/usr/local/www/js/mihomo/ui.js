@@ -118,7 +118,7 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
-    function renderProxyGroups(container, groups, labels, delayText, delayClass) {
+    function renderProxyGroups(container, groups, labels, delayText, delayClass, visibility) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         const scroll = new Map();
         container.querySelectorAll('ul[data-group]').forEach(node => scroll.set(node.getAttribute('data-group'), node.scrollTop));
@@ -140,6 +140,9 @@
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
             (group.members || []).forEach(member => {
                 const memberName = decodeApiText(member.name);
+                const hidden = visibility && visibility.hidden.has(memberName);
+                // Keep the current selection visible, including external/automatic switches.
+                if (hidden && !visibility.showHidden && !member.selected) { return; }
                 const item = el('li', {class: 'list-group-item' + (member.selected ? ' active' : ''),
                     style: 'padding:8px 12px;display:flex;align-items:center;gap:6px', 'data-group': name, 'data-member': memberName});
                 // Separate buttons avoid nested controls; native buttons support Enter and Space.
@@ -154,15 +157,31 @@
                 const testMember = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-test', 'data-name': memberName,
                     'data-focus-key': JSON.stringify(['test', name, memberName]), 'aria-label': labels.testNode + ': ' + memberName, title: labels.testNode});
                 testMember.appendChild(el('i', {class: 'fa fa-bolt fa-fw', 'aria-hidden': 'true'}));
-                item.appendChild(testMember); list.appendChild(item);
+                item.appendChild(testMember);
+                if (visibility) {
+                    const label = hidden ? labels.restoreNode : labels.hideNode;
+                    const hide = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-hide',
+                        'data-name': memberName, 'data-group': name,
+                        'data-focus-key': JSON.stringify(['hide', name, memberName]),
+                        'aria-label': label + ': ' + memberName, title: label, 'aria-pressed': hidden ? 'true' : 'false'});
+                    if (member.selected && !hidden) { hide.setAttribute('disabled', 'disabled'); }
+                    hide.appendChild(el('i', {class: 'fa ' + (hidden ? 'fa-eye' : 'fa-eye-slash') + ' fa-fw', 'aria-hidden': 'true'}));
+                    item.appendChild(hide);
+                }
+                list.appendChild(item);
             });
+            if (visibility && !list.children.length && (group.members || []).length) {
+                list.appendChild(el('li', {class: 'list-group-item text-muted'}, labels.allHidden));
+            }
             card.appendChild(header); card.appendChild(list); column.appendChild(card); row.appendChild(column);
         });
         container.replaceChildren(row);
         // Names are map keys, never interpolated CSS selectors.
         container.querySelectorAll('ul[data-group]').forEach(node => { node.scrollTop = scroll.get(node.getAttribute('data-group')) || 0; });
         if (focusKey) {
-            const replacement = Array.from(container.querySelectorAll('[data-focus-key]')).find(node => node.getAttribute('data-focus-key') === focusKey);
+            const controls = Array.from(container.querySelectorAll('[data-focus-key]'));
+            const replacement = controls.find(node => node.getAttribute('data-focus-key') === focusKey && node.getAttribute('disabled') === null)
+                || controls.find(node => node.getAttribute('data-focus-key') === JSON.stringify(['group', active.getAttribute('data-group')]));
             if (replacement) { replacement.focus({preventScroll: true}); }
         }
     }

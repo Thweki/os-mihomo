@@ -338,23 +338,43 @@ now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
 
+// This behavioral regression also runs against the pre-feature renderer.
+const hiddenFixture = doc.createElement('div');
+UI.renderProxyGroups(hiddenFixture, [{name: 'Group', members: [
+    {name: encode(names[2]), selected: false}, {name: 'Selected', selected: true}
+]}], {testGroup: 'Test group', testNode: 'Test node', hideNode: 'Hide', restoreNode: 'Restore'},
+() => '—', () => 'label-default', {hidden: new Set([names[2], 'Selected']), showHidden: false});
+assert.deepEqual(hiddenFixture.querySelectorAll('li[data-member]').map(node => node.getAttribute('data-member')),
+    ['Selected'], 'Hidden proxies are filtered while current selections remain visible');
+
 // Run the dashboard render path with fresh API objects and the real DOM renderer.
 // Unchanged polling must retain nodes, focus and scroll without allocating DOM.
-const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null;\n)?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
+const renderGroupsScript = indexView.match(/        const hiddenProxies = new Set\(\);[\s\S]*?(?=        let testing = false;)/)[0]
     .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
+const visibilityControls = new Map(), visibilityHandlers = new Map();
 const groupContext = vm.createContext({
     $: selector => {
-        assert.equal(selector, '#proxy-groups');
-        return {0: pollingBox, html: text => {
-            const placeholder = pollingDoc.createElement('placeholder');
-            placeholder.textContent = text;
-            pollingBox.replaceChildren(placeholder);
-        }};
+        if (typeof selector !== 'string') {
+            return {attr: key => selector.getAttribute(key), prop: key => selector[key]};
+        }
+        if (!visibilityControls.has(selector)) {
+            const item = {0: pollingBox, text(value) { this.label = value; return this; },
+                prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+                on(event, delegated, handler) { visibilityHandlers.set(selector + ':' + event + (handler ? ':' + delegated : ''), handler || delegated); return this; },
+                focus() { this.focused = true; },
+                html: text => {
+                    const placeholder = pollingDoc.createElement('placeholder');
+                    placeholder.textContent = text;
+                    pollingBox.replaceChildren(placeholder);
+                }};
+            visibilityControls.set(selector, item);
+        }
+        return visibilityControls.get(selector);
     },
-    MihomoUI: UI, delayText: value => value + ' ms', delayClass: () => 'label-success'
+    MihomoUI: UI, testing: false, delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
 vm.runInContext(renderGroupsScript, groupContext);
 const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
@@ -398,3 +418,102 @@ for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
     assert.equal(pollingBox.children[0], recoveredRow);
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
+
+// Hide/restore runs the real view handlers and renderer. The state belongs only
+// to this page; no storage or routing API is available to these handlers.
+const hideResponse = {ready: true, groups: [
+    {name: 'Primary', type: 'Selector', members: [
+        {name: 'Active', type: 'test', selected: true, delay: 10},
+        {name: encode(names[2]), type: 'test', selected: false, delay: 20},
+        {name: '__proto__', type: 'test', selected: false, delay: 30}
+    ]},
+    {name: 'Other', type: 'URLTest', members: [
+        {name: encode(names[2]), type: 'test', selected: false, delay: 20}
+    ]}
+]};
+const originalHideResponse = JSON.stringify(hideResponse);
+const visibleNames = () => pollingBox.querySelectorAll('li[data-member]').map(node => node.getAttribute('data-member'));
+const hideButton = (name, group = 'Primary') => pollingBox.querySelectorAll('button[data-focus-key]')
+    .find(node => node.getAttribute('data-focus-key') === JSON.stringify(['hide', group, name]));
+const clickHide = name => visibilityHandlers.get('#proxy-groups:click:.cmd-hide').call(hideButton(name));
+const showHidden = checked => {
+    const checkbox = visibilityControls.get('#proxy-show-hidden');
+    checkbox.checked = checked;
+    visibilityHandlers.get('#proxy-show-hidden:change').call(checkbox);
+};
+pollGroups(hideResponse);
+assert.equal(hideButton('Active').getAttribute('disabled'), 'disabled', 'Current selections cannot be hidden');
+assert.equal(hideButton(names[2]).getAttribute('aria-pressed'), 'false');
+pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop = 88;
+pollingDoc.activeElement = hideButton(names[2]);
+clickHide(names[2]);
+assert.deepEqual(visibleNames(), ['Active', '__proto__'], 'A proxy is hidden in every group by its exact decoded name');
+assert.equal(visibilityControls.get('#proxy-hidden-count').label, 1, 'Count proxies, not memberships');
+assert.equal(visibilityControls.get('#proxy-restore-all').disabled, false);
+assert.equal(pollingDoc.activeElement.getAttribute('data-focus-key'), JSON.stringify(['group', 'Primary']), 'Hiding the focused row returns focus to its group');
+assert(pollingBox.contains(pollingDoc.activeElement));
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 88);
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[1].children[0].textContent, 'translated', 'An entirely hidden group explains its empty list');
+const hiddenRow = pollingBox.children[0];
+pollGroups(hideResponse);
+assert.equal(pollingBox.children[0], hiddenRow, 'Unchanged polls retain the filtered DOM');
+for (const empty of [{ready: false}, {ready: true, groups: []}]) {
+    pollGroups(empty); pollGroups(hideResponse);
+    assert.deepEqual(visibleNames(), ['Active', '__proto__'], 'Hiding survives controller recovery');
+}
+showHidden(true);
+assert.deepEqual(visibleNames(), ['Active', names[2], '__proto__', names[2]]);
+assert.equal(hideButton(names[2]).getAttribute('aria-pressed'), 'true');
+assert.equal(hideButton(names[2]).getAttribute('aria-label'), 'translated: ' + names[2]);
+clickHide(names[2]);
+showHidden(false);
+assert.equal(visibleNames().length, 4, 'Individual restore removes the filter in every group');
+assert.equal(visibilityControls.get('#proxy-hidden-count').label, 0);
+clickHide('__proto__');
+clickHide(names[2]);
+const externalSwitch = JSON.parse(originalHideResponse);
+externalSwitch.groups[0].members[0].selected = false;
+externalSwitch.groups[0].members[1].selected = true;
+pollGroups(externalSwitch);
+assert.deepEqual(visibleNames(), ['Active', names[2]], 'A hidden proxy selected by the controller becomes visible in that group');
+assert.equal(hideButton(names[2]).getAttribute('disabled'), null, 'A hidden current selection can still be restored');
+pollingDoc.activeElement = hideButton(names[2]);
+clickHide(names[2]);
+assert.equal(pollingDoc.activeElement.getAttribute('data-focus-key'), JSON.stringify(['group', 'Primary']), 'Restoring a selected proxy does not focus its now-disabled hide button');
+pollGroups(hideResponse);
+clickHide(names[2]);
+pollGroups(hideResponse);
+assert.deepEqual(visibleNames(), ['Active'], 'The hiding choice applies again when the proxy is no longer selected');
+assert.equal(JSON.stringify(hideResponse), originalHideResponse, 'Filtering never mutates controller data');
+
+// Group tests use the complete controller snapshot, not just displayed rows.
+const groupTestScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-test-group',[\s\S]*?\n        \}\);/)[0];
+const testNodesScript = indexView.match(/        function testNodes\(names\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+const latencyRequests = [];
+let refreshedGroups = 0;
+groupContext.ajaxCall = (url, data, done) => latencyRequests.push({url, data, done});
+groupContext.groupsPoller = {refresh: () => { refreshedGroups++; }};
+vm.runInContext(testNodesScript + '\n' + groupTestScript, groupContext);
+const groupTestButton = pollingBox.querySelectorAll('button[data-focus-key]')
+    .find(node => node.getAttribute('data-focus-key') === JSON.stringify(['group', 'Primary']));
+visibilityHandlers.get('#proxy-groups:click:.cmd-test-group').call(groupTestButton);
+assert.deepEqual(latencyRequests.map(request => request.data.name), ['Active', names[2], '__proto__']);
+assert(latencyRequests.every(request => request.url === '/api/mihomo/dashboard/test_delay'), 'Visibility actions never request a routing write');
+visibilityHandlers.get('#proxy-restore-all:click')();
+assert.deepEqual(visibleNames(), ['Active'], 'Visibility changes wait for an in-progress latency test');
+latencyRequests.forEach(request => request.done({status: 'ok'}, 'success'));
+assert.equal(refreshedGroups, 1);
+visibilityHandlers.get('#proxy-restore-all:click')();
+assert.equal(visibleNames().length, 4);
+assert.equal(visibilityControls.get('#proxy-hidden-count').label, 0);
+assert.equal(visibilityControls.get('#proxy-restore-all').disabled, true);
+assert.equal(visibilityControls.get('#proxy-show-hidden').focused, true, 'Restore-all leaves focus on an enabled control');
+clickHide(names[2]);
+// Re-evaluating the view in a new realm models reload: no browser persistence.
+const reloadedContext = vm.createContext({$: groupContext.$, MihomoUI: UI,
+    delayText: groupContext.delayText, delayClass: groupContext.delayClass, testing: false,
+    response: hideResponse});
+vm.runInContext(renderGroupsScript + '\nrenderGroups(response);', reloadedContext);
+assert.equal(visibleNames().length, 4, 'Reload restores every proxy');
+console.log('Temporary proxy hiding, shared names, selection safety, recovery, focus, restore and full-group tests: all checks passed');

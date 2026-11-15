@@ -78,6 +78,10 @@ msgstr ""
 msgid "All destination ports"
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "All proxies in this group are hidden."
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/SettingsController.php src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
 msgid "Allow LAN"
 msgstr ""
@@ -528,6 +532,18 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/DashboardController.php
 msgid "Group and member are required."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Hidden proxies"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Hide proxy until reload"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Hiding only changes this overview until reload. Selected proxies stay visible; routing and group latency tests are unchanged."
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
@@ -1034,6 +1050,14 @@ msgstr ""
 msgid "Restore"
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore all proxies"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore proxy"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt
 msgid "Restore this configuration backup? The current file is backed up first and the result is validated with mihomo -t."
 msgstr ""
@@ -1180,6 +1204,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Show differences only"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Show hidden proxies"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt

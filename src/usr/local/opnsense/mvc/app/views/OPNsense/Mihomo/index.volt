@@ -171,8 +171,11 @@
         /* ------------------------------------------------------------------ *
          * 代理分组
          * ------------------------------------------------------------------ */
+        const hiddenProxies = new Set();
+        let showHiddenProxies = false, latestGroups = null;
         let renderedGroups = null;
         function renderGroups(data) {
+            latestGroups = data;
             const $box = $('#proxy-groups');
             if (!data['ready']) {
                 renderedGroups = null;
@@ -189,20 +192,48 @@
             }
 
             // Polls return fresh objects; retain the DOM while their data is unchanged.
-            const snapshot = JSON.stringify(groups);
+            const snapshot = JSON.stringify([groups, Array.from(hiddenProxies), showHiddenProxies]);
             if (snapshot === renderedGroups) { return; }
             MihomoUI.renderProxyGroups($box[0], groups, {
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
-                testNode: {{ lang._('Test node latency') | json_encode }}
-            }, delayText, delayClass);
+                testNode: {{ lang._('Test node latency') | json_encode }},
+                hideNode: {{ lang._('Hide proxy until reload') | json_encode }},
+                restoreNode: {{ lang._('Restore proxy') | json_encode }},
+                allHidden: {{ lang._('All proxies in this group are hidden.') | json_encode }}
+            }, delayText, delayClass, {hidden: hiddenProxies, showHidden: showHiddenProxies});
             renderedGroups = snapshot;
         }
+
+        function updateProxyVisibility() {
+            $('#proxy-hidden-count').text(hiddenProxies.size);
+            $('#proxy-restore-all').prop('disabled', hiddenProxies.size === 0);
+            if (latestGroups) { renderGroups(latestGroups); }
+        }
+        $('#proxy-groups').on('click', '.cmd-hide', function () {
+            if (testing) { return; }
+            const name = $(this).attr('data-name');
+            if (hiddenProxies.has(name)) { hiddenProxies.delete(name); }
+            else { hiddenProxies.add(name); }
+            updateProxyVisibility();
+        });
+        $('#proxy-show-hidden').on('change', function () {
+            if (testing) { return; }
+            showHiddenProxies = $(this).prop('checked');
+            updateProxyVisibility();
+        });
+        $('#proxy-restore-all').on('click', function () {
+            if (testing) { return; }
+            hiddenProxies.clear();
+            updateProxyVisibility();
+            $('#proxy-show-hidden').focus();
+        });
 
         let testing = false;
         function testNodes(names) {
             if (testing || !names.length) { return; }
             testing = true;
             $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
+            $('#proxy-show-hidden, #proxy-restore-all').prop('disabled', true);
             const progress = function (state) {
                 $('#proxy-test-state').text({{ lang._('Latency tests') | json_encode }} + ': ' + state.completed + '/' + state.total
                     + ' · ' + {{ lang._('Failed') | json_encode }} + ': ' + state.failed);
@@ -215,13 +246,15 @@
             }, progress, function () {
                 testing = false;
                 $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', false);
+                $('#proxy-show-hidden').prop('disabled', false);
+                $('#proxy-restore-all').prop('disabled', hiddenProxies.size === 0);
                 groupsPoller.refresh();
             });
         }
         $('#proxy-groups').on('click', '.cmd-test', function () { testNodes([$(this).attr('data-name')]); });
         $('#proxy-groups').on('click', '.cmd-test-group', function () {
-            const names = [];
-            $(this).closest('.content-box').find('.cmd-test').each(function () { names.push($(this).attr('data-name')); });
+            const group = latestGroups && (latestGroups.groups || []).find(group => MihomoUI.decodeApiText(group.name) === $(this).attr('data-group'));
+            const names = group ? (group.members || []).map(member => MihomoUI.decodeApiText(member.name)) : [];
             testNodes(Array.from(new Set(names)));
         });
         $('#proxy-groups').on('click', '.cmd-select', function () {
@@ -468,6 +501,12 @@
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div style="padding:0 12px;">
+                <label><input type="checkbox" id="proxy-show-hidden"> {{ lang._('Show hidden proxies') }}</label>
+                <span role="status">{{ lang._('Hidden proxies') }}: <span id="proxy-hidden-count">0</span></span>
+                <button type="button" id="proxy-restore-all" class="btn btn-xs btn-default" disabled>{{ lang._('Restore all proxies') }}</button>
+                <p class="text-muted">{{ lang._('Hiding only changes this overview until reload. Selected proxies stay visible; routing and group latency tests are unchanged.') }}</p>
+            </div>
             <div style="padding: 12px;" id="proxy-groups">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>
             </div>
