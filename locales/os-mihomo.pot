@@ -1765,3 +1765,43 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "…"
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Saving settings"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Applying settings"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "No file changes needed"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Restart accepted; readiness unconfirmed"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Outcome unconfirmed; check current settings before retrying"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "No settings applies on this page yet."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Recent settings applies"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Latest 10 attempts on this page, newest first. Reloading clears this list. Field names describe submitted edits, not confirmed file changes. Values are not retained. YAML edits and other operators are not included."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Started"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Outcome"
+msgstr ""
