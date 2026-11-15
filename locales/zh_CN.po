@@ -14,6 +14,14 @@ msgstr "测试已停止。"
 
 msgid "Stopping tests; waiting for active requests."
 msgstr "正在停止测试，等待已发出的请求完成。"
+msgid "Rule-based: Mihomo follows matching rules to route or block traffic."
+msgstr "规则模式：Mihomo 根据匹配的规则转发或阻止流量。"
+
+msgid "Global: traffic handled by Mihomo uses the GLOBAL group selection."
+msgstr "全局模式：由 Mihomo 处理的流量使用 GLOBAL 分组中选定的出口。"
+
+msgid "Direct: traffic handled by Mihomo connects without a proxy."
+msgstr "直连模式：由 Mihomo 处理的流量不经过代理，直接连接。"
 
 msgid "Collapse group"
 msgstr "折叠分组"
