@@ -119,18 +119,18 @@ class Controller
         return $result['ok'];
     }
 
-    /** mihomo 版本信息 */
+    /** mihomo 版本信息；请求失败或响应不是数组时返回 null。 */
     public static function version(): ?array
     {
         $result = self::get('/version', 2);
-        return $result['ok'] ? $result['data'] : null;
+        return $result['ok'] && is_array($result['data']) ? $result['data'] : null;
     }
 
-    /** 运行中的配置（mode / log-level / ports …） */
+    /** 运行中的配置（mode / log-level / ports …）；请求失败或响应不是数组时返回 null。 */
     public static function runningConfig(): ?array
     {
         $result = self::get('/configs', 3);
-        return $result['ok'] ? $result['data'] : null;
+        return $result['ok'] && is_array($result['data']) ? $result['data'] : null;
     }
 
     /**
