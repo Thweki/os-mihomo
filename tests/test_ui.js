@@ -403,7 +403,7 @@ const totalsContext = {
     sessionStorage: {setItem: () => historySaves++},
     ajaxGet: (url, params, done) => totalRequests.push({url, params, done})
 };
-vm.runInNewContext(totalsScript, totalsContext);
+vm.runInNewContext('function renderModeHint() {}\n' + totalsScript, totalsContext);
 const bytesControl = totalControl('#traffic-totals-bytes');
 const shownTotals = () => ['#stat-download', '#stat-upload'].map(id => totalControl(id).label);
 const toggleTotals = checked => { bytesControl.checked = checked; bytesControl.handlers.change(); };
@@ -467,7 +467,8 @@ const modeContext = {
     trafficHistory: {add: () => ({down: null, up: null})}, drawTraffic: () => {},
     overviewPoller: {refresh: () => { modeRefreshes++; }},
     ajaxCall: (url, data, done) => modeWrites.push({url, data, done}),
-    setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; }
+    setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; },
+    renderTrafficTotals() {}
 };
 const modeScript = indexView.match(/        function renderModeHint\(\) \{[\s\S]*?\n        \}\);/)[0];
 const modeOverviewScript = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0];
