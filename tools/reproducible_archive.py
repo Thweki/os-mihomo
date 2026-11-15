@@ -9,7 +9,14 @@ import tarfile
 
 def archive(root, output, epoch, package=False):
     root = Path(root).resolve()
-    files = sorted(path for path in root.rglob('*') if path.is_file())
+    files = []
+    # Check links before filtering files or opening the output: directory and
+    # dangling links must not disappear silently from a successful archive.
+    for path in sorted(root.rglob('*')):
+        if path.is_symlink():
+            raise ValueError(f'Symlink not supported: {path}')
+        if path.is_file():
+            files.append(path)
     if package:
         files.sort(key=lambda path: (0 if path.name == '+COMPACT_MANIFEST' else
                                     1 if path.name == '+MANIFEST' else 2,
