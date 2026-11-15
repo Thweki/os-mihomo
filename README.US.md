@@ -23,6 +23,8 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+Each **Proxy Groups** card shows **Members: N**, the number of direct entries reported by the controller, including nested groups and DIRECT/REJECT choices. Empty groups show zero. Counts refresh with the group list, making changes after subscription updates easy to spot; they do not indicate how many proxies are healthy.
+
 In **Proxy Groups**, click the star beside a group to pin its card first, or beside a proxy to pin it first in every group containing it. Click again to restore its normal order. Stars do not change the selected proxy or routing. Favorites are remembered by exact name in this browser for this WebGUI address (shared by users of the same browser profile); clearing site data removes them. Missing nodes retain their stars if the same names return after a subscription update. If browser storage is unavailable, stars work for the current page visit and a notice explains that they could not be saved.
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
