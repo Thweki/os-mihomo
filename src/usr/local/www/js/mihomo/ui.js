@@ -142,6 +142,35 @@
             return starred.concat(rest);
         }
     }
+    // Notes use exact decoded names, including names shared by multiple groups.
+    class ProxyNotes {
+        constructor(storage) {
+            this.storage = storage || (() => localStorage);
+            this.notes = new Map();
+            try {
+                const saved = JSON.parse(this.storage().getItem('mihomo.proxy-notes.v1'));
+                if (Array.isArray(saved)) {
+                    saved.forEach(entry => {
+                        if (Array.isArray(entry) && entry.length === 2 && typeof entry[0] === 'string'
+                            && typeof entry[1] === 'string' && entry[1].trim() && entry[1].length <= 160) {
+                            this.notes.set(entry[0], entry[1]);
+                        }
+                    });
+                }
+            } catch (error) { /* Invalid or unavailable storage starts with no notes. */ }
+        }
+        get(name) { return this.notes.get(name) || ''; }
+        set(name, text) {
+            if (typeof name !== 'string' || typeof text !== 'string' || text.length > 160) { return 'invalid'; }
+            text = text.trim();
+            if (text) { this.notes.set(name, text); }
+            else { this.notes.delete(name); }
+            try {
+                this.storage().setItem('mihomo.proxy-notes.v1', JSON.stringify([...this.notes]));
+                return 'saved';
+            } catch (error) { return 'temporary'; } // Keep edits for this visit, including removals.
+        }
+    }
     // Every dynamic value reaches textContent/setAttribute, never HTML parsing.
     function element(doc, tag, attrs, text) {
         const node = doc.createElement(tag);
@@ -149,7 +178,7 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
-    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, collapsedGroups) {
+    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, collapsedGroups, notes) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         function favoriteButton(kind, name, group) {
             const starred = favorites.has(kind, name);
@@ -208,6 +237,18 @@
                 select.appendChild(el('span', {}, ' ' + memberName + ' '));
                 select.appendChild(el('small', {class: 'text-muted'}, decodeApiText(member.type)));
                 item.appendChild(select);
+                if (notes) {
+                    const note = notes.get(memberName);
+                    if (note) {
+                        select.appendChild(el('small', {'data-proxy-note': memberName,
+                            style: 'display:block;white-space:pre-wrap;overflow-wrap:anywhere'}, note));
+                    }
+                    const edit = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-proxy-note',
+                        'data-name': memberName, 'data-focus-key': JSON.stringify(['note', name, memberName]),
+                        'aria-label': labels.editNote + ': ' + memberName, title: labels.editNote});
+                    edit.appendChild(el('i', {class: 'fa fa-pencil fa-fw', 'aria-hidden': 'true'}));
+                    item.appendChild(edit);
+                }
                 item.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm ' + delayClass(member.delay)}, delayText(member.delay)));
                 const testMember = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-test', 'data-name': memberName,
                     'data-focus-key': JSON.stringify(['test', name, memberName]), 'aria-label': labels.testNode + ': ' + memberName, title: labels.testNode});
@@ -237,5 +278,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites, ProxyNotes};
 }));

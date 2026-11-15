@@ -365,7 +365,20 @@ const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
-let favoriteNotice = '', testsDisabled = false, favoriteHandler, collapseHandler, testGroupHandler;
+let favoriteNotice = '', testsDisabled = false, favoriteHandler, collapseHandler, testGroupHandler, noteHandler;
+const noteControls = new Map();
+function noteControl(selector) {
+    if (!noteControls.has(selector)) {
+        const node = pollingDoc.createElement('input');
+        node.focus = () => { pollingDoc.activeElement = node; };
+        noteControls.set(selector, {0: node, value: '', label: '', hidden: true, handlers: {},
+            text(value) { this.label = value; return this; },
+            val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
+            prop(key, value) { this[key] = value; return this; },
+            on(event, handler) { this.handlers[event] = handler; return this; }});
+    }
+    return noteControls.get(selector);
+}
 const dashboardStorage = new Map();
 const dashboardFavorites = new UI.ProxyFavorites(() => ({
     getItem: key => dashboardStorage.get(key) || null,
@@ -385,6 +398,7 @@ const groupContext = vm.createContext({
             }};
         }
         if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
+        if (selector.startsWith('#proxy-note-')) { return noteControl(selector); }
         if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
             return {prop: (key, value) => { assert.equal(key, 'disabled'); testsDisabled = value; }};
         }
@@ -393,6 +407,7 @@ const groupContext = vm.createContext({
             assert.equal(event, 'click');
             if (target === '.cmd-collapse-group') { collapseHandler = handler; }
             else if (target === '.cmd-test-group') { testGroupHandler = handler; }
+            else if (target === '.cmd-proxy-note') { noteHandler = handler; }
             else { assert.equal(target, '.cmd-favorite'); favoriteHandler = handler; }
         }, html: text => {
             const placeholder = pollingDoc.createElement('placeholder');
@@ -401,10 +416,16 @@ const groupContext = vm.createContext({
         }};
     },
     MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false,
+    localStorage: {getItem: key => dashboardStorage.get(key) || null, setItem: (key, value) => dashboardStorage.set(key, value)},
     delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
 const collapseStateScript = indexView.match(/        const collapsedGroups = new Set\(\);[^\n]*/)[0];
-vm.runInContext(collapseStateScript + '\n' + renderGroupsScript, groupContext);
+const noteStateScript = indexView.match(/        const proxyNotes = new MihomoUI.ProxyNotes\(\);/)[0];
+// Inject storage explicitly because UI constructors run in Node's context.
+groupContext.MihomoUI = {...UI, ProxyNotes: class extends UI.ProxyNotes {
+    constructor() { super(() => groupContext.localStorage); }
+}};
+vm.runInContext(collapseStateScript + '\n' + noteStateScript + '\n' + renderGroupsScript, groupContext);
 const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
     {name: 'First', type: 'test', selected: true, delay: 20},
     {name: 'Second', type: 'test', selected: false, delay: 30}
@@ -625,3 +646,148 @@ assert.equal(groupList(foldNames[1]).getAttribute('hidden'), '', 'Groups expand 
 // A new page runs the actual initializer again; no browser persistence is used.
 assert.equal(vm.runInNewContext(collapseStateScript + '\ncollapsedGroups.size;'), 0);
 console.log('Group collapse: defaults, exact names, accessibility, focus, independent toggles, polling/recovery, favorites and full-group tests passed');
+
+// Notes persist literal, exact names and plain text, not HTML or decoded entities.
+let savedNotes = null, noteWrites = 0;
+const noteStorage = {
+    getItem(key) { assert.equal(key, 'mihomo.proxy-notes.v1'); return savedNotes; },
+    setItem(key, value) { assert.equal(key, 'mihomo.proxy-notes.v1'); noteWrites++; savedNotes = value; }
+};
+const notes = new UI.ProxyNotes(() => noteStorage);
+const noteNames = [...names, '__proto__', 'constructor', 'literal &gt;', 'Literal &gt;'];
+const literalNote = '<img src=x onerror=alert(1)> &amp; 中文 📝';
+for (const name of noteNames) {
+    assert.equal(notes.get(name), '');
+    assert.equal(notes.set(name, literalNote), 'saved');
+}
+let reloadedNotes = new UI.ProxyNotes(() => noteStorage);
+assert(noteNames.every(name => reloadedNotes.get(name) === literalNote));
+assert.equal(reloadedNotes.get('literal >'), '', 'Do not decode local names twice');
+assert.equal(reloadedNotes.set('literal &gt;', ' edited '), 'saved');
+assert.equal(reloadedNotes.get('literal &gt;'), 'edited');
+assert.equal(reloadedNotes.get('Literal &gt;'), literalNote, 'Names are case-sensitive');
+assert.equal(reloadedNotes.set('__proto__', '  '), 'saved');
+assert.equal(new UI.ProxyNotes(() => noteStorage).get('__proto__'), '', 'Empty notes remove persisted entries');
+assert.equal(reloadedNotes.set('boundary', '中'.repeat(160)), 'saved');
+const beforeInvalid = noteWrites;
+for (const value of ['x'.repeat(161), null, 42, {}]) {
+    assert.equal(reloadedNotes.set('boundary', value), 'invalid');
+}
+assert.equal(noteWrites, beforeInvalid, 'Invalid edits must not overwrite storage');
+assert.equal(reloadedNotes.get('boundary'), '中'.repeat(160));
+for (const corrupt of ['{', 'null', '42', '{}', '[null,3,{},["wrong",4],[3,"wrong"],["long","' + 'x'.repeat(161) + '"],["valid","ok"]]']) {
+    savedNotes = corrupt;
+    const recovered = new UI.ProxyNotes(() => noteStorage);
+    assert.equal(recovered.get('wrong'), '');
+    assert.equal(recovered.get('long'), '');
+    assert.equal(recovered.get('valid'), corrupt.includes('valid') ? 'ok' : '');
+    assert.equal(recovered.set('new', 'note'), 'saved');
+}
+for (const unavailable of [
+    () => { throw new Error('Storage blocked'); },
+    () => ({getItem() { return null; }, setItem() { throw new Error('Quota exceeded'); }})
+]) {
+    const temporary = new UI.ProxyNotes(unavailable);
+    assert.equal(temporary.set('temporary', 'note'), 'temporary');
+    assert.equal(temporary.get('temporary'), 'note');
+    assert.equal(temporary.set('temporary', ''), 'temporary');
+    assert.equal(temporary.get('temporary'), '');
+}
+console.log('Proxy notes: persistence, exact names, Unicode, removal, length limits, corrupt and unavailable storage passed');
+
+// Execute the actual editor handlers and render path; no network helpers exist.
+const noteEditorScript = indexView.match(/        let noteName = null, noteFocusKey = null;[\s\S]*?        \$\('#proxy-note-cancel'\)\.on\('click', closeNoteEditor\);/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInContext(noteEditorScript, groupContext);
+assert(indexView.includes('id="proxy-note-editor" hidden'));
+assert(indexView.includes('maxlength="160"'));
+assert(indexView.includes('aria-describedby="proxy-note-help"'));
+const noteResponse = {ready: true, groups: [
+    {name: 'Notes A', members: [{name: encode(specialName), selected: true}, {name: 'Other'}]},
+    {name: 'Notes B', members: [{name: encode(specialName)}]}
+]};
+const originalNoteResponse = JSON.stringify(noteResponse);
+const noteButtons = () => pollingBox.querySelectorAll('button[data-name]').filter(node => node.attrs.class.includes('cmd-proxy-note'));
+const noteTexts = () => pollingBox.querySelectorAll('small[data-proxy-note]');
+function editNote(name, occurrence = 0) {
+    const button = noteButtons().filter(node => node.attrs['data-name'] === name)[occurrence];
+    assert.equal(button.attrs.type, 'button');
+    assert.equal(button.attrs['aria-label'], 'Edit local note: ' + name);
+    pollingDoc.activeElement = button;
+    noteHandler.call(button);
+    assert.equal(noteControl('#proxy-note-name').label, name);
+    assert.equal(noteControl('#proxy-note-editor').hidden, false);
+    assert.equal(pollingDoc.activeElement, noteControl('#proxy-note-text')[0]);
+    return button.attrs['data-focus-key'];
+}
+function saveNote(value) {
+    noteControl('#proxy-note-text').val(value);
+    let prevented = false;
+    noteControl('#proxy-note-editor').handlers.submit({preventDefault() { prevented = true; }});
+    assert(prevented, 'Notes never submit a form to the server');
+}
+pollGroups(noteResponse);
+assert.equal(noteTexts().length, 0);
+const noteFocus = editNote(specialName);
+noteControl('#proxy-note-text').val('unsaved draft');
+noteResponse.groups[0].members[0].delay = 32;
+pollGroups(noteResponse);
+assert.equal(noteControl('#proxy-note-text').value, 'unsaved draft', 'Changed polls preserve drafts');
+assert.equal(pollingDoc.activeElement, noteControl('#proxy-note-text')[0]);
+const noteSelections = selectedNames(), noteOrder = displayedMembers();
+const noteList = pollingBox.querySelectorAll('ul[data-group]')[0];
+noteList.scrollTop = 67;
+saveNote(literalNote);
+assert.equal(noteControl('#proxy-note-editor').hidden, true);
+assert.equal(noteControl('#proxy-note-state').label, 'Local note saved.');
+assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], noteFocus, 'Save returns focus to the edit control');
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 67);
+assert.deepEqual(noteTexts().map(node => node.textContent), [literalNote, literalNote], 'Shared proxies show the same literal note');
+assert.equal(new UI.ProxyNotes(() => groupContext.localStorage).get(specialName), literalNote);
+assert.deepEqual(selectedNames(), noteSelections);
+assert.deepEqual(displayedMembers(), noteOrder);
+const notedRow = pollingBox.children[0];
+pollGroups(noteResponse);
+assert.equal(pollingBox.children[0], notedRow, 'Notes preserve the unchanged-poll optimization');
+editNote(specialName, 1);
+assert.equal(noteControl('#proxy-note-text').value, literalNote);
+noteControl('#proxy-note-text').val('discard');
+noteControl('#proxy-note-cancel').handlers.click();
+assert.deepEqual(noteTexts().map(node => node.textContent), [literalNote, literalNote]);
+assert.equal(noteControl('#proxy-note-editor').hidden, true);
+editNote(specialName);
+saveNote('x'.repeat(161));
+assert.equal(noteControl('#proxy-note-editor').hidden, false);
+assert(noteControl('#proxy-note-state').label.includes('160'));
+assert.equal(noteControl('#proxy-note-text').value.length, 161, 'Invalid drafts remain editable');
+assert.deepEqual(noteTexts().map(node => node.textContent), [literalNote, literalNote]);
+groupContext.testing = true;
+saveNote('changed');
+assert.equal(testsDisabled, true, 'Saving during latency tests retains disabled probe controls');
+groupContext.testing = false;
+for (const unavailable of [{ready: false}, {ready: true, groups: []}]) {
+    editNote(specialName);
+    pollGroups(unavailable);
+    saveNote('offline edit');
+    assert.equal(pollingDoc.activeElement, pollingBox, 'Missing row returns focus to the groups container');
+    pollGroups(noteResponse);
+    assert.deepEqual(noteTexts().map(node => node.textContent), ['offline edit', 'offline edit']);
+}
+editNote(specialName);
+saveNote('');
+assert.equal(noteTexts().length, 0);
+assert.equal(new UI.ProxyNotes(() => groupContext.localStorage).get(specialName), '');
+// Failed persistence remains visible and honest, including failure to delete.
+groupContext.localStorage.setItem = () => { throw new Error('Quota exceeded'); };
+editNote(specialName);
+saveNote('temporary');
+assert(noteControl('#proxy-note-state').label.includes('only for this page visit'));
+assert.deepEqual(noteTexts().map(node => node.textContent), ['temporary', 'temporary']);
+editNote(specialName);
+saveNote('');
+assert.equal(noteTexts().length, 0);
+assert(noteControl('#proxy-note-state').label.includes('only for this page visit'));
+// Only the test's deliberate latency update changed its API fixture.
+noteResponse.groups[0].members[0].delay = undefined;
+assert.equal(JSON.stringify(noteResponse), originalNoteResponse);
+console.log('Proxy note editor: shared rows, literal rendering, drafts across polls, save/cancel/remove, focus, recovery and no API calls passed');
