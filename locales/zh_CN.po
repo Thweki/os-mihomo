@@ -1410,3 +1410,19 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Core uptime"
+msgstr "内核运行时长"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Last successful start / reload"
+msgstr "最近成功启动 / 重载时间"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Verified core process age in hours:minutes:seconds, sampled every 30 seconds. Hours may exceed 24."
+msgstr "已核实的内核进程运行时长，格式为小时:分钟:秒，每 30 秒采样一次。小时数可超过 24。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Recorded after a verified service start or restart during this boot. Failed starts and file saves do not change it. External controller reloads are not tracked."
+msgstr "记录本次系统启动后通过检查的服务启动或重启时间。启动失败和保存文件不会更改此记录。不跟踪外部控制器发起的重载。"

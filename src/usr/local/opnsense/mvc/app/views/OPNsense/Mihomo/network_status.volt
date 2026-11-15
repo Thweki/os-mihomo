@@ -58,6 +58,7 @@ $(document).ready(function () {
             $root.find('.network-refresh').prop('disabled', false);
             if (status !== 'success' || !data || data.status !== 'ok') {
                 $root.find('.network-read-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }});
+                $(document).trigger('mihomo:runtime-unavailable');
                 return;
             }
             snapshot = data;

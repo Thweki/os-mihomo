@@ -42,6 +42,7 @@ images/
 !/tests/test_patch.php
 !/tests/test_ui.js
 !/tests/test_runtime.php
+!/tests/test_service.py
 !/tests/test_writes.php
 !/tests/test_api.php
 !/tests/test_build.py

@@ -98,10 +98,21 @@ class RuntimeStatus
 
     public static function process(string $output, int $pid, string $pattern): ?array
     {
-        if ($pid <= 1 || !preg_match('/^\s*(\d+)\s+(\d+)\s+(.+)$/s', trim($output), $match)
-            || (int)$match[1] !== $pid || !preg_match($pattern, $match[3])) {
+        if ($pid <= 1 || !preg_match('/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/s', trim($output), $match)
+            || (int)$match[1] !== $pid || !preg_match($pattern, $match[4])) {
             return null;
         }
-        return ['pid' => $pid, 'rss' => (int)$match[2] * 1024];
+        $uptime = filter_var($match[3], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 2147483647]]);
+        return ['pid' => $pid, 'rss' => (int)$match[2] * 1024,
+            'uptime_seconds' => $uptime === false ? null : $uptime];
+    }
+
+    /** The rc.d success marker is a Unix timestamp, never a config file mtime. */
+    public static function lastReload(string $record, int $now): ?int
+    {
+        $record = trim($record);
+        if (!ctype_digit($record)) { return null; }
+        $timestamp = filter_var($record, FILTER_VALIDATE_INT);
+        return $timestamp !== false && $timestamp > 0 && $timestamp <= $now ? $timestamp : null;
     }
 }
