@@ -149,7 +149,7 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
-    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, nodeOrder = 'config') {
+    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, nodeOrder = 'config', collapsedGroups) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         const direction = nodeOrder === 'name-asc' ? 1 : nodeOrder === 'name-desc' ? -1 : 0;
         const collator = direction ? new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'}) : null;
@@ -167,21 +167,36 @@
         const active = doc.activeElement;
         const focusKey = active && container.contains(active) ? active.getAttribute('data-focus-key') : null;
         const row = el('div', {class: 'row'});
-        (favorites ? favorites.order(groups, 'groups') : groups).forEach(group => {
+        (favorites ? favorites.order(groups, 'groups') : groups).forEach((group, index) => {
             const name = decodeApiText(group.name);
+            let members = group.members || [];
+            const collapsed = collapsedGroups && collapsedGroups.has(name);
+            const listId = 'mihomo-group-members-' + index;
             const column = el('div', {class: 'col-md-6', style: 'margin-bottom:15px'});
-            const card = el('div', {class: 'content-box', style: 'height:300px;margin-bottom:0;display:flex;flex-direction:column'});
+            const card = el('div', {class: 'content-box', style: 'height:' + (collapsed ? 'auto' : '300px') + ';margin-bottom:0;display:flex;flex-direction:column'});
             const header = el('div', {style: 'padding:10px 12px;flex:0 0 auto'});
             if (favorites) { header.appendChild(favoriteButton('groups', name, name)); }
             header.appendChild(el('b', {}, name + ' '));
             header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-info'}, decodeApiText(group.type)));
+            header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-default',
+                style: 'margin-left:6px', 'data-member-count': members.length}, labels.memberCount.replace('%s', members.length)));
+            if (collapsedGroups) {
+                const label = collapsed ? labels.expandGroup : labels.collapseGroup;
+                const toggle = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-collapse-group',
+                    style: 'margin-left:6px', 'data-group': name, 'aria-expanded': collapsed ? 'false' : 'true',
+                    'aria-controls': listId, 'aria-label': label + ': ' + name, title: label,
+                    'data-focus-key': JSON.stringify(['collapse', name])});
+                toggle.appendChild(el('i', {class: 'fa fa-chevron-' + (collapsed ? 'right' : 'down') + ' fa-fw', 'aria-hidden': 'true'}));
+                header.appendChild(toggle);
+            }
             const test = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-test-group pull-right',
                 'data-group': name, 'data-focus-key': JSON.stringify(['group', name]), 'aria-label': labels.testGroup + ': ' + name, title: labels.testGroup});
             test.appendChild(el('i', {class: 'fa fa-tachometer fa-fw', 'aria-hidden': 'true'}));
             header.appendChild(test);
-            const list = el('ul', {class: 'list-group', 'data-group': name, 'aria-label': name,
+            const list = el('ul', {id: listId, class: 'list-group', 'data-group': name, 'aria-label': name,
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
-            let members = group.members || [];
+            // Keep members in the DOM so full-group latency tests still include them.
+            if (collapsed) { list.setAttribute('hidden', ''); }
             if (collator) {
                 // Sort decoded display names on a copy; stable ties keep controller order.
                 members = members.map(member => ({member, name: decodeApiText(member.name)}))
