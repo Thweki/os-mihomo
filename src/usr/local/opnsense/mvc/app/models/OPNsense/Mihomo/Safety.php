@@ -85,11 +85,14 @@ class Safety
         /* --- 3. 控制器可达性与密钥 ---
          * 只监听回环时不设密钥并不危险（网络侧访问不到），因此不再一律报 danger。 */
         $bind = trim((string)(Config::scan()['external-controller'] ?? ''));
-        $host = strstr($bind, ':', true);
-        if ($host === '' || $host === false) {
-            $host = '127.0.0.1';
-        }
-        $loopbackOnly = in_array($host, ['127.0.0.1', '::1', '[::1]', 'localhost'], true);
+        // An empty host in :port listens on all addresses. Only an absent
+        // controller or an explicit loopback host may bypass exposure warnings.
+        $host = preg_match('/^(\[[^\]]+\]|[^:]*):[0-9]+$/D', $bind, $match)
+            ? trim($match[1], '[]') : '';
+        $address = @inet_pton($host);
+        $loopbackOnly = $bind === '' || strtolower($host) === 'localhost'
+            || $address === inet_pton('::1')
+            || (is_string($address) && strlen($address) === 4 && ord($address[0]) === 127);
         if (!$loopbackOnly) {
             $items[] = [
                 'level' => self::LEVEL_WARNING,
