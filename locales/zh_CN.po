@@ -1389,3 +1389,27 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Filter proxy names"
+msgstr "筛选代理名称"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Clear filter"
+msgstr "清除筛选"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Visible proxy entries"
+msgstr "可见代理条目"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "No proxy names match the filter."
+msgstr "没有代理名称符合筛选条件。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Test visible nodes in this group"
+msgstr "测试此分组中的可见节点"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Case-insensitive name substring. Group latency tests apply to visible nodes only."
+msgstr "按名称子串筛选，不区分大小写。分组延迟测试仅测试可见节点。"

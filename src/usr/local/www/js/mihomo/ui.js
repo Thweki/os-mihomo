@@ -118,6 +118,19 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
+    function filterProxyGroups(groups, query) {
+        const needle = query.trim().toLowerCase();
+        let total = 0, matched = 0;
+        const visible = [];
+        groups.forEach(group => {
+            const members = group.members || [];
+            const matches = needle ? members.filter(member => decodeApiText(member.name).toLowerCase().includes(needle)) : members;
+            total += members.length;
+            matched += matches.length;
+            if (!needle || matches.length) { visible.push(needle ? {...group, members: matches} : group); }
+        });
+        return {groups: visible, matched, total};
+    }
     function renderProxyGroups(container, groups, labels, delayText, delayClass) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         const scroll = new Map();
@@ -179,5 +192,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, filterProxyGroups, renderProxyGroups};
 }));

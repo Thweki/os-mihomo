@@ -172,10 +172,13 @@
          * 代理分组
          * ------------------------------------------------------------------ */
         let renderedGroups = null;
+        let latestGroups = null;
         function renderGroups(data) {
+            latestGroups = data;
             const $box = $('#proxy-groups');
             if (!data['ready']) {
                 renderedGroups = null;
+                $('#proxy-filter-state').empty();
                 $box.html('<div class="text-muted" style="padding: 12px;">'
                     + ('<i class="fa fa-plug fa-fw"></i> ' + {{ lang._('The controller is not reachable. Start the service to see proxy groups.') | json_encode }})
                     + '</div>');
@@ -184,19 +187,34 @@
             const groups = data['groups'] || [];
             if (groups.length === 0) {
                 renderedGroups = null;
+                $('#proxy-filter-state').empty();
                 $box.html(('<div class="text-muted" style="padding: 12px;">' + {{ lang._('No proxy groups are defined in the configuration.') | json_encode }} + '</div>'));
                 return;
             }
 
             // Polls return fresh objects; retain the DOM while their data is unchanged.
-            const snapshot = JSON.stringify(groups);
+            const query = $('#proxy-filter').val().trim().toLowerCase();
+            const snapshot = JSON.stringify([groups, query]);
             if (snapshot === renderedGroups) { return; }
-            MihomoUI.renderProxyGroups($box[0], groups, {
-                testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
-                testNode: {{ lang._('Test node latency') | json_encode }}
-            }, delayText, delayClass);
+            const filtered = MihomoUI.filterProxyGroups(groups, query);
+            $('#proxy-filter-state').text({{ lang._('Visible proxy entries') | json_encode }} + ': ' + filtered.matched + '/' + filtered.total);
+            if (filtered.groups.length === 0) {
+                $box.empty().append($('<div class="text-muted" style="padding:12px;">').text({{ lang._('No proxy names match the filter.') | json_encode }}));
+            } else {
+                MihomoUI.renderProxyGroups($box[0], filtered.groups, {
+                    testGroup: query ? {{ lang._('Test visible nodes in this group') | json_encode }} : {{ lang._('Test all nodes in this group') | json_encode }},
+                    testNode: {{ lang._('Test node latency') | json_encode }}
+                }, delayText, delayClass);
+                $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', testing);
+            }
             renderedGroups = snapshot;
         }
+        $('#proxy-filter').on('input', function () {
+            if (latestGroups) { renderGroups(latestGroups); }
+        });
+        $('#proxy-filter-clear').on('click', function () {
+            $('#proxy-filter').val('').trigger('input').trigger('focus');
+        });
 
         let testing = false;
         function testNodes(names) {
@@ -468,6 +486,13 @@
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div class="form-inline" style="padding:0 12px;">
+                <label for="proxy-filter">{{ lang._('Filter proxy names') }}</label>
+                <input type="search" id="proxy-filter" class="form-control" aria-controls="proxy-groups" aria-describedby="proxy-filter-help" autocomplete="off" />
+                <button type="button" id="proxy-filter-clear" class="btn btn-default">{{ lang._('Clear filter') }}</button>
+                <span id="proxy-filter-state" class="text-muted" role="status"></span>
+                <p id="proxy-filter-help" class="help-block">{{ lang._('Case-insensitive name substring. Group latency tests apply to visible nodes only.') }}</p>
+            </div>
             <div style="padding: 12px;" id="proxy-groups">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>
             </div>
