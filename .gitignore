@@ -47,6 +47,7 @@ images/
 !/tests/test_build.py
 !/tests/test_packaging.py
 !/tests/test_repository.sh
+!/tests/test_validate.py
 
 # Local configuration, credentials, captures and build outputs
 *.local.yaml
