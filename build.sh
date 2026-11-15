@@ -103,7 +103,12 @@ copy_tree() {
     src="$1"
     dst="$2"
     mkdir -p "$dst"
-    (cd "$src" && tar --exclude '.DS_Store' --exclude '._*' --exclude '*.xz' -cf - .) | (cd "$dst" && tar -xf -)
+    # POSIX sh only reports the last pipeline status, hiding tar read failures.
+    # Finish the archive successfully before extracting any of its contents.
+    copy_archive="$(mktemp "$WORKDIR/copy.XXXXXX")"
+    (cd "$src" && tar --exclude '.DS_Store' --exclude '._*' --exclude '*.xz' -cf - .) > "$copy_archive"
+    (cd "$dst" && tar -xf -) < "$copy_archive"
+    rm -f "$copy_archive"
 }
 
 download_file() {
