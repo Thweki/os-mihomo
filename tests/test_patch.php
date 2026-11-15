@@ -103,6 +103,37 @@ check('rules 未被破坏', str_contains($patched, 'GEOSITE,cn,DIRECT'));
 check('中文行尾注释保留', str_contains($patched, '#在调试结果后，改为error，减少日志输出。'));
 @unlink($tmp);
 
+echo "\n=== 2b. Flow mappings must not lose locked siblings ===\n";
+$flowTun = "mode: rule\ntun: {enable: true, device: tun_mihomo, stack: gvisor, auto-route: false}\n";
+$flowCases = [
+    'locked TUN siblings' => [$flowTun, ['tun.device' => 'other-device']],
+    'earlier changes cannot return a partial patch' => [$flowTun, ['mode' => 'global', 'tun.device' => 'other-device']],
+    'multiline flow mapping' => ["tun: {\n  enable: true,\n  device: tun_mihomo, stack: gvisor, auto-route: false}\n", ['tun.device' => 'other-device']],
+    'nested flow mapping and quoted punctuation' => ["sniffer:\n  sniff:\n    HTTP: {ports: [80, 8080], override-destination: true, note: 'a, b # c'} # keep\n", ['sniffer.sniff.HTTP.ports' => '[80]']],
+    'anchored flow mapping' => ["tun: &tun {enable: true, device: tun_mihomo}\n", ['tun.device' => 'other-device']],
+];
+foreach ($flowCases as $label => [$input, $values]) {
+    $result = null;
+    $rejected = false;
+    try {
+        $result = Config::patchKeys($input, $values);
+    } catch (RuntimeException $error) {
+        $rejected = str_contains($error->getMessage(), 'block mapping');
+    }
+    check($label . ': explicitly rejected without returning destructive YAML', $rejected && $result === null);
+}
+check('unrelated patch preserves flow mapping bytes',
+    Config::patchKeys($flowTun, ['mode' => 'global']) === str_replace('mode: rule', 'mode: global', $flowTun));
+foreach (['{}', '{ } # keep', '# keep', ''] as $parent) {
+    $input = "tun: " . $parent . "\n";
+    $out = Config::patchKeys($input, ['tun.device' => 'tun_mihomo']);
+    check('empty or block parent remains editable: ' . $parent, str_contains($out, '  device: tun_mihomo'));
+    check('parent comment retained: ' . $parent, !str_contains($input, '# keep') || str_contains($out, '# keep'));
+}
+$blockTun = "tun:\n  enable: true\n  device: old-device\n  stack: gvisor\n  auto-route: false\n";
+check('block mapping edit preserves all locked siblings byte for byte',
+    Config::patchKeys($blockTun, ['tun.device' => 'tun_mihomo']) === str_replace('old-device', 'tun_mihomo', $blockTun));
+
 echo "\n=== 3. 新增不存在的键 ===\n";
 $tmp = writeTemp(Config::patchKeys("# minimal\nmode: rule\n", [
     'log-level' => 'info',
@@ -378,6 +409,17 @@ $fixedKeys = [
 ];
 [$w6, , ] = Config::selectManagedKeys($fixedKeys, ['mihomo.tun.device', 'mihomo.tun.stack'], []);
 check('写死项始终写入', count($w6) === 2, (string)count($w6));
+
+/* Apply supplies fixed TUN fields even when every user-controlled TUN field is locked. */
+[$fixedWrite] = Config::selectManagedKeys($fixedKeys, Config::ownedFieldsWithDefaults([]), Config::scanText($flowTun));
+check('default ownership selects both fixed TUN fields', array_keys($fixedWrite) === ['tun.device', 'tun.stack']);
+$fixedRejected = false;
+try {
+    Config::patchKeys($flowTun, array_map(fn ($info) => $info['value'], $fixedWrite));
+} catch (RuntimeException $error) {
+    $fixedRejected = str_contains($error->getMessage(), 'block mapping');
+}
+check('fixed TUN values already matching the flow mapping cannot erase locked enable/auto-route', $fixedRejected);
 
 echo "\n=== 汇总: {$failures} 个失败 ===\n";
 exit($failures === 0 ? 0 : 1);
