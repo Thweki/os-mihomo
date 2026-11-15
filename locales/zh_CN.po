@@ -3,6 +3,18 @@ msgstr ""
 "Language: zh_CN\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Stop tests"
+msgstr "停止测试"
+
+msgid "Skipped"
+msgstr "已跳过"
+
+msgid "Tests stopped."
+msgstr "测试已停止。"
+
+msgid "Stopping tests; waiting for active requests."
+msgstr "正在停止测试，等待已发出的请求完成。"
+
 msgid "Collapse group"
 msgstr "折叠分组"
 

@@ -209,6 +209,7 @@
         }
 
         let testing = false;
+        let latencyBatch = null;
         $('#proxy-groups').on('click', '.cmd-collapse-group', function () {
             const name = $(this).attr('data-group');
             if (collapsedGroups.has(name)) { collapsedGroups.delete(name); }
@@ -226,21 +227,36 @@
             if (testing || !names.length) { return; }
             testing = true;
             $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
+            $('#stop-proxy-tests').prop('disabled', false);
             const progress = function (state) {
-                $('#proxy-test-state').text({{ lang._('Latency tests') | json_encode }} + ': ' + state.completed + '/' + state.total
-                    + ' · ' + {{ lang._('Failed') | json_encode }} + ': ' + state.failed);
+                let message = {{ lang._('Latency tests') | json_encode }} + ': ' + state.completed + '/' + state.total
+                    + ' · ' + {{ lang._('Failed') | json_encode }} + ': ' + state.failed;
+                if (state.cancelled) {
+                    message += ' · ' + {{ lang._('Skipped') | json_encode }} + ': ' + state.skipped + ' · '
+                        + (state.completed + state.skipped === state.total
+                            ? {{ lang._('Tests stopped.') | json_encode }}
+                            : {{ lang._('Stopping tests; waiting for active requests.') | json_encode }});
+                }
+                $('#proxy-test-state').text(message);
             };
             progress({completed: 0, total: names.length, failed: 0});
-            MihomoUI.runLimited(names, 3, function (name, done) {
+            latencyBatch = MihomoUI.runLimited(names, 3, function (name, done) {
                 ajaxCall('/api/mihomo/dashboard/test_delay', {name: name}, function (data, status) {
                     done(status === 'success' && data && data.status === 'ok');
                 });
             }, progress, function () {
                 testing = false;
+                latencyBatch = null;
+                $('#stop-proxy-tests').prop('disabled', true);
                 $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', false);
                 groupsPoller.refresh();
             });
         }
+        $('#stop-proxy-tests').on('click', function () {
+            if (!testing || !latencyBatch) { return; }
+            $(this).prop('disabled', true);
+            latencyBatch.cancel();
+        });
         $('#proxy-groups').on('click', '.cmd-test', function () { testNodes([$(this).attr('data-name')]); });
         $('#proxy-groups').on('click', '.cmd-test-group', function () {
             const names = [];
@@ -489,6 +505,7 @@
         <div class="content-box">
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
+                <button type="button" id="stop-proxy-tests" class="btn btn-xs btn-default pull-right" aria-describedby="proxy-test-state" disabled>{{ lang._('Stop tests') }}</button>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
