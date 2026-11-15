@@ -171,8 +171,11 @@
         /* ------------------------------------------------------------------ *
          * 代理分组
          * ------------------------------------------------------------------ */
+        const favorites = new MihomoUI.ProxyFavorites();
+        let latestGroups = null;
         let renderedGroups = null;
         function renderGroups(data) {
+            latestGroups = data;
             const $box = $('#proxy-groups');
             if (!data['ready']) {
                 renderedGroups = null;
@@ -192,9 +195,13 @@
             const snapshot = JSON.stringify(groups);
             if (snapshot === renderedGroups) { return; }
             MihomoUI.renderProxyGroups($box[0], groups, {
+                memberCount: {{ lang._('Members: %s') | json_encode }},
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
-                testNode: {{ lang._('Test node latency') | json_encode }}
-            }, delayText, delayClass);
+                testNode: {{ lang._('Test node latency') | json_encode }},
+                favoriteGroup: {{ lang._('Favorite group') | json_encode }},
+                favoriteProxy: {{ lang._('Favorite proxy') | json_encode }}
+            }, delayText, delayClass, favorites);
+            if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
 
@@ -204,6 +211,12 @@
         $autoSwitch.on('change', cancelAutoSwitch);
         document.addEventListener('visibilitychange', function () { if (document.hidden) { cancelAutoSwitch(); } });
         window.addEventListener('pagehide', cancelAutoSwitch);
+        $('#proxy-groups').on('click', '.cmd-favorite', function () {
+            const saved = favorites.toggle($(this).attr('data-kind'), $(this).attr('data-name'));
+            $('#proxy-favorites-state').text(saved ? '' : {{ lang._('Favorites could not be saved in this browser. They will last only for this page visit.') | json_encode }});
+            renderedGroups = null;
+            if (latestGroups) { renderGroups(latestGroups); }
+        });
         function testNodes(names, groupName) {
             if (testing || selecting || !names.length) { return; }
             const group = groupName && renderedGroups
@@ -512,6 +525,8 @@
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
+            <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div style="padding:0 12px;">
                 <label><input type="checkbox" id="proxy-autoswitch"> {{ lang._('Automatically select the fastest proxy after a group test (experimental)') }}</label>
                 <p class="text-muted">{{ lang._('Off by default; enabled only for this page visit. Applies to Selector groups and fresh group tests. Direct, reject and nested groups are excluded. A submitted switch cannot be cancelled.') }}</p>

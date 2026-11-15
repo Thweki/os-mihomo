@@ -164,7 +164,7 @@ const groupBox = doc.createElement('div');
 const names = ['name" data-unexpected="value', "single' quote", '<tag>&value', '001', '中文\\name'];
 const encode = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 const groups = names.map(name => ({name: encode(name), type: 'Selector', members: [{name: encode(name), type: 'test', selected: true, delay: 20}]}));
-const render = () => UI.renderProxyGroups(groupBox, groups, {testGroup: 'Test group', testNode: 'Test node'}, value => value + ' ms', () => 'label-success');
+const render = () => UI.renderProxyGroups(groupBox, groups, {testGroup: 'Test group', testNode: 'Test node', memberCount: 'Members: %s'}, value => value + ' ms', () => 'label-success');
 render();
 const lists = groupBox.querySelectorAll('ul[data-group]');
 assert.deepEqual(lists.map(node => node.getAttribute('data-group')), names);
@@ -184,6 +184,26 @@ assert.equal(groupBox.querySelectorAll('ul[data-group]')[0].scrollTop, 172);
 assert.notEqual(doc.activeElement, buttons[1], 'Refresh replaces nodes');
 assert.equal(doc.activeElement.attrs['data-focus-key'], buttons[1].attrs['data-focus-key'], 'Refresh restores keyboard focus by exact name');
 assert(groupBox.contains(doc.activeElement));
+
+// Counts describe direct entries, not recursively expanded or healthy proxies.
+const countBox = doc.createElement('div');
+const countGroups = [
+    {name: encode('<Group>&'), type: 'Selector', members: [
+        {name: 'Nested', type: 'URLTest'}, {name: 'DIRECT', type: 'Direct'},
+        {name: 'REJECT', type: 'Reject'}, {name: 'Offline', delay: 0}
+    ]},
+    {name: 'Nested', type: 'URLTest', members: [{name: 'Shared'}]},
+    {name: 'Empty', members: []}, {name: 'Missing'}, {name: 'Null', members: null}
+];
+const originalCountGroups = JSON.stringify(countGroups);
+UI.renderProxyGroups(countBox, countGroups, {memberCount: '成员数：%s'}, String, () => '');
+const countBadges = box => box.querySelectorAll('span[data-member-count]');
+assert.deepEqual(countBadges(countBox).map(node => node.textContent),
+    ['成员数：4', '成员数：1', '成员数：0', '成员数：0', '成员数：0']);
+assert.deepEqual(countBadges(countBox).map(node => node.attrs['data-member-count']), ['4', '1', '0', '0', '0']);
+assert.equal(JSON.stringify(countGroups), originalCountGroups, 'Counting must not mutate API data');
+assert.equal(countBox.children[0].children[0].children[0].children[0].children[0].textContent, '<Group>& ');
+console.log('Group member counts: direct entries, empty/missing members, translated text and unchanged data passed');
 
 // Fake timers prove non-overlap, hidden pause/resume, exponential retry and recovery.
 let hidden = false, callback, calls = 0, scheduled = null;
@@ -341,20 +361,34 @@ console.log('Settings stale-write/version handoff, partial-result feedback and o
 // Run the dashboard render path with fresh API objects and the real DOM renderer.
 // Unchanged polling must retain nodes, focus and scroll without allocating DOM.
 const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null;\n)?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
-    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
+let favoriteNotice = '', testsDisabled = false, favoriteHandler;
+const dashboardStorage = new Map();
+const dashboardFavorites = new UI.ProxyFavorites(() => ({
+    getItem: key => dashboardStorage.get(key) || null,
+    setItem: (key, value) => dashboardStorage.set(key, value)
+}));
 const groupContext = vm.createContext({
     $: selector => {
+        if (selector instanceof DomNode) { return {attr: key => selector.getAttribute(key)}; }
+        if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
+        if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
+            return {prop: (key, value) => { assert.equal(key, 'disabled'); testsDisabled = value; }};
+        }
         assert.equal(selector, '#proxy-groups');
-        return {0: pollingBox, html: text => {
+        return {0: pollingBox, on: (event, target, handler) => {
+            assert.equal(event, 'click'); assert.equal(target, '.cmd-favorite'); favoriteHandler = handler;
+        }, html: text => {
             const placeholder = pollingDoc.createElement('placeholder');
             placeholder.textContent = text;
             pollingBox.replaceChildren(placeholder);
         }};
     },
-    MihomoUI: UI, delayText: value => value + ' ms', delayClass: () => 'label-success'
+    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false,
+    delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
 vm.runInContext(renderGroupsScript, groupContext);
 const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
@@ -366,6 +400,7 @@ function pollGroups(response = groupResponse) {
     vm.runInContext('renderGroups(response);', groupContext);
 }
 pollGroups();
+assert.deepEqual(countBadges(pollingBox).map(node => node.textContent), ['Members: 2']);
 const firstRow = pollingBox.children[0];
 const focusedButton = pollingBox.querySelectorAll('button[data-focus-key]')[1];
 pollingDoc.activeElement = focusedButton;
@@ -385,19 +420,125 @@ for (const change of [
     const previousRow = pollingBox.children[0];
     change(); pollGroups();
     assert.notEqual(pollingBox.children[0], previousRow, 'Changed proxy data must render');
+    assert.equal(countBadges(pollingBox)[0].textContent, 'Members: ' + groupResponse.groups[0].members.length);
 }
 // Both placeholder states invalidate the snapshot, even when recovery returns
 // exactly the same groups that were displayed before the interruption.
 for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
     pollGroups(placeholder);
     assert.equal(pollingBox.children[0].tagName, 'placeholder');
+    assert.equal(countBadges(pollingBox).length, 0, 'Unavailable/absent groups must not retain stale counts');
     pollGroups();
     assert.equal(pollingBox.children[0].tagName, 'div', 'Recovery must replace the placeholder');
+    assert.equal(countBadges(pollingBox)[0].textContent, 'Members: 1');
     const recoveredRow = pollingBox.children[0];
     pollGroups();
     assert.equal(pollingBox.children[0], recoveredRow);
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
+
+// Favorites store exact decoded names, independently for groups and proxies.
+let savedFavorites = null;
+const favoriteStorage = {
+    getItem(key) { assert.equal(key, 'mihomo.favorites.v1'); return savedFavorites; },
+    setItem(key, value) { assert.equal(key, 'mihomo.favorites.v1'); savedFavorites = value; }
+};
+const favorites = new UI.ProxyFavorites(() => favoriteStorage);
+assert.equal(favorites.has('groups', 'Group'), false);
+for (const name of [...names, '__proto__', 'literal &gt;', 'same']) {
+    assert.equal(favorites.toggle('proxies', name), true);
+    assert(favorites.has('proxies', name));
+    assert(!favorites.has('groups', name));
+}
+favorites.toggle('groups', 'same');
+const reloadedFavorites = new UI.ProxyFavorites(() => favoriteStorage);
+assert(reloadedFavorites.has('groups', 'same'));
+assert(reloadedFavorites.has('proxies', 'literal &gt;'));
+reloadedFavorites.toggle('proxies', 'same');
+assert(!new UI.ProxyFavorites(() => favoriteStorage).has('proxies', 'same'));
+assert(reloadedFavorites.has('groups', 'same'));
+for (const corrupt of ['{', 'null', '42', '[]', '{"groups":{},"proxies":[null,3,{},"valid"]}']) {
+    savedFavorites = corrupt;
+    const recovered = new UI.ProxyFavorites(() => favoriteStorage);
+    assert.equal(recovered.has('groups', 'Group'), false);
+    assert.equal(recovered.toggle('groups', 'Group'), true);
+}
+for (const unavailable of [
+    () => { throw new Error('Storage blocked'); },
+    () => ({getItem() { return null; }, setItem() { throw new Error('Quota exceeded'); }})
+]) {
+    const temporary = new UI.ProxyFavorites(unavailable);
+    assert.equal(temporary.toggle('proxies', 'temporary'), false);
+    assert(temporary.has('proxies', 'temporary'), 'Storage failure still supports this page visit');
+}
+console.log('Favorites persistence, exact names, independent kinds and unavailable storage: all checks passed');
+
+// Real star controls and real dashboard click handler: no controller writes or reads.
+// ajaxCall/ajaxGet are deliberately absent, so accidental requests fail this test.
+const favoriteClickScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-favorite',[\s\S]*?\n        \}\);/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInContext(favoriteClickScript, groupContext);
+const specialName = names[0] + ' &gt; 中文';
+const favoriteResponse = {ready: true, groups: [
+    {name: 'First group', members: [{name: 'First proxy', selected: true}, {name: encode(specialName)}, {name: 'Last proxy'}]},
+    {name: encode(specialName), members: [{name: 'First proxy'}, {name: encode(specialName), selected: true}]},
+    {name: 'Last group', members: []}
+]};
+const untouchedResponse = JSON.stringify(favoriteResponse);
+const starButtons = () => pollingBox.querySelectorAll('button[data-kind]');
+function star(kind, name, occurrence = 0) {
+    const button = starButtons().filter(node => node.attrs['data-kind'] === kind && node.attrs['data-name'] === name)[occurrence];
+    assert(button);
+    assert.equal(button.attrs.type, 'button', 'Stars support native keyboard activation');
+    pollingDoc.activeElement = button;
+    favoriteHandler.call(button);
+    assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], button.attrs['data-focus-key']);
+    assert(pollingBox.contains(pollingDoc.activeElement), 'Focus follows the reordered control');
+}
+const displayedGroups = () => pollingBox.querySelectorAll('ul[data-group]').map(node => node.attrs['data-group']);
+const displayedMembers = () => pollingBox.querySelectorAll('ul[data-group]').map(node =>
+    node.querySelectorAll('li[data-member]').map(member => member.attrs['data-member']));
+pollGroups(favoriteResponse);
+assert(starButtons().every(button => button.attrs['aria-pressed'] === 'false'));
+star('proxies', specialName);
+assert.equal(favoriteNotice, '');
+assert.deepEqual(displayedMembers(), [[specialName, 'First proxy', 'Last proxy'], [specialName, 'First proxy'], []]);
+assert.deepEqual(displayedGroups(), ['First group', specialName, 'Last group'], 'Proxy favorites do not star groups');
+assert.equal(starButtons().filter(button => button.attrs['aria-pressed'] === 'true').length, 2, 'Shared proxies are starred everywhere');
+star('groups', specialName);
+assert.deepEqual(displayedGroups(), [specialName, 'First group', 'Last group']);
+assert.deepEqual(countBadges(pollingBox).map(node => node.textContent), ['Members: 2', 'Members: 3', 'Members: 0'],
+    'Counts stay with their groups when favorites reorder cards and members');
+pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop = 88;
+const starredRow = pollingBox.children[0];
+pollGroups(favoriteResponse);
+assert.equal(pollingBox.children[0], starredRow, 'Identical polls retain favorite ordering without rendering');
+groupContext.testing = true;
+star('proxies', 'Last proxy');
+assert.equal(testsDisabled, true, 'Starring during latency tests must retain disabled probe controls');
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 88);
+groupContext.testing = false;
+const selectedNames = () => pollingBox.querySelectorAll('li[data-member]').filter(node => node.attrs.class.includes(' active'))
+    .map(node => node.attrs['data-member']).sort();
+assert.deepEqual(selectedNames(), ['First proxy', specialName].sort(), 'Starring leaves current selection unchanged');
+assert.equal(JSON.stringify(favoriteResponse), untouchedResponse, 'Display ordering must not mutate controller data');
+pollGroups({ready: true, groups: [{name: 'Temporary', members: []}]});
+pollGroups({ready: false});
+pollGroups(favoriteResponse);
+assert.deepEqual(displayedGroups(), [specialName, 'First group', 'Last group'], 'Missing groups retain preferences on recovery');
+assert.deepEqual(displayedMembers(), [[specialName, 'First proxy'], [specialName, 'Last proxy', 'First proxy'], []]);
+star('groups', specialName);
+star('proxies', specialName, 1);
+star('proxies', 'Last proxy');
+assert.deepEqual(displayedGroups(), ['First group', specialName, 'Last group']);
+assert.deepEqual(displayedMembers(), [['First proxy', specialName, 'Last proxy'], ['First proxy', specialName], []], 'Unstarring restores controller order');
+assert(starButtons().every(button => button.attrs['aria-pressed'] === 'false'));
+dashboardFavorites.storage = () => { throw new Error('Storage denied'); };
+star('groups', specialName);
+assert(favoriteNotice.includes('only for this page visit'));
+assert.equal(displayedGroups()[0], specialName);
+assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
+console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
 
 // Automatic switching uses only fresh results and never selects direct/reject or
 // a nested policy group. Equal delays keep the current selection.
@@ -529,3 +670,4 @@ auto.node('#proxy-groups').handlers['.cmd-test-group'].call({
 assert.equal(auto.calls.length, 2, 'Group probes are deduplicated');
 auto.completeTests(); auto.validate(); assert.equal(auto.writes().length, 1);
 console.log('Experimental automatic switching: default-off, fresh minimum, exclusions, ties, cancellation, revalidation and failures passed');
+
