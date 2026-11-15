@@ -212,3 +212,44 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// Exercise the real chart redraw: repeated polls and range changes reuse locale
+// formatters while preserving localized labels, timestamps and traffic gaps.
+const trafficScript = indexView.match(/        let trafficRange = 60;[\s\S]*?\n        function drawTraffic\(\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+const trafficSamples = Array.from({length: 300}, (_, i) => ({
+    time: Date.UTC(2026, 0, 1, 12, 0, i * 2), down: i === 10 ? null : i, up: i * 2
+}));
+for (const locale of ['en-US', 'de-DE']) {
+    let localeSetups = 0, redraws = 0;
+    const chart = {data: {labels: [], datasets: [{data: []}, {data: []}]},
+        update(mode) { assert.equal(mode, 'none'); redraws++; }};
+    const chartContext = {
+        Date: class extends Date {
+            toLocaleTimeString(locales, options) {
+                localeSetups++;
+                return super.toLocaleTimeString(locale, options);
+            }
+        },
+        Intl: {DateTimeFormat: function (locales, options) {
+            localeSetups++;
+            return new Intl.DateTimeFormat(locale, options);
+        }},
+        gTrafficChart: chart, trafficHistory: {window: () => trafficSamples},
+        $: () => ({text: () => {}})
+    };
+    vm.createContext(chartContext);
+    vm.runInContext(trafficScript, chartContext);
+    for (const range of [60, 60, 300, 900, 3600, 60]) {
+        vm.runInContext('trafficRange = ' + range + '; drawTraffic();', chartContext);
+        const expected = new Intl.DateTimeFormat(locale, {
+            hour: '2-digit', minute: '2-digit', second: range <= 300 ? '2-digit' : undefined
+        });
+        assert.deepEqual(Array.from(chart.data.labels), trafficSamples.map(point => expected.format(point.time)));
+        assert.deepEqual(Array.from(chart.data.datasets[0].data), trafficSamples.map(point => point.down));
+        assert.deepEqual(Array.from(chart.data.datasets[1].data), trafficSamples.map(point => point.up));
+    }
+    assert.equal(redraws, 6);
+    assert(localeSetups <= 2, 'Repeated redraws must not set up locale formatting for every chart label');
+}
+console.log('Traffic chart localized labels, gaps and formatter reuse: all checks passed');

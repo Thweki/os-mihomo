@@ -99,14 +99,18 @@
         try { storedHistory = JSON.parse(sessionStorage.getItem('mihomo.traffic.v1') || '[]'); } catch (error) { /* Optional cache. */ }
         const trafficHistory = new MihomoUI.TrafficHistory(storedHistory);
         let trafficRange = 60;
+        // Reuse locale formatters across every label and polling redraw.
+        const trafficTimeWithSeconds = new Intl.DateTimeFormat([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+        const trafficTimeWithoutSeconds = new Intl.DateTimeFormat([], {hour: '2-digit', minute: '2-digit'});
         let lastMetadata = 0;
         let lastHistorySave = 0;
 
         function drawTraffic() {
             if (!gTrafficChart) { return; }
             const samples = trafficHistory.window(trafficRange, Date.now());
+            const timeFormat = trafficRange <= 300 ? trafficTimeWithSeconds : trafficTimeWithoutSeconds;
             gTrafficChart.data.labels = samples.map(function (point) {
-                return new Date(point.time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: trafficRange <= 300 ? '2-digit' : undefined});
+                return timeFormat.format(point.time);
             });
             gTrafficChart.data.datasets[0].data = samples.map(function (point) { return point.down; });
             gTrafficChart.data.datasets[1].data = samples.map(function (point) { return point.up; });
