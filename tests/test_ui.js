@@ -625,3 +625,120 @@ assert.equal(groupList(foldNames[1]).getAttribute('hidden'), '', 'Groups expand 
 // A new page runs the actual initializer again; no browser persistence is used.
 assert.equal(vm.runInNewContext(collapseStateScript + '\ncollapsedGroups.size;'), 0);
 console.log('Group collapse: defaults, exact names, accessibility, focus, independent toggles, polling/recovery, favorites and full-group tests passed');
+
+// Rule-match copying preserves observed text and decodes exactly one API layer.
+for (const [source, destination] of [
+    ['any', 'any'], ['! 203.0.113.0/24', '! 192.0.2.0/24 port = { 53, 500, 4500 }'],
+    ['2001:db8::/64 port > 1024', '2001:db8:1::/64 port 80:443'],
+    ['<客户端> port = 001', '<tag> &amp; "quote" \\literal\nnext']
+]) {
+    assert.equal(UI.ruleMatchText({source: encode(source), destination: encode(destination)}),
+        'from ' + source + ' to ' + destination);
+}
+for (const rule of [null, {}, {source: '', destination: 'any'}, {source: 'any'},
+    {source: 'any', destination: '  '}, {source: 123, destination: 'any'}]) {
+    assert.equal(UI.ruleMatchText(rule), '', 'Incomplete observations must not become invented matches');
+}
+
+// Execute the shared view, including rendering, clipboard promises and refreshes.
+// The fixture never parses dynamic HTML and never talks to a real clipboard/API.
+const networkView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt'), 'utf8');
+const networkScript = networkView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label))
+    .replace(/\{\{ network_id \| json_encode \}\}/g, '"test-network"');
+class NetworkNode {
+    constructor(markup = '') { this.markup = markup; this.children = []; this.attrs = {}; this.label = ''; }
+    text(value) { this.label = String(value); return this; }
+    append(node) { this.children.push(node); return this; }
+    empty() { this.children = []; this.label = ''; return this; }
+    css() { return this; }
+    addClass() { return this; }
+    attr(key, value) { this.attrs[key] = value; return this; }
+    prop(key, value) { this[key] = value; return this; }
+    click(handler) { this.handler = handler; return this; }
+    html() { throw new Error('Rule text must not be parsed as HTML'); }
+}
+async function testRuleCopy() {
+    const nodes = new Map(), reads = [], copied = [], prompts = [];
+    const root = {find: selector => {
+        if (!nodes.has(selector)) { nodes.set(selector, new NetworkNode()); }
+        return nodes.get(selector);
+    }};
+    const document = {getElementById: () => root, addEventListener: () => {}};
+    const clipboard = {writeText: value => { copied.push(value); return Promise.resolve(); }};
+    const navigator = {clipboard};
+    const context = {
+        document, navigator, window: {addEventListener: () => {}, prompt: (message, value) => { prompts.push({message, value}); return null; }},
+        $: selector => {
+            if (selector === document) { return {ready: fn => fn(), trigger: () => {}}; }
+            if (selector === root || selector instanceof NetworkNode) { return selector; }
+            assert(/^<(?:tr|td|strong|small|div|button)(?:\s[^<>]*)?>$/.test(selector), 'Only static markup creates nodes');
+            return new NetworkNode(selector);
+        },
+        MihomoUI: UI, ajaxGet: (url, params, done) => reads.push({url, done})
+    };
+    // Use the real poller with inert timers to drive refreshes explicitly.
+    context.MihomoUI = {...UI, Poller: class extends UI.Poller {
+        constructor(request, interval) { super(request, interval, {hidden: () => false, schedule: () => 1, cancel: () => {}}); }
+    }};
+    vm.runInNewContext(networkScript, context);
+    const rules = [
+        {device: 'vtnet1', family: 'IPv4', direction: 'in', protocols: ['tcp'], ports: '*',
+            source: encode('<clients> &amp; 中文'), destination: encode('! 192.0.2.0/24 port = { 80, 443 }'), next_hop: 'tun_mihomo 198.51.100.2'},
+        {device: '', family: 'IPv6', direction: 'out', protocols: ['udp'], ports: '53',
+            source: '2001:db8::/64', destination: 'any port = 53', next_hop: 'tun_mihomo 2001:db8::1'}
+    ];
+    const original = JSON.stringify(rules);
+    const snapshot = {status: 'ok', rules_available: true, rules, interfaces: [], observed_at: 1};
+    const respond = data => reads.filter(read => read.url.endsWith('/runtime_status')).at(-1).done(data, 'success');
+    const buttons = () => nodes.get('.network-details-body').children.flatMap(row => row.children[3]?.children || []);
+    const state = () => nodes.get('.network-copy-state').label;
+    respond(snapshot);
+    assert.equal(buttons().length, 2);
+    const match = 'from <clients> &amp; 中文 to ! 192.0.2.0/24 port = { 80, 443 }';
+    const first = buttons()[0];
+    assert(first.markup.includes('type="button"'), 'Native buttons support keyboard activation');
+    assert.equal(first.attrs['aria-label'], 'Copy match: ' + match);
+    assert.equal(nodes.get('.network-details-body').children[0].children[3].label, '! 192.0.2.0/24 port = { 80, 443 }');
+    assert(networkView.includes('class="network-copy-state text-muted" role="status" aria-live="polite"'));
+    let finishCopy;
+    clipboard.writeText = value => { copied.push(value); return new Promise(resolve => { finishCopy = resolve; }); };
+    const pending = first.handler.call(first);
+    assert.equal(first.disabled, true);
+    assert.equal(state(), '', 'Do not announce success before the clipboard resolves');
+    // A DNS render or new runtime snapshot cannot change the in-flight payload.
+    reads.find(read => read.url.endsWith('/dns_status')).done({status: 'ok', interfaces: []}, 'success');
+    assert.notEqual(buttons()[0], first);
+    finishCopy(); await pending;
+    assert.equal(first.disabled, false);
+    assert.deepEqual(copied, [match]);
+    assert.equal(state(), 'Rule match copied.');
+    assert.equal(prompts.length, 0);
+    for (const mode of ['reject', 'missing', 'throw']) {
+        navigator.clipboard = mode === 'missing' ? undefined : {writeText: () => {
+            if (mode === 'throw') { throw new Error('denied'); }
+            return Promise.reject(new Error('denied'));
+        }};
+        await buttons()[1].handler.call(buttons()[1]);
+        assert.equal(state(), 'Clipboard unavailable. Copy the rule match manually.');
+        assert.equal(prompts.at(-1).value, 'from 2001:db8::/64 to any port = 53');
+        assert.equal(buttons()[1].disabled, false);
+    }
+    assert.equal(prompts.length, 3, 'Rejection, absent API and synchronous errors all offer manual copying');
+    assert.equal(JSON.stringify(rules), original, 'Copying never changes rule data');
+    assert.equal(reads.length, 2, 'Copy clicks add no network requests');
+    navigator.clipboard = clipboard;
+    clipboard.writeText = value => { copied.push(value); return Promise.resolve(); };
+    nodes.get('.network-refresh').handler();
+    respond({...snapshot, rules: [{...rules[1], destination: 'any port = 853'}]});
+    await buttons()[0].handler.call(buttons()[0]);
+    assert.equal(copied.at(-1), 'from 2001:db8::/64 to any port = 853', 'Refreshed rows copy current conditions');
+    for (const data of [{...snapshot, rules_available: false}, {...snapshot, rules: []},
+        {...snapshot, rules: [{...rules[0], source: ''}]}]) {
+        nodes.get('.network-refresh').handler(); respond(data);
+        assert.equal(buttons().length, 0, 'Unavailable, empty or incomplete rules have no copy action');
+    }
+    console.log('Rule match copy: exact text, safe DOM, keyboard controls, clipboard success/fallback, refresh and read-only behavior passed');
+}
+testRuleCopy().catch(error => { console.error(error); process.exitCode = 1; });

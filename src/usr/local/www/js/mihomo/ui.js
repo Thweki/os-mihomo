@@ -21,6 +21,12 @@
             return {'&amp;': '&', '&lt;': '<', '&gt;': '>'}[entity];
         });
     }
+    // Copy the observed match conditions, not a reconstructed executable PF rule.
+    function ruleMatchText(rule) {
+        if (!rule || typeof rule.source !== 'string' || !rule.source.trim()
+            || typeof rule.destination !== 'string' || !rule.destination.trim()) { return ''; }
+        return 'from ' + decodeApiText(rule.source) + ' to ' + decodeApiText(rule.destination);
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -237,5 +243,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, ruleMatchText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
 }));
