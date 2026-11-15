@@ -140,6 +140,7 @@
             if (runtime.mode !== undefined && !$('#mode-select').data('user-changed')) {
                 $('#mode-select').val(runtime['mode'] || '');
             }
+            renderModeHint();
 
             const now = Date.now();
             const rate = trafficHistory.add(now, runtime['downloadTotal'], runtime['uploadTotal'], runtime['ready'] && controller['alive']);
@@ -270,8 +271,25 @@
         /* ------------------------------------------------------------------ *
          * 运行模式
          * ------------------------------------------------------------------ */
+        function renderModeHint() {
+            let hint = '';
+            switch ($('#mode-select').val()) {
+                case 'rule':
+                    hint = {{ lang._('Rule-based: Mihomo follows matching rules to route or block traffic.') | json_encode }};
+                    break;
+                case 'global':
+                    hint = {{ lang._('Global: traffic handled by Mihomo uses the GLOBAL group selection.') | json_encode }};
+                    break;
+                case 'direct':
+                    hint = {{ lang._('Direct: traffic handled by Mihomo connects without a proxy.') | json_encode }};
+                    break;
+            }
+            if ($('#mode-hint').text() !== hint) { $('#mode-hint').text(hint); }
+        }
+
         $('#mode-select').change(function () {
             const mode = $(this).val();
+            renderModeHint();
             $(this).data('user-changed', true);
             ajaxCall('/api/mihomo/dashboard/set_mode', { mode: mode }, function (data, status) {
                 if (status === 'success' && data && data.status === 'ok') { $('#dashboard-action-state').empty(); }
@@ -520,7 +538,7 @@
                         <option value="3600">{{ lang._('Last hour') }}</option>
                     </select>
                     <label for="mode-select" style="font-weight: normal;">{{ lang._('Mode') }}:</label>
-                    <select id="mode-select" class="form-control" style="width: auto; display: inline-block; height: 28px; padding: 2px 6px;">
+                    <select id="mode-select" aria-describedby="mode-hint" class="form-control" style="width: auto; display: inline-block; height: 28px; padding: 2px 6px;">
                         <option value="">{{ lang._('…') }}</option>
                         <option value="rule">{{ lang._('Rule-based') }}</option>
                         <option value="global">{{ lang._('Global') }}</option>
@@ -528,6 +546,7 @@
                     </select>
                 </span>
             </div>
+            <p id="mode-hint" class="text-muted" role="status" style="padding:0 14px;"></p>
             <div style="padding: 12px;">
                 <div style="height: 200px;">
                     <canvas id="traffic-chart" role="img" aria-label="{{ lang._('Download and upload rates') }}"></canvas>
