@@ -25,6 +25,8 @@ Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, wit
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
+In **Overview → Proxy Groups**, choose **Export selections (JSON)** to read all current group selections into a selected, read-only snippet for notes or troubleshooting. Press **Ctrl+C / Command+C** to copy it. The report contains a capture time, group names, types and selected member names; `null` means no single selection was reported. Automatic selections may change afterward; export again to refresh. Exporting does not change routing or save a restorable snapshot.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.

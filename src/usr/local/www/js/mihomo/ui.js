@@ -21,6 +21,14 @@
             return {'&amp;': '&', '&lt;': '<', '&gt;': '>'}[entity];
         });
     }
+    // Report only selection metadata, never the full controller response.
+    function exportSelections(groups, capturedAt) {
+        return JSON.stringify({capturedAt, groups: groups.map(group => ({
+            group: decodeApiText(group.name),
+            type: decodeApiText(group.type),
+            selected: typeof group.now === 'string' && group.now !== '' ? decodeApiText(group.now) : null
+        }))}, null, 2);
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -179,5 +187,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, exportSelections, Poller, runLimited, element, renderProxyGroups};
 }));

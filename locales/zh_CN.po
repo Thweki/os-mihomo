@@ -1389,3 +1389,31 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Export selections (JSON)"
+msgstr "导出选择（JSON）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Group selections (JSON)"
+msgstr "分组选择（JSON）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Reading current group selections…"
+msgstr "正在读取当前分组选择…"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Could not read current selections. Try exporting again."
+msgstr "无法读取当前选择，请重新导出。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copy the selected JSON with Ctrl+C or Command+C. Export again to refresh it."
+msgstr "按 Ctrl+C 或 Command+C 复制选中的 JSON。再次导出即可刷新。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Includes all reported groups. Automatic selections may change; null means no single selection was reported. Group and node names are included."
+msgstr "包含所有已报告的分组。自动选择可能变化；null 表示未报告单一选择。内容包含分组和节点名称。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Dismiss"
+msgstr "关闭"

@@ -398,3 +398,101 @@ for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
     assert.equal(pollingBox.children[0], recoveredRow);
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
+
+// Bulk selection reports preserve exact names and only export allowlisted fields.
+const selectionGroups = [
+    {name: '手动 &amp; &lt;组&gt;', type: 'Selector', now: '节点 "A"\\line\nnext',
+        members: [{name: 'old', selected: true}], secret: 'excluded-test-value'},
+    {name: '__proto__', type: 'URLTest', now: 'literal &amp;gt;'},
+    {name: '001', type: 'Fallback', now: 'DIRECT'},
+    {name: 'balanced', type: 'LoadBalance', now: ''},
+    {name: 'unknown', type: 'Selector'},
+    {name: 'nested', type: 'Selector', now: '手动 &amp; &lt;组&gt;'}
+];
+const capturedAt = '2026-11-15T12:00:00.000Z';
+const originalSelectionGroups = JSON.stringify(selectionGroups);
+const selectionText = UI.exportSelections(selectionGroups, capturedAt);
+assert.deepEqual(JSON.parse(selectionText), {capturedAt, groups: [
+    {group: '手动 & <组>', type: 'Selector', selected: '节点 "A"\\line\nnext'},
+    {group: '__proto__', type: 'URLTest', selected: 'literal &gt;'},
+    {group: '001', type: 'Fallback', selected: 'DIRECT'},
+    {group: 'balanced', type: 'LoadBalance', selected: null},
+    {group: 'unknown', type: 'Selector', selected: null},
+    {group: 'nested', type: 'Selector', selected: '手动 & <组>'}
+]});
+assert.equal(JSON.stringify(selectionGroups), originalSelectionGroups, 'Export must not mutate selections');
+assert(!selectionText.includes('excluded-test-value'));
+assert(!selectionText.includes('members'));
+assert.deepEqual(JSON.parse(UI.exportSelections([], capturedAt)), {capturedAt, groups: []});
+
+// Run the actual export controls. No clipboard permission, write API, or storage
+// is available: the read-only textarea must be sufficient to copy the report.
+const exportScript = indexView.match(/        let exportingSelections = false;[\s\S]*?(?=        let testing = false;)/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+const exportControls = new Map(), exportRequests = [];
+function exportControl(selector) {
+    if (!exportControls.has(selector)) {
+        const item = {value: '', label: '', handlers: {}, hidden: true, disabled: false, focused: false, selected: false,
+            prop(key, value) { this[key] = value; return this; },
+            val(value) { this.value = value; return this; },
+            text(value) { this.label = value; return this; },
+            empty() { this.label = ''; return this; },
+            on(event, handler) { this.handlers[event] = handler; return this; },
+            focus() { this.focused = true; }, select() { this.selected = true; }};
+        item[0] = item;
+        exportControls.set(selector, item);
+    }
+    return exportControls.get(selector);
+}
+vm.runInNewContext(exportScript, {
+    $: exportControl, MihomoUI: UI,
+    ajaxGet: (url, params, done) => exportRequests.push({url, params, done})
+});
+const exportButton = exportControl('#export-selections');
+const exportField = exportControl('#selection-export-text');
+const exportPanel = exportControl('#selection-export-panel');
+const exportState = exportControl('#selection-export-state');
+const exportClick = () => exportButton.handlers.click();
+assert.equal(exportRequests.length, 0, 'Export is strictly on demand');
+exportClick(); exportClick();
+assert.equal(exportRequests.length, 1, 'Repeated clicks must not overlap requests');
+assert.equal(exportRequests[0].url, '/api/mihomo/dashboard/proxies');
+assert.equal(Object.keys(exportRequests[0].params).length, 0);
+assert.equal(exportButton.disabled, true);
+exportRequests[0].done({ready: true, groups: selectionGroups}, 'success');
+assert.equal(exportButton.disabled, false);
+assert.equal(exportPanel.hidden, false);
+assert(exportField.focused && exportField.selected, 'The snippet is ready for manual copy');
+const exportedReport = JSON.parse(exportField.value);
+assert.deepEqual(exportedReport.groups, JSON.parse(selectionText).groups);
+assert(!Number.isNaN(Date.parse(exportedReport.capturedAt)));
+assert(exportState.label.includes('Ctrl+C'));
+selectionGroups[0].now = 'changed since export';
+assert.equal(exportField.value.includes('changed since export'), false, 'A report stays fixed while copying');
+exportClick();
+assert.equal(exportField.value, '', 'A new read clears the previous report');
+assert.equal(exportPanel.hidden, true);
+exportRequests.at(-1).done({ready: true, groups: selectionGroups}, 'success');
+assert.equal(JSON.parse(exportField.value).groups[0].selected, 'changed since export', 'Each export reads fresh selections');
+exportControl('#selection-export-dismiss').handlers.click();
+assert.equal(exportPanel.hidden, true);
+assert.equal(exportField.value, '');
+assert.equal(exportState.label, '');
+assert.equal(exportButton.focused, true);
+for (const [data, status] of [
+    [null, 'error'], [{ready: false, groups: selectionGroups}, 'success'],
+    [{ready: true, groups: selectionGroups}, 'error'], [{ready: true}, 'success']
+]) {
+    exportClick();
+    exportRequests.at(-1).done(data, status);
+    assert.equal(exportButton.disabled, false, 'A failed read permits retry');
+    assert.equal(exportPanel.hidden, true);
+    assert.equal(exportField.value, '', 'Never offer stale data after a failed export');
+    assert.equal(exportState.label, 'Could not read current selections. Try exporting again.');
+}
+exportClick();
+exportRequests.at(-1).done({ready: true, groups: []}, 'success');
+assert.equal(exportState.label, 'No proxy groups are defined in the configuration.');
+assert.equal(exportPanel.hidden, true);
+assert.match(indexView, /<textarea[^>]*id="selection-export-text"[^>]* readonly[^>]*aria-describedby="selection-export-help"/);
+console.log('Selection export: exact names, all group types, safe fields, fresh reads, manual copy, retry and empty results passed');

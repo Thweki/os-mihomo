@@ -198,6 +198,41 @@
             renderedGroups = snapshot;
         }
 
+        let exportingSelections = false;
+        $('#export-selections').on('click', function () {
+            if (exportingSelections) { return; }
+            exportingSelections = true;
+            $('#export-selections').prop('disabled', true);
+            $('#selection-export-panel').prop('hidden', true);
+            $('#selection-export-text').val('');
+            $('#selection-export-state').text({{ lang._('Reading current group selections…') | json_encode }});
+            // A dedicated read avoids exporting stale polling data after a selection change.
+            ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
+                exportingSelections = false;
+                $('#export-selections').prop('disabled', false);
+                if (status !== 'success' || !data || !data.ready || !Array.isArray(data.groups)) {
+                    $('#selection-export-state').text({{ lang._('Could not read current selections. Try exporting again.') | json_encode }});
+                    return;
+                }
+                if (!data.groups.length) {
+                    $('#selection-export-state').text({{ lang._('No proxy groups are defined in the configuration.') | json_encode }});
+                    return;
+                }
+                const text = MihomoUI.exportSelections(data.groups, new Date().toISOString());
+                $('#selection-export-panel').prop('hidden', false);
+                const field = $('#selection-export-text').val(text)[0];
+                field.focus();
+                field.select();
+                $('#selection-export-state').text({{ lang._('Copy the selected JSON with Ctrl+C or Command+C. Export again to refresh it.') | json_encode }});
+            });
+        });
+        $('#selection-export-dismiss').on('click', function () {
+            $('#selection-export-panel').prop('hidden', true);
+            $('#selection-export-text').val('');
+            $('#selection-export-state').empty();
+            $('#export-selections')[0].focus();
+        });
+
         let testing = false;
         function testNodes(names) {
             if (testing || !names.length) { return; }
@@ -466,6 +501,14 @@
         <div class="content-box">
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
+                <button type="button" id="export-selections" class="btn btn-xs btn-default pull-right">{{ lang._('Export selections (JSON)') }}</button>
+            </div>
+            <p id="selection-export-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div id="selection-export-panel" hidden style="padding:0 12px 12px;">
+                <label for="selection-export-text">{{ lang._('Group selections (JSON)') }}</label>
+                <p id="selection-export-help" class="text-muted">{{ lang._('Includes all reported groups. Automatic selections may change; null means no single selection was reported. Group and node names are included.') }}</p>
+                <textarea id="selection-export-text" class="form-control" rows="10" readonly spellcheck="false" aria-describedby="selection-export-help"></textarea>
+                <button type="button" id="selection-export-dismiss" class="btn btn-xs btn-default">{{ lang._('Dismiss') }}</button>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div style="padding: 12px;" id="proxy-groups">
