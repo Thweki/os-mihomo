@@ -288,16 +288,30 @@ const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
+let favoriteNotice = '', testsDisabled = false, favoriteHandler;
+const dashboardStorage = new Map();
+const dashboardFavorites = new UI.ProxyFavorites(() => ({
+    getItem: key => dashboardStorage.get(key) || null,
+    setItem: (key, value) => dashboardStorage.set(key, value)
+}));
 const groupContext = vm.createContext({
     $: selector => {
+        if (selector instanceof DomNode) { return {attr: key => selector.getAttribute(key)}; }
+        if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
+        if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
+            return {prop: (key, value) => { assert.equal(key, 'disabled'); testsDisabled = value; }};
+        }
         assert.equal(selector, '#proxy-groups');
-        return {0: pollingBox, html: text => {
+        return {0: pollingBox, on: (event, target, handler) => {
+            assert.equal(event, 'click'); assert.equal(target, '.cmd-favorite'); favoriteHandler = handler;
+        }, html: text => {
             const placeholder = pollingDoc.createElement('placeholder');
             placeholder.textContent = text;
             pollingBox.replaceChildren(placeholder);
         }};
     },
-    MihomoUI: UI, delayText: value => value + ' ms', delayClass: () => 'label-success'
+    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false,
+    delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
 vm.runInContext(renderGroupsScript, groupContext);
 const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
@@ -341,3 +355,104 @@ for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
     assert.equal(pollingBox.children[0], recoveredRow);
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
+
+// Favorites store exact decoded names, independently for groups and proxies.
+let savedFavorites = null;
+const favoriteStorage = {
+    getItem(key) { assert.equal(key, 'mihomo.favorites.v1'); return savedFavorites; },
+    setItem(key, value) { assert.equal(key, 'mihomo.favorites.v1'); savedFavorites = value; }
+};
+const favorites = new UI.ProxyFavorites(() => favoriteStorage);
+assert.equal(favorites.has('groups', 'Group'), false);
+for (const name of [...names, '__proto__', 'literal &gt;', 'same']) {
+    assert.equal(favorites.toggle('proxies', name), true);
+    assert(favorites.has('proxies', name));
+    assert(!favorites.has('groups', name));
+}
+favorites.toggle('groups', 'same');
+const reloadedFavorites = new UI.ProxyFavorites(() => favoriteStorage);
+assert(reloadedFavorites.has('groups', 'same'));
+assert(reloadedFavorites.has('proxies', 'literal &gt;'));
+reloadedFavorites.toggle('proxies', 'same');
+assert(!new UI.ProxyFavorites(() => favoriteStorage).has('proxies', 'same'));
+assert(reloadedFavorites.has('groups', 'same'));
+for (const corrupt of ['{', 'null', '42', '[]', '{"groups":{},"proxies":[null,3,{},"valid"]}']) {
+    savedFavorites = corrupt;
+    const recovered = new UI.ProxyFavorites(() => favoriteStorage);
+    assert.equal(recovered.has('groups', 'Group'), false);
+    assert.equal(recovered.toggle('groups', 'Group'), true);
+}
+for (const unavailable of [
+    () => { throw new Error('Storage blocked'); },
+    () => ({getItem() { return null; }, setItem() { throw new Error('Quota exceeded'); }})
+]) {
+    const temporary = new UI.ProxyFavorites(unavailable);
+    assert.equal(temporary.toggle('proxies', 'temporary'), false);
+    assert(temporary.has('proxies', 'temporary'), 'Storage failure still supports this page visit');
+}
+console.log('Favorites persistence, exact names, independent kinds and unavailable storage: all checks passed');
+
+// Real star controls and real dashboard click handler: no controller writes or reads.
+// ajaxCall/ajaxGet are deliberately absent, so accidental requests fail this test.
+const favoriteClickScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-favorite',[\s\S]*?\n        \}\);/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInContext(favoriteClickScript, groupContext);
+const specialName = names[0] + ' &gt; 中文';
+const favoriteResponse = {ready: true, groups: [
+    {name: 'First group', members: [{name: 'First proxy', selected: true}, {name: encode(specialName)}, {name: 'Last proxy'}]},
+    {name: encode(specialName), members: [{name: 'First proxy'}, {name: encode(specialName), selected: true}]},
+    {name: 'Last group', members: []}
+]};
+const untouchedResponse = JSON.stringify(favoriteResponse);
+const starButtons = () => pollingBox.querySelectorAll('button[data-kind]');
+function star(kind, name, occurrence = 0) {
+    const button = starButtons().filter(node => node.attrs['data-kind'] === kind && node.attrs['data-name'] === name)[occurrence];
+    assert(button);
+    assert.equal(button.attrs.type, 'button', 'Stars support native keyboard activation');
+    pollingDoc.activeElement = button;
+    favoriteHandler.call(button);
+    assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], button.attrs['data-focus-key']);
+    assert(pollingBox.contains(pollingDoc.activeElement), 'Focus follows the reordered control');
+}
+const displayedGroups = () => pollingBox.querySelectorAll('ul[data-group]').map(node => node.attrs['data-group']);
+const displayedMembers = () => pollingBox.querySelectorAll('ul[data-group]').map(node =>
+    node.querySelectorAll('li[data-member]').map(member => member.attrs['data-member']));
+pollGroups(favoriteResponse);
+assert(starButtons().every(button => button.attrs['aria-pressed'] === 'false'));
+star('proxies', specialName);
+assert.equal(favoriteNotice, '');
+assert.deepEqual(displayedMembers(), [[specialName, 'First proxy', 'Last proxy'], [specialName, 'First proxy'], []]);
+assert.deepEqual(displayedGroups(), ['First group', specialName, 'Last group'], 'Proxy favorites do not star groups');
+assert.equal(starButtons().filter(button => button.attrs['aria-pressed'] === 'true').length, 2, 'Shared proxies are starred everywhere');
+star('groups', specialName);
+assert.deepEqual(displayedGroups(), [specialName, 'First group', 'Last group']);
+pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop = 88;
+const starredRow = pollingBox.children[0];
+pollGroups(favoriteResponse);
+assert.equal(pollingBox.children[0], starredRow, 'Identical polls retain favorite ordering without rendering');
+groupContext.testing = true;
+star('proxies', 'Last proxy');
+assert.equal(testsDisabled, true, 'Starring during latency tests must retain disabled probe controls');
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 88);
+groupContext.testing = false;
+const selectedNames = () => pollingBox.querySelectorAll('li[data-member]').filter(node => node.attrs.class.includes(' active'))
+    .map(node => node.attrs['data-member']).sort();
+assert.deepEqual(selectedNames(), ['First proxy', specialName].sort(), 'Starring leaves current selection unchanged');
+assert.equal(JSON.stringify(favoriteResponse), untouchedResponse, 'Display ordering must not mutate controller data');
+pollGroups({ready: true, groups: [{name: 'Temporary', members: []}]});
+pollGroups({ready: false});
+pollGroups(favoriteResponse);
+assert.deepEqual(displayedGroups(), [specialName, 'First group', 'Last group'], 'Missing groups retain preferences on recovery');
+assert.deepEqual(displayedMembers(), [[specialName, 'First proxy'], [specialName, 'Last proxy', 'First proxy'], []]);
+star('groups', specialName);
+star('proxies', specialName, 1);
+star('proxies', 'Last proxy');
+assert.deepEqual(displayedGroups(), ['First group', specialName, 'Last group']);
+assert.deepEqual(displayedMembers(), [['First proxy', specialName, 'Last proxy'], ['First proxy', specialName], []], 'Unstarring restores controller order');
+assert(starButtons().every(button => button.attrs['aria-pressed'] === 'false'));
+dashboardFavorites.storage = () => { throw new Error('Storage denied'); };
+star('groups', specialName);
+assert(favoriteNotice.includes('only for this page visit'));
+assert.equal(displayedGroups()[0], specialName);
+assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
+console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
