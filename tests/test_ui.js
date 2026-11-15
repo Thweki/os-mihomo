@@ -185,33 +185,6 @@ assert.notEqual(doc.activeElement, buttons[1], 'Refresh replaces nodes');
 assert.equal(doc.activeElement.attrs['data-focus-key'], buttons[1].attrs['data-focus-key'], 'Refresh restores keyboard focus by exact name');
 assert(groupBox.contains(doc.activeElement));
 
-// Proxy filtering uses displayed names and literal substrings without mutating
-// the controller snapshot or retaining non-matching selected members.
-const filterSource = [{name: 'Group only', members: [
-    {name: 'US &amp; West', selected: true, delay: 20},
-    {name: 'us [East].*', selected: false}, {name: '中文节点'}, {name: 'literal &amp;gt;'}
-]}, {name: 'Other', members: [{name: 'US &amp; West'}]}, {name: 'Empty'}];
-const filterOriginal = JSON.stringify(filterSource);
-const filtered = UI.filterProxyGroups(filterSource, '  uS  ');
-assert.deepEqual(filtered.groups.map(group => group.members.map(member => member.name)),
-    [['US &amp; West', 'us [East].*'], ['US &amp; West']]);
-assert.equal(filtered.matched, 3, 'Counts represent rows across groups');
-assert.equal(filtered.total, 5);
-assert.equal(filtered.groups[0].members[0].selected, true);
-assert.equal(filtered.groups[0].members[0].delay, 20);
-for (const query of ['& West', '[East].*', '文节', '&gt;']) {
-    assert(UI.filterProxyGroups(filterSource, query).matched > 0, 'Match decoded, literal names: ' + query);
-}
-assert.equal(UI.filterProxyGroups(filterSource, '>').matched, 0, 'Decode exactly once');
-assert.equal(UI.filterProxyGroups(filterSource, 'Group only').matched, 0, 'Filter proxy names, not group names');
-assert.equal(UI.filterProxyGroups(filterSource, 'no match').groups.length, 0);
-assert.deepEqual(UI.filterProxyGroups(filterSource, '  ').groups, filterSource);
-assert.deepEqual(UI.filterProxyGroups([], 'us'), {groups: [], matched: 0, total: 0});
-assert.equal(JSON.stringify(filterSource), filterOriginal, 'Filtering must not alter source order or selections');
-UI.renderProxyGroups(groupBox, UI.filterProxyGroups(groups, '<tag>&').groups,
-    {testGroup: 'Test visible nodes in this group', testNode: 'Test node'}, String, () => '');
-assert.deepEqual(groupBox.querySelectorAll('li[data-member]').map(node => node.attrs['data-member']), ['<tag>&value']);
-
 // Fake timers prove non-overlap, hidden pause/resume, exponential retry and recovery.
 let hidden = false, callback, calls = 0, scheduled = null;
 const polling = new UI.Poller(done => { calls++; callback = done; }, 2000, {
@@ -367,41 +340,39 @@ console.log('Settings stale-write/version handoff, partial-result feedback and o
 
 // Run the dashboard render path with fresh API objects and the real DOM renderer.
 // Unchanged polling must retain nodes, focus and scroll without allocating DOM.
-const renderGroupsScript = indexView.match(/        let renderedGroups = null;[\s\S]*?(?=        let testing = false;)/)[0]
-    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null;\n)?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
-const filterControls = new Map();
-function filterControl(selector) {
-    if (!filterControls.has(selector)) {
-        filterControls.set(selector, {value: '', label: '', handlers: {}, disabled: false,
-            val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
-            text(value) { this.label = value; return this; },
-            empty() { this.label = ''; return this; },
-            on(event, handler) { this.handlers[event] = handler; return this; },
-            trigger(event) { if (this.handlers[event]) { this.handlers[event](); } return this; },
-            prop(key, value) { this[key] = value; return this; }});
-    }
-    return filterControls.get(selector);
-}
-const proxyReads = [];
+let favoriteNotice = '', testsDisabled = false, favoriteHandler;
+const dashboardStorage = new Map();
+const dashboardFavorites = new UI.ProxyFavorites(() => ({
+    getItem: key => dashboardStorage.get(key) || null,
+    setItem: (key, value) => dashboardStorage.set(key, value)
+}));
 const groupContext = vm.createContext({
     $: selector => {
-        if (selector.startsWith('<div')) {
-            const node = pollingDoc.createElement('placeholder');
-            return {node, text(value) { node.textContent = value; return this; }};
+        if (selector instanceof DomNode) { return {attr: key => selector.getAttribute(key)}; }
+        if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
+        if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
+            return {prop: (key, value) => { assert.equal(key, 'disabled'); testsDisabled = value; }};
         }
-        if (selector !== '#proxy-groups') { return filterControl(selector); }
-        return {0: pollingBox, html: text => {
+        if (typeof selector === 'string' && (selector.startsWith('#proxy-filter') || selector.startsWith('<div'))) {
+            return {val: () => '', text() { return this; }, empty() { return this; }, on() { return this; },
+                trigger() { return this; }};
+        }
+        assert.equal(selector, '#proxy-groups');
+        return {0: pollingBox, on: (event, target, handler) => {
+            assert.equal(event, 'click'); assert.equal(target, '.cmd-favorite'); favoriteHandler = handler;
+        }, html: text => {
             const placeholder = pollingDoc.createElement('placeholder');
             placeholder.textContent = text;
             pollingBox.replaceChildren(placeholder);
-        }, empty() { pollingBox.replaceChildren(); return this; },
-        append(item) { pollingBox.appendChild(item.node); return this; }};
+        }};
     },
-    MihomoUI: UI, delayText: value => value + ' ms', delayClass: () => 'label-success', testing: false,
-    ajaxGet: (url, params, done) => proxyReads.push({url, done})
+    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false,
+    delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
 vm.runInContext(renderGroupsScript, groupContext);
 const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
@@ -446,6 +417,181 @@ for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
 
+// Favorites store exact decoded names, independently for groups and proxies.
+let savedFavorites = null;
+const favoriteStorage = {
+    getItem(key) { assert.equal(key, 'mihomo.favorites.v1'); return savedFavorites; },
+    setItem(key, value) { assert.equal(key, 'mihomo.favorites.v1'); savedFavorites = value; }
+};
+const favorites = new UI.ProxyFavorites(() => favoriteStorage);
+assert.equal(favorites.has('groups', 'Group'), false);
+for (const name of [...names, '__proto__', 'literal &gt;', 'same']) {
+    assert.equal(favorites.toggle('proxies', name), true);
+    assert(favorites.has('proxies', name));
+    assert(!favorites.has('groups', name));
+}
+favorites.toggle('groups', 'same');
+const reloadedFavorites = new UI.ProxyFavorites(() => favoriteStorage);
+assert(reloadedFavorites.has('groups', 'same'));
+assert(reloadedFavorites.has('proxies', 'literal &gt;'));
+reloadedFavorites.toggle('proxies', 'same');
+assert(!new UI.ProxyFavorites(() => favoriteStorage).has('proxies', 'same'));
+assert(reloadedFavorites.has('groups', 'same'));
+for (const corrupt of ['{', 'null', '42', '[]', '{"groups":{},"proxies":[null,3,{},"valid"]}']) {
+    savedFavorites = corrupt;
+    const recovered = new UI.ProxyFavorites(() => favoriteStorage);
+    assert.equal(recovered.has('groups', 'Group'), false);
+    assert.equal(recovered.toggle('groups', 'Group'), true);
+}
+for (const unavailable of [
+    () => { throw new Error('Storage blocked'); },
+    () => ({getItem() { return null; }, setItem() { throw new Error('Quota exceeded'); }})
+]) {
+    const temporary = new UI.ProxyFavorites(unavailable);
+    assert.equal(temporary.toggle('proxies', 'temporary'), false);
+    assert(temporary.has('proxies', 'temporary'), 'Storage failure still supports this page visit');
+}
+console.log('Favorites persistence, exact names, independent kinds and unavailable storage: all checks passed');
+
+// Real star controls and real dashboard click handler: no controller writes or reads.
+// ajaxCall/ajaxGet are deliberately absent, so accidental requests fail this test.
+const favoriteClickScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-favorite',[\s\S]*?\n        \}\);/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInContext(favoriteClickScript, groupContext);
+const specialName = names[0] + ' &gt; 中文';
+const favoriteResponse = {ready: true, groups: [
+    {name: 'First group', members: [{name: 'First proxy', selected: true}, {name: encode(specialName)}, {name: 'Last proxy'}]},
+    {name: encode(specialName), members: [{name: 'First proxy'}, {name: encode(specialName), selected: true}]},
+    {name: 'Last group', members: []}
+]};
+const untouchedResponse = JSON.stringify(favoriteResponse);
+const starButtons = () => pollingBox.querySelectorAll('button[data-kind]');
+function star(kind, name, occurrence = 0) {
+    const button = starButtons().filter(node => node.attrs['data-kind'] === kind && node.attrs['data-name'] === name)[occurrence];
+    assert(button);
+    assert.equal(button.attrs.type, 'button', 'Stars support native keyboard activation');
+    pollingDoc.activeElement = button;
+    favoriteHandler.call(button);
+    assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], button.attrs['data-focus-key']);
+    assert(pollingBox.contains(pollingDoc.activeElement), 'Focus follows the reordered control');
+}
+const displayedGroups = () => pollingBox.querySelectorAll('ul[data-group]').map(node => node.attrs['data-group']);
+const displayedMembers = () => pollingBox.querySelectorAll('ul[data-group]').map(node =>
+    node.querySelectorAll('li[data-member]').map(member => member.attrs['data-member']));
+pollGroups(favoriteResponse);
+assert(starButtons().every(button => button.attrs['aria-pressed'] === 'false'));
+star('proxies', specialName);
+assert.equal(favoriteNotice, '');
+assert.deepEqual(displayedMembers(), [[specialName, 'First proxy', 'Last proxy'], [specialName, 'First proxy'], []]);
+assert.deepEqual(displayedGroups(), ['First group', specialName, 'Last group'], 'Proxy favorites do not star groups');
+assert.equal(starButtons().filter(button => button.attrs['aria-pressed'] === 'true').length, 2, 'Shared proxies are starred everywhere');
+star('groups', specialName);
+assert.deepEqual(displayedGroups(), [specialName, 'First group', 'Last group']);
+pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop = 88;
+const starredRow = pollingBox.children[0];
+pollGroups(favoriteResponse);
+assert.equal(pollingBox.children[0], starredRow, 'Identical polls retain favorite ordering without rendering');
+groupContext.testing = true;
+star('proxies', 'Last proxy');
+assert.equal(testsDisabled, true, 'Starring during latency tests must retain disabled probe controls');
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 88);
+groupContext.testing = false;
+const selectedNames = () => pollingBox.querySelectorAll('li[data-member]').filter(node => node.attrs.class.includes(' active'))
+    .map(node => node.attrs['data-member']).sort();
+assert.deepEqual(selectedNames(), ['First proxy', specialName].sort(), 'Starring leaves current selection unchanged');
+assert.equal(JSON.stringify(favoriteResponse), untouchedResponse, 'Display ordering must not mutate controller data');
+pollGroups({ready: true, groups: [{name: 'Temporary', members: []}]});
+pollGroups({ready: false});
+pollGroups(favoriteResponse);
+assert.deepEqual(displayedGroups(), [specialName, 'First group', 'Last group'], 'Missing groups retain preferences on recovery');
+assert.deepEqual(displayedMembers(), [[specialName, 'First proxy'], [specialName, 'Last proxy', 'First proxy'], []]);
+star('groups', specialName);
+star('proxies', specialName, 1);
+star('proxies', 'Last proxy');
+assert.deepEqual(displayedGroups(), ['First group', specialName, 'Last group']);
+assert.deepEqual(displayedMembers(), [['First proxy', specialName, 'Last proxy'], ['First proxy', specialName], []], 'Unstarring restores controller order');
+assert(starButtons().every(button => button.attrs['aria-pressed'] === 'false'));
+dashboardFavorites.storage = () => { throw new Error('Storage denied'); };
+star('groups', specialName);
+assert(favoriteNotice.includes('only for this page visit'));
+assert.equal(displayedGroups()[0], specialName);
+assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
+console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
+
+{
+// Proxy filtering uses displayed names and literal substrings without mutating
+// the controller snapshot or retaining non-matching selected members.
+const filterSource = [{name: 'Group only', members: [
+    {name: 'US &amp; West', selected: true, delay: 20},
+    {name: 'us [East].*', selected: false}, {name: '中文节点'}, {name: 'literal &amp;gt;'}
+]}, {name: 'Other', members: [{name: 'US &amp; West'}]}, {name: 'Empty'}];
+const filterOriginal = JSON.stringify(filterSource);
+const filtered = UI.filterProxyGroups(filterSource, '  uS  ');
+assert.deepEqual(filtered.groups.map(group => group.members.map(member => member.name)),
+    [['US &amp; West', 'us [East].*'], ['US &amp; West']]);
+assert.equal(filtered.matched, 3, 'Counts represent rows across groups');
+assert.equal(filtered.total, 5);
+assert.equal(filtered.groups[0].members[0].selected, true);
+assert.equal(filtered.groups[0].members[0].delay, 20);
+for (const query of ['& West', '[East].*', '文节', '&gt;']) {
+    assert(UI.filterProxyGroups(filterSource, query).matched > 0, 'Match decoded, literal names: ' + query);
+}
+assert.equal(UI.filterProxyGroups(filterSource, '>').matched, 0, 'Decode exactly once');
+assert.equal(UI.filterProxyGroups(filterSource, 'Group only').matched, 0, 'Filter proxy names, not group names');
+assert.equal(UI.filterProxyGroups(filterSource, 'no match').groups.length, 0);
+assert.deepEqual(UI.filterProxyGroups(filterSource, '  ').groups, filterSource);
+assert.deepEqual(UI.filterProxyGroups([], 'us'), {groups: [], matched: 0, total: 0});
+assert.equal(JSON.stringify(filterSource), filterOriginal, 'Filtering must not alter source order or selections');
+UI.renderProxyGroups(groupBox, UI.filterProxyGroups(groups, '<tag>&').groups,
+    {testGroup: 'Test visible nodes in this group', testNode: 'Test node'}, String, () => '');
+assert.deepEqual(groupBox.querySelectorAll('li[data-member]').map(node => node.attrs['data-member']), ['<tag>&value']);
+
+const renderGroupsScript = indexView.match(/        let renderedGroups = null;[\s\S]*?(?=        let testing = false;)/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+let groupAllocations = 0;
+const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
+const pollingBox = pollingDoc.createElement('div');
+const filterControls = new Map();
+function filterControl(selector) {
+    if (!filterControls.has(selector)) {
+        filterControls.set(selector, {value: '', label: '', handlers: {}, disabled: false,
+            val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
+            text(value) { this.label = value; return this; },
+            empty() { this.label = ''; return this; },
+            on(event, handler) { this.handlers[event] = handler; return this; },
+            trigger(event) { if (this.handlers[event]) { this.handlers[event](); } return this; },
+            prop(key, value) { this[key] = value; return this; }});
+    }
+    return filterControls.get(selector);
+}
+const proxyReads = [];
+const groupContext = vm.createContext({
+    $: selector => {
+        if (selector.startsWith('<div')) {
+            const node = pollingDoc.createElement('placeholder');
+            return {node, text(value) { node.textContent = value; return this; }};
+        }
+        if (selector !== '#proxy-groups') { return filterControl(selector); }
+        return {0: pollingBox, html: text => {
+            const placeholder = pollingDoc.createElement('placeholder');
+            placeholder.textContent = text;
+            pollingBox.replaceChildren(placeholder);
+        }, empty() { pollingBox.replaceChildren(); return this; },
+        append(item) { pollingBox.appendChild(item.node); return this; }};
+    },
+    MihomoUI: UI, delayText: value => value + ' ms', delayClass: () => 'label-success', testing: false,
+    favorites: new UI.ProxyFavorites(), ajaxGet: (url, params, done) => proxyReads.push({url, done})
+});
+vm.runInContext(renderGroupsScript, groupContext);
+const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
+    {name: 'First', type: 'test', selected: true, delay: 20},
+    {name: 'Second', type: 'test', selected: false, delay: 30}
+]}]};
+function pollGroups(response = groupResponse) {
+    groupContext.response = JSON.parse(JSON.stringify(response));
+    vm.runInContext('renderGroups(response);', groupContext);
+}
+
 // Drive the actual input/clear handlers and refresh callback, not copied UI logic.
 const filterInput = filterControl('#proxy-filter');
 const visibleNames = () => pollingBox.querySelectorAll('li[data-member]').map(node => node.attrs['data-member']);
@@ -455,7 +601,8 @@ pollGroups(searchResponse);
 searchProxies('  US  ');
 assert.deepEqual(visibleNames(), ['US & West', 'us [East].*', 'US & West']);
 assert.equal(filterControl('#proxy-filter-state').label, 'Visible proxy entries: 3/5');
-assert(pollingBox.querySelectorAll('button[data-focus-key]')[0].attrs['aria-label'].startsWith('Test visible nodes'));
+assert(pollingBox.querySelectorAll('button[data-focus-key]').some(node =>
+    (node.attrs['aria-label'] || '').startsWith('Test visible nodes')));
 const groupTestScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-test-group',[\s\S]*?\n        \}\);/)[0];
 let groupTestHandler, testedNames;
 vm.runInNewContext(groupTestScript, {
@@ -509,3 +656,4 @@ assert.deepEqual(visibleNames(), ['US & West', 'West new', 'US & West'], 'New ma
 assert.equal(filterControl('#proxy-filter-state').label, 'Visible proxy entries: 3/6');
 assert.equal(JSON.stringify(filterSource), filterOriginal);
 console.log('Proxy name filtering, literal/Unicode names, counts, clear, refresh/recovery and test controls: all checks passed');
+}

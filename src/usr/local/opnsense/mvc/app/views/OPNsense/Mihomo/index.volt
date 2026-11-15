@@ -171,8 +171,9 @@
         /* ------------------------------------------------------------------ *
          * 代理分组
          * ------------------------------------------------------------------ */
-        let renderedGroups = null;
+        const favorites = new MihomoUI.ProxyFavorites();
         let latestGroups = null;
+        let renderedGroups = null;
         function renderGroups(data) {
             latestGroups = data;
             const $box = $('#proxy-groups');
@@ -203,9 +204,11 @@
             } else {
                 MihomoUI.renderProxyGroups($box[0], filtered.groups, {
                     testGroup: query ? {{ lang._('Test visible nodes in this group') | json_encode }} : {{ lang._('Test all nodes in this group') | json_encode }},
-                    testNode: {{ lang._('Test node latency') | json_encode }}
-                }, delayText, delayClass);
-                $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', testing);
+                    testNode: {{ lang._('Test node latency') | json_encode }},
+                    favoriteGroup: {{ lang._('Favorite group') | json_encode }},
+                    favoriteProxy: {{ lang._('Favorite proxy') | json_encode }}
+                }, delayText, delayClass, favorites);
+                if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
             }
             renderedGroups = snapshot;
         }
@@ -217,6 +220,12 @@
         });
 
         let testing = false;
+        $('#proxy-groups').on('click', '.cmd-favorite', function () {
+            const saved = favorites.toggle($(this).attr('data-kind'), $(this).attr('data-name'));
+            $('#proxy-favorites-state').text(saved ? '' : {{ lang._('Favorites could not be saved in this browser. They will last only for this page visit.') | json_encode }});
+            renderedGroups = null;
+            if (latestGroups) { renderGroups(latestGroups); }
+        });
         function testNodes(names) {
             if (testing || !names.length) { return; }
             testing = true;
@@ -486,6 +495,8 @@
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
+            <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div class="form-inline" style="padding:0 12px;">
                 <label for="proxy-filter">{{ lang._('Filter proxy names') }}</label>
                 <input type="search" id="proxy-filter" class="form-control" aria-controls="proxy-groups" aria-describedby="proxy-filter-help" autocomplete="off" />

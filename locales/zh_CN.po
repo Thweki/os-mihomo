@@ -3,6 +3,18 @@ msgstr ""
 "Language: zh_CN\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Favorite group"
+msgstr "收藏分组"
+
+msgid "Favorite proxy"
+msgstr "收藏代理"
+
+msgid "Favorites could not be saved in this browser. They will last only for this page visit."
+msgstr "无法在此浏览器中保存收藏，仅在本次页面访问中有效。"
+
+msgid "Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged."
+msgstr "点击星标可将分组置顶，或将代理在各分组中置顶。收藏保存在此浏览器中，不改变路由。"
+
 msgid "%s (answering)"
 msgstr "%s（有应答）"
 
