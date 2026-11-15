@@ -8,24 +8,10 @@ require_once '/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Config.php';
 use OPNsense\Mihomo\RuntimeStatus;
 use OPNsense\Mihomo\Config;
 
-function read_command(array $command): array
-{
-    $pipes = [];
-    $proc = proc_open($command, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
-    if (!is_resource($proc)) {
-        return [1, ''];
-    }
-    $output = stream_get_contents($pipes[1]);
-    stream_get_contents($pipes[2]);
-    fclose($pipes[1]);
-    fclose($pipes[2]);
-    return [proc_close($proc), (string)$output];
-}
-
 function process_for_pid(string $pid, string $pattern): ?array
 {
     if (!ctype_digit($pid) || (int)$pid <= 1) { return null; }
-    [$code, $output] = read_command(['/bin/ps', '-ww', '-p', $pid, '-o', 'pid=', '-o', 'rss=', '-o', 'command=']);
+    [$code, $output] = RuntimeStatus::readCommand(['/bin/ps', '-ww', '-p', $pid, '-o', 'pid=', '-o', 'rss=', '-o', 'command=']);
     return $code === 0 ? RuntimeStatus::process($output, (int)$pid, $pattern) : null;
 }
 
@@ -41,7 +27,7 @@ function core_process(): ?array
     $pid = trim((string)@file_get_contents('/var/run/mihomo.pid'));
     $core = process_for_pid($pid, $pattern);
     if ($core !== null) { return $core; }
-    [$code, $pids] = read_command(['/usr/bin/pgrep', '-x', 'mihomo']);
+    [$code, $pids] = RuntimeStatus::readCommand(['/usr/bin/pgrep', '-x', 'mihomo']);
     if ($code === 0) {
         foreach (preg_split('/\s+/', trim($pids)) as $candidate) {
             $core = process_for_pid($candidate, $pattern);
@@ -69,7 +55,7 @@ if (($argv[1] ?? '') === 'subscription') {
 }
 $scan = Config::scan();
 $tun = (string)($scan['tun.device'] ?? 'tun_mihomo');
-[$code, $pf] = read_command(['/sbin/pfctl', '-a', '*', '-sr']);
+[$code, $pf] = RuntimeStatus::readCommand(['/sbin/pfctl', '-a', '*', '-sr']);
 echo json_encode([
     'status' => 'ok', 'observed_at' => time(), 'rules_available' => $code === 0,
     'interfaces' => RuntimeStatus::interfaces((string)file_get_contents('/conf/config.xml')),
