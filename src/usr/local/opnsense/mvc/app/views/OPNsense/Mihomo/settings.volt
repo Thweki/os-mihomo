@@ -302,22 +302,74 @@
             updatePendingSettings();
         });
 
+        const applyHistory = [];
+        const applyHistoryLabels = {
+            saving: {{ lang._('Saving settings') | json_encode }},
+            applying: {{ lang._('Applying settings') | json_encode }},
+            save_failed: {{ lang._('Save failed') | json_encode }},
+            completed: {{ lang._('Settings applied') | json_encode }},
+            unchanged: {{ lang._('No file changes needed') | json_encode }},
+            accepted: {{ lang._('Restart accepted; readiness unconfirmed') | json_encode }},
+            partial: {{ lang._('Settings partly applied') | json_encode }},
+            failed: {{ lang._('Apply failed') | json_encode }},
+            unknown: {{ lang._('Outcome unconfirmed; check current settings before retrying') | json_encode }}
+        };
+        function renderApplyHistory() {
+            const $body = $('#settings-history-body').empty();
+            if (!applyHistory.length) {
+                $body.append($('<tr>').append($('<td>').attr('colspan', 3).text({{ lang._('No settings applies on this page yet.') | json_encode }})));
+            }
+            applyHistory.forEach(function (entry) {
+                const $row = $('<tr>');
+                $row.append($('<td>').text(entry.time.toLocaleString()));
+                $row.append($('<td>').text(entry.fields.length ? entry.fields.join(', ') : {{ lang._('Reapply saved settings') | json_encode }}));
+                $row.append($('<td>').text(applyHistoryLabels[entry.state]));
+                $body.append($row);
+            });
+        }
+        function beginApplyAttempt() {
+            // Keep labels only: never retain form values, YAML or backend messages.
+            const entry = {time: new Date(), state: 'saving', fields: formChanges().map(function (id) {
+                return id === MANAGED_INPUT ? {{ lang._('Write locks') | json_encode }}
+                    : $(document.getElementById('control_label_' + id)).text().trim().replace(/\s+/g, ' ') || id;
+            })};
+            applyHistory.unshift(entry);
+            applyHistory.length = Math.min(applyHistory.length, 10);
+            renderApplyHistory();
+            return entry;
+        }
+        function finishApplyAttempt(entry, data, status) {
+            const state = data && data.state;
+            const expectedStatus = ['failed', 'partial'].includes(state) ? state : 'ok';
+            entry.state = status === 'success' && data && data.status === expectedStatus
+                && ['completed', 'unchanged', 'accepted', 'partial', 'failed'].includes(state) ? state : 'unknown';
+            renderApplyHistory();
+        }
+        renderApplyHistory();
+
         function applySettings() {
             const $btn = $('#applyAct, #reapplyAct');
             $btn.prop('disabled', true);
             syncManagedHidden();
+            const attempt = beginApplyAttempt();
             ajaxCall('/api/mihomo/settings/set', getFormData('frm_Settings'), function (saved, status) {
                 if (status !== 'success' || !saved || !saved.version || (saved.result !== 'saved' && saved.status !== 'ok')) {
+                    attempt.state = status === 'success' && saved && (saved.status === 'failed' || saved.result === 'failed')
+                        ? 'save_failed' : 'unknown';
+                    renderApplyHistory();
                     $btn.prop('disabled', false);
                     handleFormValidation('frm_Settings', saved && saved.validations || {});
                     showResult({{ lang._('Save failed') | json_encode }}, MihomoUI.decodeApiText(saved && saved.message) || {{ lang._('The operation failed. Please try again.') | json_encode }}, BootstrapDialog.TYPE_DANGER);
                     return;
                 }
                 $('#version').val(saved.version);
+                attempt.state = 'applying';
+                renderApplyHistory();
                 ajaxCall('/api/mihomo/settings/apply', {
                     'version': saved.version,
                     'restart': formChanges().length && $('#restart-after-apply').prop('checked') ? 1 : 0
-                }, function (data) {
+                }, function (data, status) {
+                    finishApplyAttempt(attempt, data, status);
                     $btn.prop('disabled', false);
                     if (data && data.status === 'partial' && data.version) { $('#version').val(data.version); }
                     if (data && data['status'] === 'ok') {
@@ -929,6 +981,20 @@
 <div class="tab-content content-box">
     <div id="settings" class="tab-pane fade in active">
         {{ partial("layout_partials/base_form",['fields':formSettings,'id':'frm_Settings'])}}
+        <details open style="padding: 12px 14px;">
+            <summary>{{ lang._('Recent settings applies') }}</summary>
+            <p class="text-muted">{{ lang._('Latest 10 attempts on this page, newest first. Reloading clears this list. Field names describe submitted edits, not confirmed file changes. Values are not retained. YAML edits and other operators are not included.') }}</p>
+            <div class="table-responsive">
+                <table class="table table-condensed">
+                    <thead><tr>
+                        <th scope="col">{{ lang._('Started') }}</th>
+                        <th scope="col">{{ lang._('Changed fields') }}</th>
+                        <th scope="col">{{ lang._('Outcome') }}</th>
+                    </tr></thead>
+                    <tbody id="settings-history-body" aria-live="polite"></tbody>
+                </table>
+            </div>
+        </details>
     </div>
     <div id="dnsstatus" class="tab-pane fade in">
         <div style="padding: 12px 14px;">
