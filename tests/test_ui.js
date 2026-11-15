@@ -443,6 +443,76 @@ assert.deepEqual(shownTotals(), ['—', '—']);
 assert.match(indexView, /<label for="traffic-totals-bytes"[^>]*>\s*<input type="checkbox" id="traffic-totals-bytes">/);
 assert(indexView.includes("lang._('Show totals in bytes')"));
 console.log('Traffic totals: units, locale grouping, invalid counters, immediate toggling, polling and counter resets passed');
+// Exercise the actual mode hint, overview renderer and mode-change handler together.
+const translateModeScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
+    (_, label) => JSON.stringify(label));
+const modeControls = new Map(), modeWrites = [], modeTimeouts = [];
+let modeRefreshes = 0, modeFailures = 0;
+function modeControl(selector) {
+    if (typeof selector !== 'string') { return selector; }
+    if (!modeControls.has(selector)) {
+        modeControls.set(selector, {
+            value: '', label: '', state: {}, textWrites: 0,
+            val(value) { if (arguments.length === 0) { return this.value; } this.value = value; return this; },
+            text(value) { if (arguments.length === 0) { return this.label; } this.textWrites++; this.label = value; return this; },
+            data(key, value) { if (arguments.length === 1) { return this.state[key]; } this.state[key] = value; return this; },
+            change(handler) { this.handler = handler; }, empty() { this.label = ''; }
+        });
+    }
+    return modeControls.get(selector);
+}
+const modeContext = {
+    $: modeControl, Date: {now: () => 1000}, processMemory: null,
+    fmtCount: String, fmtBytes: String, fmtRate: String,
+    trafficHistory: {add: () => ({down: null, up: null})}, drawTraffic: () => {},
+    overviewPoller: {refresh: () => { modeRefreshes++; }},
+    ajaxCall: (url, data, done) => modeWrites.push({url, data, done}),
+    setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; }
+};
+const modeScript = indexView.match(/        function renderModeHint\(\) \{[\s\S]*?\n        \}\);/)[0];
+const modeOverviewScript = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0];
+vm.runInNewContext('let lastHistorySave = 1000, lastMetadata = 0;\n'
+    + translateModeScript(modeScript + '\n' + modeOverviewScript), modeContext);
+const modeSelect = modeControl('#mode-select'), modeHint = modeControl('#mode-hint');
+const modeLabels = {
+    rule: 'Rule-based: Mihomo follows matching rules to route or block traffic.',
+    global: 'Global: traffic handled by Mihomo uses the GLOBAL group selection.',
+    direct: 'Direct: traffic handled by Mihomo connects without a proxy.'
+};
+function pollMode(runtime) { modeContext.payload = {runtime, controller: {alive: true}}; vm.runInNewContext('renderOverview(payload)', modeContext); }
+for (const [mode, label] of Object.entries(modeLabels)) {
+    pollMode({mode});
+    assert.equal(modeHint.label, label);
+    const hintWrites = modeHint.textWrites;
+    pollMode({ready: true});
+    assert.equal(modeHint.label, label, 'Lightweight polls retain the displayed mode explanation');
+    pollMode({mode});
+    assert.equal(modeHint.textWrites, hintWrites, 'Unchanged polls do not repeat live-region announcements');
+}
+for (const mode of ['', null, 'unknown', '__proto__', '<script>']) {
+    pollMode({mode});
+    assert.equal(modeHint.label, '', 'Unknown modes clear old hints without rendering API text');
+}
+pollMode({mode: 'rule'});
+modeSelect.val('global'); modeSelect.handler.call(modeSelect);
+assert.equal(modeHint.label, modeLabels.global, 'A selection immediately explains the requested mode');
+assert.equal(modeWrites[0].url, '/api/mihomo/dashboard/set_mode');
+assert.equal(modeWrites[0].data.mode, 'global');
+pollMode({mode: 'rule'});
+assert.equal(modeHint.label, modeLabels.global, 'Pending changes keep selector and hint aligned');
+modeWrites[0].done({status: 'failed'}, 'success');
+assert.equal(modeFailures, 1, 'Hints must not suppress switch failures');
+modeTimeouts.shift()(); pollMode({mode: 'rule'});
+assert.equal(modeHint.label, modeLabels.rule, 'The hint follows the refreshed mode after a failed switch');
+modeSelect.val('direct'); modeSelect.handler.call(modeSelect);
+modeWrites[1].done({status: 'ok'}, 'success');
+modeTimeouts.shift()(); pollMode({mode: 'direct'});
+assert.equal(modeHint.label, modeLabels.direct);
+assert.equal(modeRefreshes, 4);
+assert.equal(modeWrites.length, 2, 'Rendering hints introduces no mode writes');
+assert.match(indexView, /id="mode-select"[^>]*aria-describedby="mode-hint"/);
+assert.match(indexView, /id="mode-hint"[^>]*role="status"/);
+console.log('Mode hints: all modes, metadata gaps, unknown values, selection, failure/recovery and accessibility passed');
 
 // Run the dashboard render path with fresh API objects and the real DOM renderer.
 // Unchanged polling must retain nodes, focus and scroll without allocating DOM.
