@@ -185,6 +185,35 @@ assert.notEqual(doc.activeElement, buttons[1], 'Refresh replaces nodes');
 assert.equal(doc.activeElement.attrs['data-focus-key'], buttons[1].attrs['data-focus-key'], 'Refresh restores keyboard focus by exact name');
 assert(groupBox.contains(doc.activeElement));
 
+// Order the displayed latest delays numerically, without changing API data or selection.
+const delayMembers = [
+    {name: 'slow', delay: 1000}, {name: 'unknown', delay: null},
+    {name: '<fast>&', delay: 9, selected: true}, {name: 'timeout', delay: 0},
+    {name: 'equal', delay: 9}, {name: 'failed', delay: -1},
+    {name: 'missing'}, {name: 'invalid', delay: '2'}, {name: 'nan', delay: NaN}
+];
+const delayGroups = [{name: 'Latency', members: delayMembers}, {name: 'Other', members: [
+    {name: 'second', delay: 30}, {name: 'first', delay: 10}
+]}];
+delayGroups.forEach(group => { group.members.forEach(Object.freeze); Object.freeze(group.members); Object.freeze(group); });
+Object.freeze(delayGroups);
+const renderDelays = order => UI.renderProxyGroups(groupBox, delayGroups,
+    {testGroup: 'Test group', testNode: 'Test node'}, String, () => '', order);
+const displayedMembers = box => box.querySelectorAll('ul[data-group]').map(list =>
+    list.querySelectorAll('li[data-member]').map(item => item.getAttribute('data-member')));
+const unavailable = ['unknown', 'timeout', 'failed', 'missing', 'invalid', 'nan'];
+renderDelays('delay-asc');
+assert.deepEqual(displayedMembers(groupBox), [['<fast>&', 'equal', 'slow', ...unavailable], ['first', 'second']]);
+assert.equal(groupBox.querySelectorAll('button[data-focus-key]').find(button =>
+    button.attrs['data-focus-key'] === JSON.stringify(['select', 'Latency', '<fast>&'])).attrs['aria-pressed'], 'true');
+renderDelays('delay-desc');
+assert.deepEqual(displayedMembers(groupBox)[0], ['slow', '<fast>&', 'equal', ...unavailable]);
+for (const order of ['configured', undefined, 'invalid']) {
+    renderDelays(order);
+    assert.deepEqual(displayedMembers(groupBox)[0], delayMembers.map(member => member.name));
+}
+console.log('Latest-delay numeric ordering, stable ties, missing/failed results and unchanged selections: all checks passed');
+
 // Fake timers prove non-overlap, hidden pause/resume, exponential retry and recovery.
 let hidden = false, callback, calls = 0, scheduled = null;
 const polling = new UI.Poller(done => { calls++; callback = done; }, 2000, {
@@ -340,13 +369,15 @@ console.log('Settings stale-write/version handoff, partial-result feedback and o
 
 // Run the dashboard render path with fresh API objects and the real DOM renderer.
 // Unchanged polling must retain nodes, focus and scroll without allocating DOM.
-const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null;\n)?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
+const renderGroupsScript = indexView.match(/        let renderedGroups = null;[\s\S]*?(?=        let testing = false;)/)[0]
     .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
+let changeGroupOrder;
 const groupContext = vm.createContext({
     $: selector => {
+        if (selector === '#proxy-order') { return {on: (event, handler) => { assert.equal(event, 'change'); changeGroupOrder = handler; }}; }
         assert.equal(selector, '#proxy-groups');
         return {0: pollingBox, html: text => {
             const placeholder = pollingDoc.createElement('placeholder');
@@ -354,7 +385,7 @@ const groupContext = vm.createContext({
             pollingBox.replaceChildren(placeholder);
         }};
     },
-    MihomoUI: UI, delayText: value => value + ' ms', delayClass: () => 'label-success'
+    MihomoUI: UI, delayText: value => value + ' ms', delayClass: () => 'label-success', testing: false
 });
 vm.runInContext(renderGroupsScript, groupContext);
 const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
@@ -398,3 +429,40 @@ for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
     assert.equal(pollingBox.children[0], recoveredRow);
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
+
+const sortedResponse = {ready: true, groups: [{name: 'Group', members: [
+    {name: 'Slow', delay: 1000}, {name: 'Fast', delay: 10}, {name: 'Untested', delay: null}
+]}]};
+changeGroupOrder.call({value: 'delay-asc'});
+pollGroups({ready: true, groups: []});
+changeGroupOrder.call({value: 'configured'});
+assert.equal(pollingBox.children[0].tagName, 'placeholder', 'Empty groups remain empty after sorting');
+pollGroups(sortedResponse);
+assert.equal(typeof changeGroupOrder, 'function', 'The overview must wire the ordering control');
+const sortFocus = pollingBox.querySelectorAll('button[data-focus-key]')[1];
+pollingDoc.activeElement = sortFocus;
+pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop = 60;
+changeGroupOrder.call({value: 'delay-asc'});
+assert.deepEqual(displayedMembers(pollingBox)[0], ['Fast', 'Slow', 'Untested'], 'Sorting reuses the loaded response without a request');
+assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], sortFocus.attrs['data-focus-key']);
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 60);
+const sortedAllocations = groupAllocations;
+pollGroups(sortedResponse);
+assert.equal(groupAllocations, sortedAllocations, 'Identical polls retain the sorted DOM');
+sortedResponse.groups[0].members[0].delay = 5;
+pollGroups(sortedResponse);
+assert.deepEqual(displayedMembers(pollingBox)[0], ['Slow', 'Fast', 'Untested'], 'New results update the active ordering');
+pollGroups({ready: false});
+changeGroupOrder.call({value: 'delay-desc'});
+assert.equal(pollingBox.children[0].tagName, 'placeholder', 'Sorting cannot revive stale groups when the controller is down');
+pollGroups(sortedResponse);
+assert.deepEqual(displayedMembers(pollingBox)[0], ['Fast', 'Slow', 'Untested'], 'Sort choice survives controller recovery');
+changeGroupOrder.call({value: 'configured'});
+assert.deepEqual(displayedMembers(pollingBox)[0], ['Slow', 'Fast', 'Untested']);
+groupContext.testing = true;
+changeGroupOrder.call({value: 'delay-desc'});
+assert.deepEqual(displayedMembers(pollingBox)[0], ['Slow', 'Fast', 'Untested'], 'Sorting cannot recreate enabled test buttons during a test batch');
+groupContext.testing = false;
+assert(indexView.includes('id="proxy-order"'));
+assert(indexView.includes('for="proxy-order"'));
+console.log('Overview ordering control, refresh, focus/scroll, configured order and recovery: all checks passed');

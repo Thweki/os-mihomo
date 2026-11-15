@@ -1389,3 +1389,23 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Node order"
+msgstr "节点排序"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Configuration order"
+msgstr "配置顺序"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Last delay: fastest first"
+msgstr "最近延迟：最快优先"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Last delay: slowest first"
+msgstr "最近延迟：最慢优先"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Uses the last recorded delay, which may be old. Failed and untested nodes sort last. Sorting does not run tests or change selections."
+msgstr "使用最后记录的延迟，结果可能已过时。失败和未测试的节点排在最后。排序不会运行测试或更改选择。"

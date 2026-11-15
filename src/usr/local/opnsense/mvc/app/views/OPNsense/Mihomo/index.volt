@@ -172,7 +172,10 @@
          * 代理分组
          * ------------------------------------------------------------------ */
         let renderedGroups = null;
+        let lastGroups = null;
+        let proxyOrder = 'configured';
         function renderGroups(data) {
+            lastGroups = data;
             const $box = $('#proxy-groups');
             if (!data['ready']) {
                 renderedGroups = null;
@@ -189,20 +192,26 @@
             }
 
             // Polls return fresh objects; retain the DOM while their data is unchanged.
-            const snapshot = JSON.stringify(groups);
+            const snapshot = JSON.stringify([proxyOrder, groups]);
             if (snapshot === renderedGroups) { return; }
             MihomoUI.renderProxyGroups($box[0], groups, {
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }}
-            }, delayText, delayClass);
+            }, delayText, delayClass, proxyOrder);
             renderedGroups = snapshot;
         }
+
+        $('#proxy-order').on('change', function () {
+            if (testing) { return; }
+            proxyOrder = this.value;
+            if (lastGroups) { renderGroups(lastGroups); }
+        });
 
         let testing = false;
         function testNodes(names) {
             if (testing || !names.length) { return; }
             testing = true;
-            $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
+            $('#proxy-order, #proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
             const progress = function (state) {
                 $('#proxy-test-state').text({{ lang._('Latency tests') | json_encode }} + ': ' + state.completed + '/' + state.total
                     + ' · ' + {{ lang._('Failed') | json_encode }} + ': ' + state.failed);
@@ -214,7 +223,7 @@
                 });
             }, progress, function () {
                 testing = false;
-                $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', false);
+                $('#proxy-order, #proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', false);
                 groupsPoller.refresh();
             });
         }
@@ -466,6 +475,15 @@
         <div class="content-box">
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
+            </div>
+            <div class="form-inline" style="padding:0 12px;">
+                <label for="proxy-order">{{ lang._('Node order') }}</label>
+                <select id="proxy-order" class="form-control input-sm" aria-describedby="proxy-order-note">
+                    <option value="configured">{{ lang._('Configuration order') }}</option>
+                    <option value="delay-asc">{{ lang._('Last delay: fastest first') }}</option>
+                    <option value="delay-desc">{{ lang._('Last delay: slowest first') }}</option>
+                </select>
+                <p id="proxy-order-note" class="text-muted">{{ lang._('Uses the last recorded delay, which may be old. Failed and untested nodes sort last. Sorting does not run tests or change selections.') }}</p>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div style="padding: 12px;" id="proxy-groups">

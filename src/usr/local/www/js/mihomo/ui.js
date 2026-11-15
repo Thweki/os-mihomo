@@ -118,7 +118,7 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
-    function renderProxyGroups(container, groups, labels, delayText, delayClass) {
+    function renderProxyGroups(container, groups, labels, delayText, delayClass, order) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         const scroll = new Map();
         container.querySelectorAll('ul[data-group]').forEach(node => scroll.set(node.getAttribute('data-group'), node.scrollTop));
@@ -138,7 +138,17 @@
             header.appendChild(test);
             const list = el('ul', {class: 'list-group', 'data-group': name, 'aria-label': name,
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
-            (group.members || []).forEach(member => {
+            const members = (group.members || []).slice();
+            if (order === 'delay-asc' || order === 'delay-desc') {
+                members.sort((a, b) => {
+                    const aValid = Number.isFinite(a.delay) && a.delay > 0;
+                    const bValid = Number.isFinite(b.delay) && b.delay > 0;
+                    // Failed/untested nodes stay last in both directions. Ties retain configuration order.
+                    if (aValid !== bValid) { return aValid ? -1 : 1; }
+                    return aValid ? (order === 'delay-desc' ? b.delay - a.delay : a.delay - b.delay) : 0;
+                });
+            }
+            members.forEach(member => {
                 const memberName = decodeApiText(member.name);
                 const item = el('li', {class: 'list-group-item' + (member.selected ? ' active' : ''),
                     style: 'padding:8px 12px;display:flex;align-items:center;gap:6px', 'data-group': name, 'data-member': memberName});

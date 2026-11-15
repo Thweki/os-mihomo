@@ -23,6 +23,8 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+Under **Proxy Groups → Node order**, choose **Last delay: fastest first** or **Last delay: slowest first** to compare nodes within each group. Sorting uses the core's last recorded latency, which may be old; run a node or group latency test to refresh it. Failed and untested nodes stay last, and ties keep configuration order. The choice lasts while the page is open and follows refreshed results. Choose **Configuration order** to restore the original order. Sorting does not run probes or change the selected proxy.
+
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
