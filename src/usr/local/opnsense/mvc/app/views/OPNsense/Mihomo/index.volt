@@ -210,6 +210,107 @@
         }
 
         let testing = false;
+        let selecting = false, snapshotBusy = false, groupsRevision = 0;
+        const snapshotErrors = {
+            name: {{ lang._('Enter a snapshot name of 1 to 80 characters.') | json_encode }},
+            duplicate: {{ lang._('That snapshot name already exists. Delete it first or choose another name.') | json_encode }},
+            limit: {{ lang._('Up to 20 snapshots can be saved. Delete one first.') | json_encode }},
+            empty: {{ lang._('No manual Selector groups are available to save.') | json_encode }},
+            groups: {{ lang._('Could not read current selections. No changes were made.') | json_encode }}
+        };
+        let snapshotStore = null;
+        function snapshotError(error) {
+            $('#proxy-snapshot-state').text(snapshotErrors[error.message] || {{ lang._('Snapshot storage is unavailable or invalid. No snapshot was saved or deleted.') | json_encode }});
+        }
+        function listSnapshots(selected) {
+            const list = document.getElementById('proxy-snapshot-list');
+            list.replaceChildren(MihomoUI.element(document, 'option', {value: ''}, {{ lang._('Choose a snapshot') | json_encode }}));
+            snapshotStore.read().forEach(item => list.appendChild(MihomoUI.element(document, 'option', {value: item.name}, item.name)));
+            if (selected) { $('#proxy-snapshot-list').val(selected); }
+        }
+        try {
+            snapshotStore = new MihomoUI.ProxySnapshots(window.localStorage);
+            listSnapshots();
+        } catch (error) { snapshotError(error); }
+        function snapshotLock(busy) {
+            snapshotBusy = busy;
+            groupsRevision++;
+            $('#proxy-snapshots input, #proxy-snapshots select, #proxy-snapshots button, #proxy-groups .cmd-select').prop('disabled', busy);
+            if (!busy) { groupsPoller.refresh(); }
+        }
+        function readSnapshotGroups(callback) {
+            snapshotLock(true);
+            $('#proxy-snapshot-state').text({{ lang._('Reading current selections…') | json_encode }});
+            ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
+                if (status !== 'success' || !data || data.ready !== true || !Array.isArray(data.groups)) {
+                    snapshotError(new Error('groups')); snapshotLock(false); return;
+                }
+                callback(data.groups);
+            });
+        }
+        $('#proxy-snapshot-save').on('click', function () {
+            if (snapshotBusy || selecting || testing) { return; }
+            const name = $('#proxy-snapshot-name').val();
+            readSnapshotGroups(function (groups) {
+                try {
+                    if (!snapshotStore) { throw new Error('storage'); }
+                    const saved = snapshotStore.save(name, groups);
+                    listSnapshots(saved);
+                    $('#proxy-snapshot-state').text({{ lang._('Snapshot saved in this browser.') | json_encode }});
+                } catch (error) { snapshotError(error); }
+                snapshotLock(false);
+            });
+        });
+        $('#proxy-snapshot-delete').on('click', function () {
+            if (snapshotBusy || selecting || testing) { return; }
+            const name = $('#proxy-snapshot-list').val();
+            if (!name) { return; }
+            try {
+                snapshotStore.remove(name); listSnapshots();
+                $('#proxy-snapshot-state').text({{ lang._('Snapshot deleted.') | json_encode }});
+            } catch (error) { snapshotError(error); }
+        });
+        $('#proxy-snapshot-restore').on('click', function () {
+            if (snapshotBusy || selecting || testing) { return; }
+            let snapshot;
+            try { snapshot = snapshotStore.read().find(item => item.name === $('#proxy-snapshot-list').val()); }
+            catch (error) { snapshotError(error); return; }
+            if (!snapshot) { return; }
+            readSnapshotGroups(function (groups) {
+                let plan;
+                try { plan = MihomoUI.planProxySnapshot(snapshot, groups); }
+                catch (error) { snapshotError(error); snapshotLock(false); return; }
+                if (plan.missing.length) {
+                    $('#proxy-snapshot-state').text({{ lang._('Restore blocked: missing groups, members or changed group types. No changes were made.') | json_encode }} + ' ' + plan.missing.join(', '));
+                    snapshotLock(false); return;
+                }
+                if (!plan.changes.length) {
+                    $('#proxy-snapshot-state').text({{ lang._('All saved selections are already active.') | json_encode }});
+                    snapshotLock(false); return;
+                }
+                const preview = plan.changes.map(pair => pair.group + ': ' + pair.previous + ' → ' + pair.member).join('\n');
+                if (!window.confirm({{ lang._('Restore these selections? This changes live routing. Other groups are left as they are.') | json_encode }} + '\n\n' + preview)) {
+                    $('#proxy-snapshot-state').text({{ lang._('Restore cancelled. No changes were made.') | json_encode }});
+                    snapshotLock(false); return;
+                }
+                let applied = 0;
+                function restoreNext() {
+                    const summary = {{ lang._('Selections applied') | json_encode }} + ': ' + applied + '/' + plan.changes.length;
+                    $('#proxy-snapshot-state').text(summary);
+                    if (applied === plan.changes.length) { snapshotLock(false); return; }
+                    const pair = plan.changes[applied];
+                    ajaxCall('/api/mihomo/dashboard/select_proxy', {group: pair.group, member: pair.member}, function (data, status) {
+                        if (status === 'success' && data && data.status === 'ok') { applied++; restoreNext(); }
+                        else {
+                            $('#proxy-snapshot-state').text(summary + '. ' + {{ lang._('Restore stopped; this selection is unconfirmed. Earlier changes remain active. Check current groups before retrying:') | json_encode }} + ' ' + pair.group);
+                            snapshotLock(false);
+                        }
+                    });
+                }
+                restoreNext();
+            });
+        });
+
         $('#proxy-groups').on('click', '.cmd-collapse-group', function () {
             const name = $(this).attr('data-group');
             if (collapsedGroups.has(name)) { collapsedGroups.delete(name); }
@@ -224,7 +325,7 @@
             if (latestGroups) { renderGroups(latestGroups); }
         });
         function testNodes(names) {
-            if (testing || !names.length) { return; }
+            if (testing || snapshotBusy || !names.length) { return; }
             testing = true;
             $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
             const progress = function (state) {
@@ -249,9 +350,12 @@
             testNodes(Array.from(new Set(names)));
         });
         $('#proxy-groups').on('click', '.cmd-select', function () {
+            if (selecting || snapshotBusy) { return; }
+            selecting = true; groupsRevision++;
             const $button = $(this), $item = $button.closest('li');
             $button.prop('disabled', true);
             ajaxCall('/api/mihomo/dashboard/select_proxy', {group: $item.attr('data-group'), member: $item.attr('data-member')}, function (data, status) {
+                selecting = false; groupsRevision++;
                 $button.prop('disabled', false);
                 if (status === 'success' && data && data.status === 'ok') { $('#dashboard-action-state').empty(); groupsPoller.refresh(); }
                 else { actionFailed(data); }
@@ -259,8 +363,10 @@
         });
 
         function loadGroups(done) {
-            if (testing) { done(true); return; }
+            if (testing || selecting || snapshotBusy) { done(true); return; }
+            const revision = groupsRevision;
             ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
+                if (revision !== groupsRevision) { done(true); return; }
                 const ok = status === 'success' && data && data.ready;
                 if (data && status === 'success') { renderGroups(data); }
                 if (!ok) { $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }}); }
@@ -510,6 +616,19 @@
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div id="proxy-snapshots" style="padding:0 12px;">
+                <p class="text-muted">{{ lang._('Save manual Selector groups as named snapshots (up to 20). Stored only in this browser for this firewall address. Restore checks availability before changing live selections; configuration files and automatic groups are not saved.') }}</p>
+                <div class="form-inline">
+                    <label for="proxy-snapshot-name">{{ lang._('Snapshot name') }}</label>
+                    <input id="proxy-snapshot-name" type="text" maxlength="80" class="form-control" />
+                    <button id="proxy-snapshot-save" type="button" class="btn btn-default">{{ lang._('Save snapshot') }}</button>
+                    <label for="proxy-snapshot-list">{{ lang._('Saved snapshots') }}</label>
+                    <select id="proxy-snapshot-list" class="form-control"></select>
+                    <button id="proxy-snapshot-restore" type="button" class="btn btn-default">{{ lang._('Restore snapshot') }}</button>
+                    <button id="proxy-snapshot-delete" type="button" class="btn btn-default">{{ lang._('Delete snapshot') }}</button>
+                </div>
+                <p id="proxy-snapshot-state" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;"></p>
+            </div>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
             <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div style="padding: 12px;" id="proxy-groups">

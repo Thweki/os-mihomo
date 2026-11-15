@@ -1815,6 +1815,92 @@ msgid "Outcome"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Enter a snapshot name of 1 to 80 characters."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "That snapshot name already exists. Delete it first or choose another name."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Up to 20 snapshots can be saved. Delete one first."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "No manual Selector groups are available to save."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Could not read current selections. No changes were made."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Snapshot storage is unavailable or invalid. No snapshot was saved or deleted."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Choose a snapshot"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Reading current selections…"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Snapshot saved in this browser."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Snapshot deleted."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore blocked: missing groups, members or changed group types. No changes were made."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "All saved selections are already active."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore these selections? This changes live routing. Other groups are left as they are."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore cancelled. No changes were made."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Selections applied"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore stopped; this selection is unconfirmed. Earlier changes remain active. Check current groups before retrying:"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Save manual Selector groups as named snapshots (up to 20). Stored only in this browser for this firewall address. Restore checks availability before changing live selections; configuration files and automatic groups are not saved."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Snapshot name"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Save snapshot"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Saved snapshots"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore snapshot"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Delete snapshot"
+
 msgid "Favorite group"
 msgstr ""
 

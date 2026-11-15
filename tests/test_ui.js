@@ -522,6 +522,173 @@ for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
 
+// Named snapshots retain only exact Selector selections, across page instances.
+function memoryStorage() {
+    const values = new Map();
+    return {getItem: key => values.has(key) ? values.get(key) : null, setItem: (key, value) => values.set(key, value)};
+}
+const snapshotStorage = memoryStorage();
+const snapshots = new UI.ProxySnapshots(snapshotStorage);
+const snapshotName = '<Work> & "中文"';
+const snapshotGroups = [
+    {name: encode('__proto__'), type: 'Selector', now: encode('literal &gt; <node>'), members: [{name: encode('literal &gt; <node>')}, {name: 'other'}], secret: 'never-store-this'},
+    {name: encode('中文 / "group"'), type: 'Selector', now: 'DIRECT', members: [{name: 'DIRECT'}, {name: 'other'}]},
+    {name: 'Auto', type: 'URLTest', now: 'fast', members: [{name: 'fast'}]},
+    {name: 'Fallback', type: 'Fallback', now: 'fast', members: [{name: 'fast'}]}
+];
+assert.equal(snapshots.save(' ' + snapshotName + ' ', snapshotGroups), snapshotName);
+const savedSnapshot = new UI.ProxySnapshots(snapshotStorage).read()[0];
+assert.deepEqual(savedSnapshot, {name: snapshotName, selections: [
+    {group: '__proto__', member: 'literal &gt; <node>'}, {group: '中文 / "group"', member: 'DIRECT'}
+]});
+assert(!snapshotStorage.getItem(snapshots.key).includes('never-store-this'));
+assert(!snapshotStorage.getItem(snapshots.key).includes('URLTest'));
+assert.throws(() => snapshots.save(snapshotName, snapshotGroups), /duplicate/);
+assert.throws(() => snapshots.save(' ', snapshotGroups), /name/);
+assert.throws(() => snapshots.save('x'.repeat(81), snapshotGroups), /name/);
+assert.throws(() => snapshots.save('auto only', snapshotGroups.slice(2)), /empty/);
+assert.throws(() => snapshots.save('bad current', [{...snapshotGroups[0], now: 'gone'}]), /groups/);
+assert.throws(() => snapshots.save('malformed', [{}]), /groups/);
+assert.throws(() => snapshots.save('ambiguous', [snapshotGroups[0], snapshotGroups[0]]), /groups/);
+assert.deepEqual(UI.planProxySnapshot(savedSnapshot, snapshotGroups), {changes: [], missing: []});
+const changedGroups = snapshotGroups.map(group => ({...group, now: 'other'}));
+assert.deepEqual(UI.planProxySnapshot(savedSnapshot, changedGroups).changes, [
+    {group: '__proto__', member: 'literal &gt; <node>', previous: 'other'},
+    {group: '中文 / "group"', member: 'DIRECT', previous: 'other'}
+]);
+for (const groups of [changedGroups.slice(1), [{...changedGroups[0], type: 'URLTest'}, ...changedGroups.slice(1)],
+    [{...changedGroups[0], members: [{name: 'other'}]}, ...changedGroups.slice(1)]]) {
+    assert.deepEqual(UI.planProxySnapshot(savedSnapshot, groups).missing, ['__proto__']);
+}
+for (let i = 1; i < 20; i++) { snapshots.save(String(i), snapshotGroups); }
+assert.throws(() => snapshots.save('overflow', snapshotGroups), /limit/);
+snapshots.remove('1'); snapshots.save('replacement', snapshotGroups);
+assert.equal(snapshots.read().length, 20);
+const beforeStorageFailure = snapshots.read();
+const originalSet = snapshotStorage.setItem;
+snapshotStorage.setItem = () => { throw new Error('quota'); };
+assert.throws(() => snapshots.remove(snapshotName), /quota/);
+assert.deepEqual(snapshots.read(), beforeStorageFailure, 'Failed storage writes retain saved snapshots');
+snapshotStorage.setItem = originalSet;
+for (const invalid of ['{', 'null', '[]', '{"version":2,"snapshots":[]}',
+    JSON.stringify({version: 1, snapshots: [{name: 'bad', selections: []}]}),
+    JSON.stringify({version: 1, snapshots: [savedSnapshot, savedSnapshot]})]) {
+    const broken = memoryStorage(); broken.setItem(snapshots.key, invalid);
+    assert.throws(() => new UI.ProxySnapshots(broken).read());
+}
+console.log('Proxy snapshots: persistence, exact names, selectors, validation, limits and storage failures passed');
+
+// Execute actual overview controls, requests, locks and restore sequencing.
+const snapshotScript = indexView.slice(indexView.indexOf('        let testing = false;'), indexView.indexOf('        /*', indexView.indexOf('        function loadGroups(done)')))
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+assert(snapshotScript.includes('proxy-snapshot-restore'), 'The overview must wire snapshot controls');
+function snapshotPage(storage = memoryStorage()) {
+    const items = new Map(), gets = [], posts = [], confirms = [];
+    const document = {createElement: tag => new DomNode(document, tag), getElementById: id => item('#' + id)[0]};
+    function item(selector) {
+        if (typeof selector !== 'string') { return selector; }
+        if (!items.has(selector)) {
+            items.set(selector, {0: document.createElement('select'), value: '', label: '', handlers: {}, disabled: false,
+                val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
+                text(value) { this.label = value; return this; }, empty() { this.label = ''; return this; },
+                prop(key, value) { this[key] = value; return this; },
+                on(event, selector, fn) { this.handlers[fn ? selector : event] = fn || selector; return this; }});
+        }
+        return items.get(selector);
+    }
+    const page = {item, gets, posts, confirms, refreshes: 0, renders: 0, confirm: true};
+    const context = vm.createContext({document, $: item, MihomoUI: UI,
+        window: {get localStorage() { if (!storage) { throw new Error('denied'); } return storage; },
+            confirm: text => { confirms.push(text); return page.confirm; }},
+        ajaxGet: (url, data, done) => gets.push({url, data, done}),
+        ajaxCall: (url, data, done) => posts.push({url, data, done}),
+        groupsPoller: {refresh: () => { page.refreshes++; }}, renderGroups: () => { page.renders++; }, actionFailed: () => {}
+    });
+    vm.runInContext(snapshotScript, context);
+    page.click = action => item('#proxy-snapshot-' + action).handlers.click();
+    page.read = groups => gets.at(-1).done({ready: true, groups}, 'success');
+    page.poll = () => vm.runInContext('loadGroups(() => {});', context);
+    page.state = () => item('#proxy-snapshot-state').label;
+    page.store = new UI.ProxySnapshots(storage);
+    page.context = context;
+    return page;
+}
+const page = snapshotPage();
+assert.equal(page.gets.length + page.posts.length, 0, 'Loading never saves or restores automatically');
+page.item('#proxy-snapshot-name').val(snapshotName);
+page.click('save'); page.click('save');
+assert.equal(page.gets.length, 1, 'Save fetches once and rejects overlapping actions');
+page.read(snapshotGroups);
+assert.equal(page.store.read()[0].name, snapshotName);
+assert.equal(page.item('#proxy-snapshot-list')[0].children[1].textContent, snapshotName, 'Snapshot labels are literal text');
+assert.equal(page.posts.length, 0);
+page.poll(); const stalePoll = page.gets.at(-1);
+page.click('restore');
+stalePoll.done({ready: true, groups: snapshotGroups}, 'success');
+assert.equal(page.renders, 0, 'Old polls cannot render across snapshot operations');
+page.read(changedGroups);
+assert.equal(page.confirms.length, 1);
+assert(page.confirms[0].includes('literal &gt; <node>'));
+assert.equal(page.posts.length, 1, 'Restore issues one selection at a time');
+assert.equal(page.posts[0].url, '/api/mihomo/dashboard/select_proxy');
+assert.deepEqual({...page.posts[0].data}, {group: '__proto__', member: 'literal &gt; <node>'});
+const readsWhileBusy = page.gets.length;
+page.click('save'); page.click('delete'); page.click('restore'); page.poll();
+page.item('#proxy-groups').handlers['.cmd-select']();
+assert.equal(page.gets.length, readsWhileBusy);
+assert.equal(page.posts.length, 1, 'Manual selections cannot interleave with restore');
+page.posts[0].done({status: 'ok'}, 'success');
+assert.equal(page.posts.length, 2);
+page.posts[1].done(null, 'error');
+assert(page.state().includes('1/2'));
+assert(page.state().includes('unconfirmed'));
+assert.equal(page.store.read().length, 1, 'Partial restore does not mutate the snapshot');
+assert(page.refreshes >= 2, 'Completion refreshes current selections');
+page.click('restore'); page.read(changedGroups);
+page.posts[2].done({status: 'failed'}, 'success');
+assert.equal(page.posts.length, 3, 'A rejected write stops the remaining queue');
+assert(page.state().includes('0/2'));
+page.click('restore'); page.read([{...changedGroups[0], now: snapshotGroups[0].now}, ...changedGroups.slice(1)]);
+assert.equal(page.posts.length, 4, 'Already active selections are skipped on retry');
+page.posts[3].done({status: 'ok'}, 'success');
+assert(page.state().includes('1/1'));
+for (const groups of [changedGroups.slice(1), [{...changedGroups[0], type: 'Fallback'}, ...changedGroups.slice(1)],
+    [{...changedGroups[0], members: []}, ...changedGroups.slice(1)]]) {
+    page.click('restore'); page.read(groups);
+    assert(page.state().includes('Restore blocked'));
+    assert.equal(page.posts.length, 4, 'Any incompatible saved selection blocks all writes');
+}
+page.click('restore'); page.read(snapshotGroups);
+assert(page.state().includes('already active'));
+page.confirm = false; page.click('restore'); page.read(changedGroups);
+assert(page.state().includes('cancelled'));
+assert.equal(page.posts.length, 4);
+for (const action of ['save', 'restore']) {
+    page.click(action); page.gets.at(-1).done({ready: false}, 'success');
+    assert(page.state().includes('No changes'));
+    page.click(action); page.gets.at(-1).done(null, 'error');
+    assert(page.state().includes('No changes'));
+}
+const manualButton = {prop() {}, closest: () => ({attr: name => name === 'data-group' ? '__proto__' : 'other'})};
+page.item('#proxy-groups').handlers['.cmd-select'].call(manualButton);
+const readsBeforeSelection = page.gets.length;
+page.click('save'); page.click('restore');
+assert.equal(page.gets.length, readsBeforeSelection, 'Snapshots wait for pending manual selections');
+page.posts.at(-1).done({status: 'ok'}, 'success');
+page.click('delete');
+assert.equal(page.store.read().length, 0);
+const deniedPage = snapshotPage(null);
+assert(deniedPage.state().includes('storage'));
+deniedPage.item('#proxy-snapshot-name').val('Denied'); deniedPage.click('save'); deniedPage.read(snapshotGroups);
+assert(deniedPage.state().includes('storage'));
+assert.equal(deniedPage.posts.length, 0);
+const fullStorage = memoryStorage();
+fullStorage.setItem = () => { throw new Error('quota'); };
+const quotaPage = snapshotPage(fullStorage);
+quotaPage.item('#proxy-snapshot-name').val('Full'); quotaPage.click('save'); quotaPage.read(snapshotGroups);
+assert(quotaPage.state().includes('storage'));
+assert.equal(quotaPage.store.read().length, 0);
+console.log('Proxy snapshot controls: fresh reads, preview/cancel, sequential writes, partial failure, compatibility and request races passed');
 // Favorites store exact decoded names, independently for groups and proxies.
 let savedFavorites = null;
 const favoriteStorage = {
