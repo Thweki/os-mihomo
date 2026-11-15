@@ -13,9 +13,51 @@ from check_publication import check
 
 ROOT = Path(__file__).resolve().parent.parent
 
+
+def shell_files(root=ROOT):
+    """Find maintained POSIX scripts, including entrypoints without a suffix."""
+    candidates = [root / 'build.sh']
+    for directory in ['scripts', 'tests', 'src', 'packaging/freebsd']:
+        candidates.extend((root / directory).rglob('*'))
+    snippets = {'src/etc/rc.conf.d/mihomo', 'src/usr/local/etc/mihomo/sub/env'}
+    paths = []
+    for path in sorted(candidates):
+        if not path.is_file():
+            continue
+        with path.open('rb') as stream:
+            first_line = stream.readline(128)
+        if (path.suffix == '.sh' or path.relative_to(root).as_posix() in snippets
+                or re.match(rb'#!\s*(?:/bin/sh|/usr/bin/env\s+sh)(?:\s|$)', first_line)):
+            paths.append(path)
+    return paths
+
+
+def check_shell_syntax(root=ROOT):
+    shell = shutil.which('sh') or ('C:/Program Files/Git/usr/bin/sh.exe' if sys.platform == 'win32' else 'sh')
+    for path in shell_files(root):
+        subprocess.run([shell, '-n', str(path)], check=True)
+
+
+def check_correctness(root=ROOT):
+    # Error-level shell diagnostics and Python runtime mistakes, not style rules.
+    paths = shell_files(root)
+    if paths:
+        subprocess.run(['shellcheck', '--norc', '--shell=sh', '--severity=error',
+                        *map(str, paths)], check=True)
+    paths = sorted(path for directory in ['tools', 'tests']
+                   for path in (root / directory).rglob('*.py'))
+    if paths:
+        subprocess.run([sys.executable, '-m', 'ruff', 'check', '--isolated', '--no-cache',
+                        '--select', 'E9,F63,F7,F82', *map(str, paths)], check=True)
+
+
 def main():
     check()
     build(check=True)
+    check_shell_syntax()
+    if '--lint' in sys.argv:
+        check_correctness()
+    subprocess.run([sys.executable, str(ROOT / 'tests/test_validate.py')], check=True)
     # Distributed samples must never acquire real controller/node credentials.
     examples = {'secret': 'example-change-me', 'password': 'example-password',
                 'uuid': '00000000-0000-0000-0000-000000000000', 'public-key': 'A' * 43}
@@ -53,9 +95,6 @@ def main():
         subprocess.run(['php', str(ROOT / 'tests/test_patch.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_writes.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_api.php')], check=True)
-    for path in [*(ROOT / name for name in ['build.sh', 'scripts/deploy.sh', 'scripts/rollback.sh', 'scripts/ci_build.sh', 'scripts/make_repo.sh', 'tests/test_repository.sh']), *sorted((ROOT / 'src').rglob('*.sh')), *sorted((ROOT / 'packaging/freebsd').glob('+*INSTALL'))]:
-        shell = shutil.which('sh') or ('C:/Program Files/Git/usr/bin/sh.exe' if sys.platform == 'win32' else 'sh')
-        subprocess.run([shell, '-n', str(path)], check=True)
     for path in (ROOT / 'packaging/freebsd').glob('+*INSTALL'):
         text = path.read_text(encoding='utf-8')
         assert not re.search(r'configctl|pfctl|pkill|config.xml|service mihomo|setup_unbound|rm -rf', text), path

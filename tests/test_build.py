@@ -27,4 +27,30 @@ with tempfile.TemporaryDirectory() as directory:
         assert [entry.name for entry in entries] == ['+COMPACT_MANIFEST', '+MANIFEST', '/usr/local/etc/example']
         assert all(entry.uid == entry.gid == 0 and entry.mtime == 1234567890 for entry in entries)
         assert tar.extractfile('/usr/local/etc/example').read() == b'example\n'
-print('Deterministic archive and package metadata tests passed.')
+
+    # Reject every symlink before creating or truncating an output. Filtering by
+    # is_file() first would silently omit directory links and dangling links.
+    for package in (False, True):
+        for kind, target in [('file', source / 'usr/local/etc/example'),
+                             ('directory', source / 'usr/local/etc'),
+                             ('dangling', scratch / 'missing')]:
+            link = source / 'linked-entry'
+            link.symlink_to(target, target_is_directory=kind == 'directory')
+            try:
+                for existing in (False, True):
+                    output = scratch / f'rejected-{package}-{kind}-{existing}.gz'
+                    if existing:
+                        output.write_bytes(b'previous artifact\n')
+                    try:
+                        module.archive(source, output, 1234567890, package)
+                    except ValueError as error:
+                        assert str(error) == f'Symlink not supported: {link}'
+                    else:
+                        raise AssertionError(f'{kind} symlink accepted (package={package})')
+                    if existing:
+                        assert output.read_bytes() == b'previous artifact\n', 'Rejected input clobbered output'
+                    else:
+                        assert not output.exists(), 'Rejected input left a partial archive'
+            finally:
+                link.unlink()
+print('Deterministic archive, package metadata and symlink rejection tests passed.')
