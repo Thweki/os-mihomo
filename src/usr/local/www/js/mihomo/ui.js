@@ -111,6 +111,26 @@
         }
         pump();
     }
+    // Only this test run's successful measurements can nominate a proxy.
+    function fastestProxy(group, delays) {
+        if (!group || group.type !== 'Selector') { return null; }
+        const excluded = new Set(['direct', 'reject', 'rejectdrop', 'pass', 'compatible', 'selector', 'urltest', 'fallback', 'loadbalance', 'relay']);
+        let best = null, bestDelay = Infinity;
+        (group.members || []).forEach(member => {
+            const name = decodeApiText(member.name), delay = delays.get(name);
+            if (excluded.has(String(member.type).toLowerCase().replace(/[-_]/g, ''))
+                || ['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE'].includes(name)
+                || !Number.isFinite(delay) || delay <= 0) { return; }
+            if (delay < bestDelay || delay === bestDelay && member.selected) {
+                best = member; bestDelay = delay;
+            }
+        });
+        return best && !best.selected ? decodeApiText(best.name) : null;
+    }
+    function proxyGroupSignature(group) {
+        return group && JSON.stringify([group.name, group.type,
+            (group.members || []).map(member => [member.name, member.type, !!member.selected])]);
+    }
     // Browser-local display preferences; names are decoded once at the API boundary.
     class ProxyFavorites {
         constructor(storage) {
@@ -237,5 +257,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, fastestProxy, proxyGroupSignature, element, renderProxyGroups, ProxyFavorites};
 }));

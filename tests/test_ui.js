@@ -625,6 +625,137 @@ assert.equal(displayedGroups()[0], specialName);
 assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
 console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
 
+// Automatic switching uses only fresh results and never selects direct/reject or
+// a nested policy group. Equal delays keep the current selection.
+const autoGroup = {name: 'Group &amp; &lt;one&gt;', type: 'Selector', members: [
+    {name: 'slow', type: 'Shadowsocks', selected: true, delay: 1},
+    {name: 'fast &amp; &lt;two&gt;', type: 'Trojan', selected: false, delay: 999}
+]};
+const freshDelays = new Map([['slow', 100], ['fast & <two>', 20]]);
+assert.equal(UI.fastestProxy(autoGroup, freshDelays), 'fast & <two>');
+assert.equal(UI.fastestProxy(autoGroup, new Map()), null, 'Cached history cannot nominate a winner');
+assert.equal(UI.fastestProxy(autoGroup, new Map([['slow', 20], ['fast & <two>', 20]])), null);
+for (const invalid of [null, undefined, -1, 0, NaN, Infinity, '10']) {
+    assert.equal(UI.fastestProxy(autoGroup, new Map([['fast & <two>', invalid]])), null);
+}
+assert.equal(UI.fastestProxy(autoGroup, new Map([['slow', -1], ['fast & <two>', 20]])), 'fast & <two>');
+for (const type of ['URLTest', 'Fallback', 'LoadBalance', 'Relay', 'Direct', 'Reject', 'RejectDrop', 'Pass', 'Compatible', 'Selector']) {
+    const group = {...autoGroup, members: [{name: 'alias', type, selected: false}]};
+    assert.equal(UI.fastestProxy(group, new Map([['alias', 1]])), null, type + ' must not be selected');
+    if (type !== 'Selector') { assert.equal(UI.fastestProxy({...autoGroup, type}, freshDelays), null); }
+}
+const reversedTie = {...autoGroup, members: [...autoGroup.members].reverse()};
+assert.equal(UI.fastestProxy(reversedTie, new Map([['slow', 20], ['fast & <two>', 20]])), null);
+
+// Execute the actual dashboard event handlers and async callbacks, with controlled
+// API responses so races are deterministic and do not require an appliance.
+const autoScript = indexView.slice(indexView.indexOf('        let testing = false'),
+    indexView.indexOf('        /* ------------------------------------------------------------------ *', indexView.indexOf('        let testing = false')))
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+function autoHarness() {
+    const nodes = new Map(), calls = [], gets = [], events = {}, errors = [];
+    let refreshes = 0;
+    function node(selector) {
+        if (typeof selector !== 'string') { return selector; }
+        if (!nodes.has(selector)) {
+            nodes.set(selector, {checked: true, handlers: {}, label: '',
+                prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+                on(event, delegate, handler) { this.handlers[handler ? delegate : event] = handler || delegate; return this; },
+                text(value) { this.label = value; return this; }, empty() { this.label = ''; return this; }});
+        }
+        return nodes.get(selector);
+    }
+    const context = vm.createContext({MihomoUI: UI, renderedGroups: JSON.stringify([autoGroup]), $: node,
+        document: {hidden: false, addEventListener: (event, handler) => { events[event] = handler; }},
+        window: {addEventListener: (event, handler) => { events[event] = handler; }},
+        ajaxCall: (url, params, done) => calls.push({url, params, done}),
+        ajaxGet: (url, params, done) => gets.push({url, params, done}),
+        groupsPoller: {refresh: () => { refreshes++; }}, actionFailed: result => errors.push(result)});
+    vm.runInContext(autoScript, context);
+    const toggle = enabled => { node('#proxy-autoswitch').checked = enabled; node('#proxy-autoswitch').handlers.change(); };
+    const start = (groupName = 'Group & <one>') => {
+        context.testGroupName = groupName;
+        vm.runInContext('testNodes(["slow", "fast & <two>"], testGroupName);', context);
+    };
+    const completeTests = () => calls.filter(call => call.url.endsWith('test_delay'))
+        .forEach(call => call.done({status: 'ok', delay: freshDelays.get(call.params.name)}, 'success'));
+    const validate = (groups = [autoGroup], status = 'success', ready = true) => gets.at(-1).done({ready, groups}, status);
+    const writes = () => calls.filter(call => call.url.endsWith('select_proxy'));
+    const manual = () => node('#proxy-groups').handlers['.cmd-select'].call({closest: () => ({attr: key => key === 'data-group' ? 'Group & <one>' : 'slow'})});
+    return {node, calls, gets, events, context, errors, toggle, start, completeTests, validate, writes, manual, refreshes: () => refreshes};
+}
+assert(!/id="proxy-autoswitch"[^>]*\bchecked\b/.test(indexView), 'HTML must default off');
+let auto = autoHarness();
+assert.equal(auto.node('#proxy-autoswitch').checked, false, 'Even restored browser form state defaults off');
+auto.start(); auto.completeTests();
+assert.equal(auto.gets.length, 0); assert.equal(auto.writes().length, 0); assert.equal(auto.refreshes(), 1);
+auto = autoHarness(); auto.toggle(true); auto.start(); auto.start();
+assert.equal(auto.calls.length, 2, 'Repeated clicks cannot overlap a test run');
+auto.completeTests();
+assert.equal(auto.gets.length, 1); assert.equal(auto.writes().length, 0, 'Revalidate before writing');
+auto.start(); assert.equal(auto.calls.length, 2, 'Validation remains part of the busy operation');
+auto.validate();
+assert.equal(auto.writes().length, 1);
+assert.deepEqual(JSON.parse(JSON.stringify(auto.writes()[0].params)), {group: 'Group & <one>', member: 'fast & <two>'});
+auto.manual(); auto.start(); assert.equal(auto.writes().length, 1, 'No competing writes while automatic selection is in flight');
+auto.writes()[0].done({status: 'ok'}, 'success');
+assert(auto.node('#proxy-autoswitch-state').label.includes('Group & <one> → fast & <two>'));
+assert.equal(auto.refreshes(), 1);
+assert.equal(auto.node('#proxy-groups .cmd-select').disabled, false);
+
+for (const cancel of [
+    h => { h.toggle(false); h.toggle(true); },
+    h => { h.context.document.hidden = true; h.events.visibilitychange(); h.context.document.hidden = false; },
+    h => h.events.pagehide(),
+    h => { h.manual(); h.writes()[0].done({status: 'ok'}, 'success'); }
+]) {
+    for (const duringValidation of [false, true]) {
+        const h = autoHarness(); h.toggle(true); h.start();
+        if (duringValidation) { h.completeTests(); }
+        cancel(h);
+        if (duringValidation) { h.validate(); } else { h.completeTests(); }
+        assert(h.writes().every(call => call.params.member === 'slow'), 'Cancellation must suppress the automatic write');
+        assert(h.node('#proxy-autoswitch-state').label.includes('skipped'));
+    }
+}
+for (const response of [
+    [], [{...autoGroup, type: 'URLTest'}],
+    [{...autoGroup, members: autoGroup.members.slice(0, 1)}],
+    [{...autoGroup, members: autoGroup.members.map(member => ({...member, selected: !member.selected}))}]
+]) {
+    const h = autoHarness(); h.toggle(true); h.start(); h.completeTests(); h.validate(response);
+    assert.equal(h.writes().length, 0, 'Changed group state must cancel');
+    assert.equal(h.refreshes(), 1);
+}
+for (const [status, ready] of [['error', true], ['success', false]]) {
+    const h = autoHarness(); h.toggle(true); h.start(); h.completeTests(); h.validate([autoGroup], status, ready);
+    assert.equal(h.writes().length, 0);
+}
+auto = autoHarness(); auto.toggle(true); auto.start();
+auto.calls.forEach(call => call.done({status: 'failed', delay: 10}, 'success'));
+assert.equal(auto.gets.length, 0); assert.equal(auto.writes().length, 0, 'No winner on failed probes');
+auto = autoHarness(); auto.start(); auto.toggle(true); auto.completeTests();
+assert.equal(auto.gets.length, 0, 'Opting in mid-run cannot authorize a switch');
+auto = autoHarness(); auto.toggle(true); auto.start(null); auto.completeTests();
+assert.equal(auto.gets.length, 0, 'Individual node tests never switch groups');
+auto = autoHarness(); auto.toggle(true);
+auto.context.renderedGroups = JSON.stringify([{...autoGroup, type: 'URLTest'}]);
+auto.start(); auto.completeTests(); assert.equal(auto.gets.length, 0);
+auto = autoHarness(); auto.toggle(true); auto.start(); auto.completeTests(); auto.validate();
+auto.writes()[0].done({status: 'failed'}, 'success');
+assert.equal(auto.errors.length, 1); assert.equal(auto.refreshes(), 1);
+assert.equal(auto.writes().length, 1, 'Failed writes are reported without retry');
+assert.equal(auto.node('#proxy-autoswitch-state').label, '', 'Failed writes must not claim a switch');
+// Real delegated group button carries the group name, not just the test names.
+auto = autoHarness(); auto.toggle(true);
+auto.node('#proxy-groups').handlers['.cmd-test-group'].call({
+    attr: () => 'Group & <one>',
+    closest: () => ({find: () => ({each: callback => ['slow', 'fast & <two>', 'slow'].forEach(name => callback.call({attr: () => name}))})})
+});
+assert.equal(auto.calls.length, 2, 'Group probes are deduplicated');
+auto.completeTests(); auto.validate(); assert.equal(auto.writes().length, 1);
+console.log('Experimental automatic switching: default-off, fresh minimum, exclusions, ties, cancellation, revalidation and failures passed');
+
 // Exercise the real collapse handler and renderer. No API or storage is available
 // to this handler: folding cards must be a purely local display operation.
 const collapseClickScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-collapse-group',[\s\S]*?\n        \}\);/)[0];

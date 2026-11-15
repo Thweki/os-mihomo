@@ -209,7 +209,12 @@
             renderedGroups = snapshot;
         }
 
-        let testing = false;
+        let testing = false, selecting = false, autoSwitchGeneration = 0;
+        const $autoSwitch = $('#proxy-autoswitch').prop('checked', false);
+        function cancelAutoSwitch() { autoSwitchGeneration++; }
+        $autoSwitch.on('change', cancelAutoSwitch);
+        document.addEventListener('visibilitychange', function () { if (document.hidden) { cancelAutoSwitch(); } });
+        window.addEventListener('pagehide', cancelAutoSwitch);
         $('#proxy-groups').on('click', '.cmd-collapse-group', function () {
             const name = $(this).attr('data-group');
             if (collapsedGroups.has(name)) { collapsedGroups.delete(name); }
@@ -223,8 +228,14 @@
             renderedGroups = null;
             if (latestGroups) { renderGroups(latestGroups); }
         });
-        function testNodes(names) {
-            if (testing || !names.length) { return; }
+        function testNodes(names, groupName) {
+            if (testing || selecting || !names.length) { return; }
+            const group = groupName && renderedGroups
+                ? JSON.parse(renderedGroups).find(item => MihomoUI.decodeApiText(item.name) === groupName) : null;
+            const autoSwitch = $autoSwitch.prop('checked') && group && group.type === 'Selector';
+            const generation = autoSwitchGeneration, delays = new Map();
+            const cancelled = () => generation !== autoSwitchGeneration || document.hidden || !$autoSwitch.prop('checked');
+            $('#proxy-autoswitch-state').empty();
             testing = true;
             $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
             const progress = function (state) {
@@ -232,34 +243,67 @@
                     + ' · ' + {{ lang._('Failed') | json_encode }} + ': ' + state.failed);
             };
             progress({completed: 0, total: names.length, failed: 0});
-            MihomoUI.runLimited(names, 3, function (name, done) {
-                ajaxCall('/api/mihomo/dashboard/test_delay', {name: name}, function (data, status) {
-                    done(status === 'success' && data && data.status === 'ok');
-                });
-            }, progress, function () {
+            const finish = function () {
                 testing = false;
                 $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', false);
                 groupsPoller.refresh();
+            };
+            const skipped = function () {
+                $('#proxy-autoswitch-state').text({{ lang._('Automatic switch skipped: cancelled, changed group, failed read, or no faster responding proxy.') | json_encode }});
+                finish();
+            };
+            MihomoUI.runLimited(names, 3, function (name, done) {
+                ajaxCall('/api/mihomo/dashboard/test_delay', {name: name}, function (data, status) {
+                    if (status === 'success' && data && data.status === 'ok') { delays.set(name, data.delay); }
+                    done(status === 'success' && data && data.status === 'ok');
+                });
+            }, progress, function () {
+                if (!autoSwitch) { finish(); return; }
+                if (cancelled()) { skipped(); return; }
+                const member = MihomoUI.fastestProxy(group, delays);
+                if (member === null) { skipped(); return; }
+                // Check membership and selection again after probing, before a live write.
+                ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
+                    const current = status === 'success' && data && data.ready
+                        && (data.groups || []).find(item => MihomoUI.decodeApiText(item.name) === groupName);
+                    if (cancelled() || selecting || !current
+                        || MihomoUI.proxyGroupSignature(current) !== MihomoUI.proxyGroupSignature(group)) { skipped(); return; }
+                    selecting = true;
+                    $('#proxy-groups .cmd-select').prop('disabled', true);
+                    ajaxCall('/api/mihomo/dashboard/select_proxy', {group: groupName, member: member}, function (result, resultStatus) {
+                        selecting = false;
+                        $('#proxy-groups .cmd-select').prop('disabled', false);
+                        if (resultStatus === 'success' && result && result.status === 'ok') {
+                            $('#dashboard-action-state').empty();
+                            $('#proxy-autoswitch-state').text({{ lang._('Automatically selected') | json_encode }} + ': ' + groupName + ' → ' + member);
+                        } else { actionFailed(result); }
+                        finish();
+                    });
+                });
             });
         }
         $('#proxy-groups').on('click', '.cmd-test', function () { testNodes([$(this).attr('data-name')]); });
         $('#proxy-groups').on('click', '.cmd-test-group', function () {
             const names = [];
             $(this).closest('.content-box').find('.cmd-test').each(function () { names.push($(this).attr('data-name')); });
-            testNodes(Array.from(new Set(names)));
+            testNodes(Array.from(new Set(names)), $(this).attr('data-group'));
         });
         $('#proxy-groups').on('click', '.cmd-select', function () {
+            if (selecting) { return; }
+            cancelAutoSwitch();
+            selecting = true;
             const $button = $(this), $item = $button.closest('li');
-            $button.prop('disabled', true);
+            $('#proxy-groups .cmd-select').prop('disabled', true);
             ajaxCall('/api/mihomo/dashboard/select_proxy', {group: $item.attr('data-group'), member: $item.attr('data-member')}, function (data, status) {
-                $button.prop('disabled', false);
+                selecting = false;
+                $('#proxy-groups .cmd-select').prop('disabled', false);
                 if (status === 'success' && data && data.status === 'ok') { $('#dashboard-action-state').empty(); groupsPoller.refresh(); }
                 else { actionFailed(data); }
             });
         });
 
         function loadGroups(done) {
-            if (testing) { done(true); return; }
+            if (testing || selecting) { done(true); return; }
             ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
                 const ok = status === 'success' && data && data.ready;
                 if (data && status === 'success') { renderGroups(data); }
@@ -512,6 +556,11 @@
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
             <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div style="padding:0 12px;">
+                <label><input type="checkbox" id="proxy-autoswitch"> {{ lang._('Automatically select the fastest proxy after a group test (experimental)') }}</label>
+                <p class="text-muted">{{ lang._('Off by default; enabled only for this page visit. Applies to Selector groups and fresh group tests. Direct, reject and nested groups are excluded. A submitted switch cannot be cancelled.') }}</p>
+                <p id="proxy-autoswitch-state" class="text-muted" role="status"></p>
+            </div>
             <div style="padding: 12px;" id="proxy-groups">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>
             </div>
