@@ -176,8 +176,13 @@
         const collapsedGroups = new Set(); // Page visit only; reload starts expanded.
         let latestGroups = null;
         let renderedGroups = null;
+        function updateTestAll() {
+            $('#test-all-groups').prop('disabled', testing || !latestGroups || !latestGroups.ready
+                || !(latestGroups.groups || []).some(group => (group.members || []).length > 0));
+        }
         function renderGroups(data) {
             latestGroups = data;
+            updateTestAll();
             const $box = $('#proxy-groups');
             if (!data['ready']) {
                 renderedGroups = null;
@@ -226,6 +231,7 @@
         function testNodes(names) {
             if (testing || !names.length) { return; }
             testing = true;
+            updateTestAll();
             $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
             const progress = function (state) {
                 $('#proxy-test-state').text({{ lang._('Latency tests') | json_encode }} + ': ' + state.completed + '/' + state.total
@@ -238,6 +244,7 @@
                 });
             }, progress, function () {
                 testing = false;
+                updateTestAll();
                 $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', false);
                 groupsPoller.refresh();
             });
@@ -246,6 +253,14 @@
         $('#proxy-groups').on('click', '.cmd-test-group', function () {
             const names = [];
             $(this).closest('.content-box').find('.cmd-test').each(function () { names.push($(this).attr('data-name')); });
+            testNodes(Array.from(new Set(names)));
+        });
+        $('#test-all-groups').on('click', function () {
+            if (!latestGroups || !latestGroups.ready) { return; }
+            // Snapshot the displayed cards, including collapsed member lists.
+            // Shared members need only one probe, regardless of group or order.
+            const names = [];
+            $('#proxy-groups .cmd-test').each(function () { names.push($(this).attr('data-name')); });
             testNodes(Array.from(new Set(names)));
         });
         $('#proxy-groups').on('click', '.cmd-select', function () {
@@ -263,7 +278,11 @@
             ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
                 const ok = status === 'success' && data && data.ready;
                 if (data && status === 'success') { renderGroups(data); }
-                if (!ok) { $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }}); }
+                if (!ok) {
+                    latestGroups = null;
+                    updateTestAll();
+                    $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }});
+                }
                 done(!!ok);
             });
         }
@@ -508,6 +527,9 @@
         <div class="content-box">
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
+                <button type="button" id="test-all-groups" class="btn btn-xs btn-default" disabled title="{{ lang._('Test all nodes in every displayed group, including collapsed groups') }}">
+                    <i class="fa fa-bolt" aria-hidden="true"></i> {{ lang._('Test all groups') }}
+                </button>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
