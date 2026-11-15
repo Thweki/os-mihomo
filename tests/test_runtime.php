@@ -4,6 +4,29 @@ use OPNsense\Mihomo\RuntimeStatus;
 function expect($condition, $label) {
     if (!$condition) { throw new RuntimeException($label); }
 }
+// A child must be able to emit more diagnostics than a pipe can hold before
+// closing stdout. Nonblocking writes turn the old deadlock into a finite failure,
+// so this regression needs neither a timeout utility nor the pcntl extension.
+$noisyChild = <<<'PHP'
+fwrite(STDOUT, "before\n");
+stream_set_blocking(STDERR, false);
+$chunk = str_repeat('x', 65536);
+for ($i = 0; $i < 64; $i++) {
+    $offset = 0;
+    while ($offset < strlen($chunk)) {
+        $written = fwrite(STDERR, substr($chunk, $offset));
+        if ($written === false || $written === 0) { exit(91); }
+        $offset += $written;
+    }
+}
+fwrite(STDOUT, "after\n");
+PHP;
+expect(RuntimeStatus::readCommand([PHP_BINARY, '-r', $noisyChild]) === [0, "before\nafter\n"],
+    'Large stderr cannot block runtime polling or contaminate stdout');
+expect(RuntimeStatus::readCommand([PHP_BINARY, '-r', 'fwrite(STDERR, "diagnostic"); echo "partial"; exit(7);']) === [7, 'partial'],
+    'Failed commands retain their exit status and stdout');
+expect(RuntimeStatus::readCommand([PHP_BINARY, '-r', 'exit(0);']) === [0, ''],
+    'Empty successful output remains empty');
 $pf = <<<'RULES'
 pass in quick on vtnet2 route-to (tun_mihomo 198.51.100.2) inet proto tcp from 203.0.113.0/24 to ! 192.0.2.0/24 flags S/SA keep state label "example"
 pass in quick on vtnet2 route-to (tun_mihomo 198.51.100.2) inet proto udp from any to any port = { 53, 500, 4500 } keep state
@@ -29,4 +52,4 @@ expect(RuntimeStatus::process('42 1024 /bin/unrelated', 42, '~^(?:/usr/local/bin
 expect(RuntimeStatus::process('42 512 /usr/sbin/daemon /usr/local/bin/mihomo', 42, '~^(?:/usr/local/bin/)?mihomo(?:\s|$)~') === null, 'Do not report supervisor RSS as core memory');
 $xml = '<opnsense><interfaces><lan><if>vtnet1</if><descr>Example LAN</descr><ipaddr>192.0.2.1</ipaddr></lan><wan><if>vtnet0</if><ipaddr>dhcp</ipaddr></wan></interfaces></opnsense>';
 expect(count(RuntimeStatus::interfaces($xml)) === 1, 'Static client interface discovery');
-echo "Runtime rules, task records and process identity: all checks passed\n";
+echo "Runtime command I/O, rules, task records and process identity: all checks passed\n";
