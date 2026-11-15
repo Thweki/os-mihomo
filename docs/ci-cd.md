@@ -3,7 +3,7 @@
 Every push, pull request and manual run executes `.github/workflows/ci.yml`:
 
 1. Check the publication allowlist and fixed third-party asset hashes, sample credentials, PHP syntax, XML, translation catalogs, JavaScript and maintained shell scripts. Run UI, runtime, configuration patch, transaction/failure/concurrency, API permission/result and deterministic archive fixture tests. Tests never use an appliance configuration.
-2. In an isolated FreeBSD 15.1 amd64 VM, run PHP fixtures and build the package twice with separate staging directories. `cmp` must find identical package bytes. Run the bundled core with `-t` against synthetic valid and invalid YAML (TUN/DNS disabled, no subscription or service start). Inspect package metadata and ensure the package owns samples, not live configuration. Package hooks are not executed.
+2. In an isolated FreeBSD 15.1 amd64 VM, run PHP fixtures and build the package twice with separate staging directories. `cmp` must find identical package bytes. Run the bundled core with `-t` against synthetic valid and invalid YAML and representative subscription-generated block, flow and mixed layouts (audit B6). Downloads and installation are stubbed; TUN/DNS are disabled, with no service start. Inspect package metadata and ensure the package owns samples, not live configuration. Package hooks are not executed.
 3. Exercise optional RSA repository signing with disposable keys and an isolated pkg database: the valid key must work, a different key must fail, and `REQUIRE_SIGNED=yes` must reject missing keys. Nothing is installed and CI keys are discarded.
 4. Upload `os-mihomo.pkg`, `os-mihomo-repository.tar.gz`, `SHA256SUMS`, `package-files.txt` and `build-info.json`. Artifacts are retained for 14 days.
 
@@ -17,6 +17,17 @@ python3 tools/validate.py
 # FreeBSD only, with Python 3, PHP (including SimpleXML), Git and build tools:
 sh scripts/ci_build.sh
 ```
+
+`python3 tests/test_subscription.py` exercises the actual subscription shell offline,
+without PHP or a core binary. It checks block and single-line flow mappings, field
+order, nested fields, quoted commas, Unicode, indentationless lists, duplicate-name
+filtering, template isolation, converter/fallback generation and rejected inputs.
+It covers name selection, not general YAML scalar fidelity. The PHP installer is
+stubbed only in this generator suite; `tests/test_writes.php` covers the real
+installer. Use `--output-dir <directory>` to retain representative generated configs
+for core validation. Without PHP, `python3 tools/validate.py --frontend-only` runs
+the portable checks, including these fixtures; PHP checks and FreeBSD real-core
+checks still require their respective tools/platform.
 
 ## Reproduce and verify
 
