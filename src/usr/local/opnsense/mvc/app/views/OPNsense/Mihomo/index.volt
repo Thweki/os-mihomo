@@ -140,6 +140,7 @@
             if (runtime.mode !== undefined && !$('#mode-select').data('user-changed')) {
                 $('#mode-select').val(runtime['mode'] || '');
             }
+            renderModeHint();
 
             const now = Date.now();
             const rate = trafficHistory.add(now, runtime['downloadTotal'], runtime['uploadTotal'], runtime['ready'] && controller['alive']);
@@ -174,6 +175,7 @@
         const favorites = new MihomoUI.ProxyFavorites();
         const hiddenProxies = new Set();
         let showHiddenProxies = false;
+        const collapsedGroups = new Set(); // Page visit only; reload starts expanded.
         let latestGroups = null;
         let renderedGroups = null;
         function renderGroups(data) {
@@ -197,6 +199,9 @@
             const snapshot = JSON.stringify([groups, Array.from(hiddenProxies), showHiddenProxies]);
             if (snapshot === renderedGroups) { return; }
             MihomoUI.renderProxyGroups($box[0], groups, {
+                memberCount: {{ lang._('Members: %s') | json_encode }},
+                collapseGroup: {{ lang._('Collapse group') | json_encode }},
+                expandGroup: {{ lang._('Expand group') | json_encode }},
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }},
                 favoriteGroup: {{ lang._('Favorite group') | json_encode }},
@@ -204,7 +209,7 @@
                 hideNode: {{ lang._('Hide proxy until reload') | json_encode }},
                 restoreNode: {{ lang._('Restore proxy') | json_encode }},
                 allHidden: {{ lang._('All proxies in this group are hidden.') | json_encode }}
-            }, delayText, delayClass, favorites, {hidden: hiddenProxies, showHidden: showHiddenProxies});
+            }, delayText, delayClass, favorites, {hidden: hiddenProxies, showHidden: showHiddenProxies}, collapsedGroups);
             if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
@@ -234,6 +239,13 @@
         });
 
         let testing = false;
+        $('#proxy-groups').on('click', '.cmd-collapse-group', function () {
+            const name = $(this).attr('data-group');
+            if (collapsedGroups.has(name)) { collapsedGroups.delete(name); }
+            else { collapsedGroups.add(name); }
+            renderedGroups = null;
+            if (latestGroups) { renderGroups(latestGroups); }
+        });
         $('#proxy-groups').on('click', '.cmd-favorite', function () {
             const saved = favorites.toggle($(this).attr('data-kind'), $(this).attr('data-name'));
             $('#proxy-favorites-state').text(saved ? '' : {{ lang._('Favorites could not be saved in this browser. They will last only for this page visit.') | json_encode }});
@@ -291,8 +303,25 @@
         /* ------------------------------------------------------------------ *
          * 运行模式
          * ------------------------------------------------------------------ */
+        function renderModeHint() {
+            let hint = '';
+            switch ($('#mode-select').val()) {
+                case 'rule':
+                    hint = {{ lang._('Rule-based: Mihomo follows matching rules to route or block traffic.') | json_encode }};
+                    break;
+                case 'global':
+                    hint = {{ lang._('Global: traffic handled by Mihomo uses the GLOBAL group selection.') | json_encode }};
+                    break;
+                case 'direct':
+                    hint = {{ lang._('Direct: traffic handled by Mihomo connects without a proxy.') | json_encode }};
+                    break;
+            }
+            if ($('#mode-hint').text() !== hint) { $('#mode-hint').text(hint); }
+        }
+
         $('#mode-select').change(function () {
             const mode = $(this).val();
+            renderModeHint();
             $(this).data('user-changed', true);
             ajaxCall('/api/mihomo/dashboard/set_mode', { mode: mode }, function (data, status) {
                 if (status === 'success' && data && data.status === 'ok') { $('#dashboard-action-state').empty(); }
@@ -485,7 +514,7 @@
                         <option value="3600">{{ lang._('Last hour') }}</option>
                     </select>
                     <label for="mode-select" style="font-weight: normal;">{{ lang._('Mode') }}:</label>
-                    <select id="mode-select" class="form-control" style="width: auto; display: inline-block; height: 28px; padding: 2px 6px;">
+                    <select id="mode-select" aria-describedby="mode-hint" class="form-control" style="width: auto; display: inline-block; height: 28px; padding: 2px 6px;">
                         <option value="">{{ lang._('…') }}</option>
                         <option value="rule">{{ lang._('Rule-based') }}</option>
                         <option value="global">{{ lang._('Global') }}</option>
@@ -493,6 +522,7 @@
                     </select>
                 </span>
             </div>
+            <p id="mode-hint" class="text-muted" role="status" style="padding:0 14px;"></p>
             <div style="padding: 12px;">
                 <div style="height: 200px;">
                     <canvas id="traffic-chart" role="img" aria-label="{{ lang._('Download and upload rates') }}"></canvas>
