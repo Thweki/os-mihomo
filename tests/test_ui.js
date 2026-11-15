@@ -22,6 +22,29 @@ const decode = require('../src/usr/local/www/js/mihomo/ui.js').decodeApiText;
 assert.strictEqual(decode('x --&gt; y &amp; z &lt;tag&gt;'), 'x --> y & z <tag>');
 assert.strictEqual(decode('literal &amp;gt; &amp;amp; &#039;'), 'literal &gt; &amp; &#039;');
 
+const {filterLogLines} = require('../src/usr/local/www/js/mihomo/ui.js');
+const logFixture = ['start', 'before', 'ERROR [a.*]', 'after', 'ERROR again', 'end', 'unrelated'];
+assert.deepEqual(filterLogLines(logFixture, 'error', 0), {lines: [logFixture[2], logFixture[4]], matches: 2});
+assert.deepEqual(filterLogLines(logFixture, 'error', 2), {lines: logFixture, matches: 2},
+    'Overlapping context windows merge without duplicating lines');
+assert.deepEqual(filterLogLines(logFixture, '[a.*]', 2), {lines: logFixture.slice(0, 5), matches: 1},
+    'Search is literal, including regular expression punctuation');
+assert.deepEqual(filterLogLines(logFixture, 'START', 2), {lines: logFixture.slice(0, 3), matches: 1});
+assert.deepEqual(filterLogLines(logFixture, 'unrelated', 5), {lines: logFixture.slice(1), matches: 1});
+assert.deepEqual(filterLogLines(logFixture, 'absent', 5), {lines: [], matches: 0});
+assert.deepEqual(filterLogLines([], '', 5), {lines: [], matches: 0});
+assert.deepEqual(filterLogLines(logFixture, '', 5), {lines: logFixture, matches: 7});
+assert.deepEqual(filterLogLines(['中文', '', '<tag>&', '中文'], '中文', 2),
+    {lines: ['中文', '', '<tag>&', '中文'], matches: 2}, 'Preserve blank and repeated lines and Unicode');
+for (const radius of [-1, 1, 5000, NaN]) {
+    assert.deepEqual(filterLogLines(logFixture, 'error', radius), filterLogLines(logFixture, 'error', 0),
+        'Only supported context sizes are accepted');
+}
+const largeLog = Array.from({length: 3000}, (_, i) => 'line ' + i);
+largeLog[2] = largeLog[2997] = 'match';
+assert.deepEqual(filterLogLines(largeLog, 'match', 2),
+    {lines: [...largeLog.slice(0, 5), ...largeLog.slice(-5)], matches: 2}, 'Disjoint windows keep source order');
+
 console.log('UI history, formatting and API text decoding: all checks passed');
 
 // Exercise the actual log view script with delayed API responses, without a browser
@@ -46,15 +69,16 @@ function control(selector) {
 }
 control('#log-source').value = 'mihomo';
 control('#log-lines').value = '300';
+control('#log-context').value = '0';
 const logView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt'), 'utf8');
 const logScript = logView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
-    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 vm.runInNewContext(logScript, {
     document: fakeDocument,
     $: selector => selector === fakeDocument ? {ready: fn => fn()} : control(selector),
     ajaxGet: (url, params, done) => requests.push({params, done}),
-    setInterval: fn => { logTimer = fn; }, MihomoUI: {decodeApiText: value => { logDecodes++; return decode(value); }}
+    setInterval: fn => { logTimer = fn; }, MihomoUI: {filterLogLines, decodeApiText: value => { logDecodes++; return decode(value); }}
 });
 assert.equal(requests.length, 1);
 control('#log-source').value = 'subscription';
@@ -135,6 +159,44 @@ const emptyWork = logWork();
 logTimer(); respondLog('');
 assert.deepEqual(logWork(), emptyWork, 'Empty logs also skip unchanged poll work');
 console.log('Unchanged log polling, recovery, filtering, queued scrolling and cache invalidation: all checks passed');
+
+// Context controls operate on the actual view's cached, decoded lines, even paused.
+control('#log-auto-refresh').checked = false;
+control('#refreshAct').handlers.click();
+respondLog('start\nbefore\nERROR &lt;tag&gt;\nafter\nend\nunrelated\n');
+control('#log-filter').value = '<TAG>';
+control('#log-filter').handlers.input();
+assert.equal(viewer.value, 'ERROR <tag>');
+const beforeContextRequests = requests.length;
+control('#log-context').value = '2';
+control('#log-context').handlers.change();
+assert.equal(viewer.value, 'start\nbefore\nERROR <tag>\nafter\nend');
+assert.equal(control('#log-match-state').label, 'Matching lines: 1 / 6 · Shown lines: 5');
+assert.equal(requests.length, beforeContextRequests, 'Changing context does not fetch logs or resume polling');
+const contextWork = logWork();
+control('#log-auto-refresh').checked = true;
+logTimer(); respondLog('start\nbefore\nERROR &lt;tag&gt;\nafter\nend\nunrelated\n');
+assert.deepEqual(logWork(), contextWork, 'Unchanged polls retain context without rendering again');
+logTimer(); respondLog('before\nERROR &lt;tag&gt;\nafter\nend\nunrelated\n');
+assert.equal(viewer.value, 'before\nERROR <tag>\nafter\nend', 'Context is recomputed as the tail rolls');
+logTimer(); requests.at(-1).done(null, 'error');
+assert.equal(viewer.value, 'before\nERROR <tag>\nafter\nend', 'Failures retain context results');
+control('#log-filter').value = 'absent'; control('#log-filter').handlers.input();
+assert.equal(viewer.value, '');
+assert.equal(control('#log-match-state').label, 'No matching log entries.');
+control('#log-filter').value = ''; control('#log-filter').handlers.input();
+assert.equal(viewer.value, 'before\nERROR <tag>\nafter\nend\nunrelated', 'Clearing search restores all loaded lines');
+control('#log-filter').value = 'error'; control('#log-filter').handlers.input();
+control('#log-source').value = 'subscription'; control('#log-source').handlers.change();
+assert.equal(viewer.value, '', 'Source switches clear old context immediately');
+control('#log-context').value = '5'; control('#log-context').handlers.change();
+respondLog('ERROR new source\none\ntwo\nthree\nfour\nfive\nsix\n');
+assert.equal(viewer.value, 'ERROR new source\none\ntwo\nthree\nfour\nfive', 'Pending reads use the latest context size');
+control('#log-context').value = '0'; control('#log-context').handlers.change();
+assert.equal(viewer.value, 'ERROR new source', 'Matches only restores the original filter behavior');
+assert(logView.includes('label for="log-context"'));
+assert(logView.includes('aria-describedby="log-search-help"'));
+console.log('Log search context: windows, counts, literal text, paused/live polling and source changes passed');
 
 // The same renderer used by the dashboard runs against a strict DOM fixture.
 // HTML parsing is deliberately unavailable: dynamic names must be text/attributes.

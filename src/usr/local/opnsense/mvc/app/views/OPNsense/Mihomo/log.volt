@@ -16,13 +16,15 @@
         let allLines = [], pending = false, queued = false, queuedScroll = false;
         let lastContent = null;
         function renderLog() {
-            const query = $('#log-filter').val().toLocaleLowerCase();
-            const lines = allLines.filter(line => !query || line.toLocaleLowerCase().includes(query));
-            $('#log-viewer').val(lines.join('\n'));
+            const result = MihomoUI.filterLogLines(allLines, $('#log-filter').val(), Number($('#log-context').val()));
+            $('#log-viewer').val(result.lines.join('\n'));
             $('#log-match-state').text(!allLines.length ? {{ lang._('No log entries yet.') | json_encode }}
-                : !lines.length ? {{ lang._('No matching log entries.') | json_encode }} : String(lines.length) + ' / ' + String(allLines.length));
+                : !result.matches ? {{ lang._('No matching log entries.') | json_encode }}
+                : {{ lang._('Matching lines') | json_encode }} + ': ' + result.matches + ' / ' + allLines.length
+                    + ' · ' + {{ lang._('Shown lines') | json_encode }} + ': ' + result.lines.length);
         }
         $('#log-filter').on('input', renderLog);
+        $('#log-context').change(renderLog);
         function refreshLogs(scroll) {
             if (pending) { queued = true; queuedScroll = queuedScroll || scroll; return; }
             pending = true;
@@ -125,10 +127,17 @@
             <div style="padding: 14px;">
                 <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:12px;">
                     <label for="log-filter" style="flex:0 0 auto; white-space:nowrap;">{{ lang._('Filter log') }}</label>
-                    <input id="log-filter" type="search" class="form-control" style="flex:1 1 200px; width:auto; max-width:100%;" placeholder="{{ lang._('Filter the loaded lines') }}">
+                    <input id="log-filter" type="search" class="form-control" style="flex:1 1 200px; width:auto; max-width:100%;" placeholder="{{ lang._('Filter the loaded lines') }}" aria-describedby="log-search-help">
+                    <label for="log-context" style="margin:0;">{{ lang._('Surrounding lines') }}</label>
+                    <select id="log-context" class="form-control" style="width:auto;" aria-describedby="log-search-help">
+                        <option value="0" selected="selected">{{ lang._('Matches only') }}</option>
+                        <option value="2">{{ lang._('2 before and after') }}</option>
+                        <option value="5">{{ lang._('5 before and after') }}</option>
+                    </select>
                     <label style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-auto-refresh" type="checkbox" checked> {{ lang._('Auto refresh') }}</label>
                     <span id="log-match-state" class="text-muted" role="status"></span>
                 </div>
+                <p id="log-search-help" class="text-muted">{{ lang._('Search is literal and case-insensitive within loaded lines. Surrounding lines may not match; overlapping results are shown once in log order.') }}</p>
                 <p id="log-state" class="text-muted" role="status"></p>
                 <textarea aria-label="{{ lang._('Log contents') }}" id="log-viewer" class="form-control" rows="30" readonly
                           style="width: 100%; max-width: 100%; font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere;"></textarea>

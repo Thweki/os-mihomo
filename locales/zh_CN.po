@@ -1389,3 +1389,31 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Matching lines"
+msgstr "匹配行数"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Shown lines"
+msgstr "展示行数"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Surrounding lines"
+msgstr "上下文行数"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Matches only"
+msgstr "仅匹配行"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "2 before and after"
+msgstr "前后各 2 行"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "5 before and after"
+msgstr "前后各 5 行"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Search is literal and case-insensitive within loaded lines. Surrounding lines may not match; overlapping results are shown once in log order."
+msgstr "搜索仅在已载入的行中按字面匹配，不区分大小写。上下文行可能不匹配；重叠结果按日志顺序仅展示一次。"
