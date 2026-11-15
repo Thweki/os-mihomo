@@ -1833,3 +1833,23 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged."
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Controller.php
+msgid "Only URLTest and Fallback groups can resume automatic selection."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/DashboardController.php
+msgid "A group name is required."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/DashboardController.php
+msgid "Automatic selection resumed for \"%s\"."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Resume automatic selection"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Resume automatic selection clears a manual override in a URLTest or Fallback group and returns control to its configured policy."
+msgstr ""

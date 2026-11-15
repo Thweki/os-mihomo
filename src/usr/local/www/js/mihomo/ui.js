@@ -191,6 +191,12 @@
                 'data-group': name, 'data-focus-key': JSON.stringify(['group', name]), 'aria-label': labels.testGroup + ': ' + name, title: labels.testGroup});
             test.appendChild(el('i', {class: 'fa fa-tachometer fa-fw', 'aria-hidden': 'true'}));
             header.appendChild(test);
+            if (group.canReset === true) {
+                const reset = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-reset-group pull-right',
+                    'data-group': name, 'data-focus-key': JSON.stringify(['reset', name]),
+                    'aria-label': labels.resetGroup + ': ' + name, title: labels.resetGroup}, labels.resetGroup);
+                header.appendChild(reset);
+            }
             const list = el('ul', {id: listId, class: 'list-group', 'data-group': name, 'aria-label': name,
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
             // Keep members in the DOM so full-group latency tests still include them.

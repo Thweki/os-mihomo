@@ -22,10 +22,20 @@ namespace OPNsense\Mihomo {
         public static string|false $body = '';
         public static int $status = 200;
         public static string $url = '';
+        public static array $requests = [];
+        public static array $responses = [];
     }
     function curl_init($url) { ControllerHttpFixture::$url = $url; return $url; }
-    function curl_setopt_array($handle, $options) { return true; }
-    function curl_exec($handle) { return ControllerHttpFixture::$body; }
+    function curl_setopt_array($handle, $options) {
+        ControllerHttpFixture::$requests[] = [$options[CURLOPT_CUSTOMREQUEST], $handle];
+        return true;
+    }
+    function curl_exec($handle) {
+        if (ControllerHttpFixture::$responses) {
+            [ControllerHttpFixture::$status, ControllerHttpFixture::$body] = array_shift(ControllerHttpFixture::$responses);
+        }
+        return ControllerHttpFixture::$body;
+    }
     function curl_getinfo($handle, $option) { return ControllerHttpFixture::$status; }
     function curl_error($handle) { return 'Fixture transport failure'; }
     function curl_close($handle) {}
@@ -84,7 +94,7 @@ namespace {
         public function getJsonRawBody() { return []; }
     }
     $guarded = [
-        'Dashboard' => ['selectProxy', 'setMode', 'closeConnection', 'testDelay'],
+        'Dashboard' => ['selectProxy', 'resetProxy', 'setMode', 'closeConnection', 'testDelay'],
         'Settings' => ['set', 'apply', 'import', 'configSet'],
         'Subscription' => ['save', 'run', 'clearLog'],
         'Routing' => ['apply', 'historyRestore', 'netapply', 'netrollback', 'selftest'],
@@ -100,6 +110,80 @@ namespace {
         }
     }
     expect(\OPNsense\Core\Backend::$calls === 0, 'Read-only calls never reach configd');
+
+    // Reset uses the core's unfix operation, never a guessed first/fastest member.
+    class WritableDashboard extends \OPNsense\Mihomo\Api\DashboardController {
+        public function throwReadOnly() {}
+    }
+    class ResetRequest extends Request {
+        public function __construct(public mixed $group, public bool $post = true) {}
+        public function isPost() { return $this->post; }
+        public function getJsonRawBody() { return ['group' => $this->group]; }
+    }
+    $reset = function ($group, $post = true) {
+        $controller = new WritableDashboard();
+        $controller->request = new ResetRequest($group, $post);
+        return $controller->resetProxyAction();
+    };
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        \OPNsense\Mihomo\ControllerHttpFixture::$requests = [];
+        foreach ([null, '', [], 123] as $invalid) {
+            expect($reset($invalid)['status'] === 'failed', 'Invalid reset name rejected');
+        }
+        expect($reset('Group', false)['status'] === 'failed', 'Reset requires POST');
+        expect(\OPNsense\Mihomo\ControllerHttpFixture::$requests === [], 'Rejected reset does no controller I/O');
+
+        $name = ' 中文 /?%#" &gt; ';
+        $url = 'http://127.0.0.1:9090/proxies/' . rawurlencode($name);
+        foreach (['URLTest', 'Fallback'] as $type) {
+            // Empty fixed is also safe: reset is idempotent if another operator already reset it.
+            foreach (['Pinned', ''] as $fixed) {
+                \OPNsense\Mihomo\ControllerHttpFixture::$requests = [];
+                \OPNsense\Mihomo\ControllerHttpFixture::$responses = [
+                    [200, json_encode(['type' => $type, 'fixed' => $fixed])], [204, ''],
+                ];
+                $result = $reset($name);
+                expect($result['status'] === 'ok' && str_contains($result['message'], $name), 'Reset success preserves exact group name');
+                expect(\OPNsense\Mihomo\ControllerHttpFixture::$requests === [['GET', $url], ['DELETE', $url]],
+                    'Reset validates live type then deletes only the encoded group override');
+            }
+        }
+        foreach ([['type' => 'Selector'], ['type' => 'LoadBalance'], ['type' => 'Direct'], [], 'invalid'] as $data) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$requests = [];
+            \OPNsense\Mihomo\ControllerHttpFixture::$responses = [[200, json_encode($data)]];
+            expect($reset($name)['status'] === 'failed', 'Unsupported or malformed group rejected');
+            expect(count(\OPNsense\Mihomo\ControllerHttpFixture::$requests) === 1, 'Unsupported type never reaches DELETE');
+        }
+        foreach ([[404, '{}'], [503, '{}'], [0, false]] as $failure) {
+            foreach ([false, true] as $failDelete) {
+                \OPNsense\Mihomo\ControllerHttpFixture::$requests = [];
+                \OPNsense\Mihomo\ControllerHttpFixture::$responses = $failDelete
+                    ? [[200, '{"type":"URLTest"}'], $failure] : [$failure];
+                $result = $reset($name);
+                expect($result['status'] === 'failed' && $result['message'] !== '', 'Reset reports read/write failures');
+                expect(count(\OPNsense\Mihomo\ControllerHttpFixture::$requests) === ($failDelete ? 2 : 1), 'Failed read prevents mutation');
+            }
+        }
+        $nodes = [];
+        foreach (['URLTest', 'Fallback', 'Selector', 'LoadBalance'] as $type) {
+            foreach (['', 'Pinned', '0', null, []] as $i => $fixed) {
+                $nodes[$type . $i] = ['type' => $type, 'fixed' => $fixed, 'all' => ['First', 'Pinned'], 'now' => 'Pinned'];
+            }
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$responses = [[200, json_encode(['proxies' => $nodes])]];
+        foreach (\OPNsense\Mihomo\Controller::proxyGroups()['groups'] as $group) {
+            $node = $nodes[$group['name']];
+            $expected = in_array($node['type'], ['URLTest', 'Fallback'], true)
+                && is_string($node['fixed']) && $node['fixed'] !== '';
+            expect($group['canReset'] === $expected, 'Only overridden automatic groups advertise reset');
+            expect($group['members'][1]['selected'], 'Reset capability preserves selection');
+        }
+    } finally {
+        \OPNsense\Mihomo\ControllerHttpFixture::$responses = [];
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Automatic selection reset: guards, exact names, group types and controller failures passed\n";
     $settings = new \OPNsense\Mihomo\Api\SettingsController();
     foreach (['', 'FATAL: invalid config', 'Configuration is valid.', '{"status":"ok"}', '{"state":"failed","status":"ok","changed":"no","code":[],"message":"invalid"}'] as $output) {
         \OPNsense\Core\Backend::$output = $output;
@@ -173,7 +257,7 @@ namespace {
     expect(str_contains($redacted, 'normal message'), 'Ordinary log text preserved');
     $acl = simplexml_load_file($app . 'models/OPNsense/Mihomo/ACL/ACL.xml');
     $view = array_map('strval', iterator_to_array($acl->{'page-vpn-mihomo-view'}->patterns->pattern, false));
-    foreach (['api/mihomo/settings/config_get', 'api/mihomo/subscription/get', 'api/mihomo/dashboard/set_mode', 'api/mihomo/routing/history_show'] as $path) {
+    foreach (['api/mihomo/settings/config_get', 'api/mihomo/subscription/get', 'api/mihomo/dashboard/set_mode', 'api/mihomo/dashboard/reset_proxy', 'api/mihomo/routing/history_show'] as $path) {
         foreach ($view as $pattern) { expect(!fnmatch($pattern, $path), 'View privilege excludes mutation and credentials'); }
     }
     expect((string)$acl->{'page-vpn-mihomo'}->patterns->pattern[1] === 'api/mihomo/*', 'Existing full-access grant remains compatible');
