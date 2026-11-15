@@ -25,6 +25,8 @@ Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, wit
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
+**Policy Routing → Runtime rules** searches the core's loaded top-level rules by type, rule value (such as a domain or rule-set name), or proxy target. Search is a case-insensitive literal substring across the entire snapshot; combine it with the rule-type selector to narrow results. Results retain their original positions and show 50 rows per page. Clear filters restores the full list. The snapshot loads on first opening the tab; use Refresh after changing the running configuration. A failed refresh retains the previous snapshot with a warning. This read-only feature needs the existing Mihomo view privilege and no feature flag. It does not simulate routing, expand rule-set contents, or read unapplied YAML changes.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.

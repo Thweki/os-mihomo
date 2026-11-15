@@ -168,6 +168,11 @@ class DashboardController extends ApiControllerBase
         ];
     }
 
+    public function rulesAction()
+    {
+        return Controller::ruleRows();
+    }
+
     /** 关闭单条连接（id 为空表示全部） */
     public function closeConnectionAction()
     {

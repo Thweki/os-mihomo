@@ -212,3 +212,104 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// Run the actual runtime-rules view: searching is over the complete snapshot,
+// not the visible page. The DOM fixture rejects dynamic HTML parsing.
+const rulesView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt'), 'utf8');
+const routingView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt'), 'utf8');
+assert(routingView.includes('href="#routing-rules"') && routingView.includes("partial('OPNsense/Mihomo/runtime_rules')"),
+    'Policy Routing exposes the runtime-rule explorer');
+const rulesScript = rulesView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, text) => JSON.stringify(text));
+const ruleControls = new Map(), ruleNodes = new Map(), ruleRequests = [];
+const ruleDocument = {
+    createElement(tag) { return new DomNode(this, tag); },
+    getElementById(id) {
+        if (!ruleNodes.has(id)) { ruleNodes.set(id, this.createElement(id === 'runtime-rule-type' ? 'select' : 'tbody')); }
+        return ruleNodes.get(id);
+    }
+};
+function ruleControl(selector) {
+    if (!ruleControls.has(selector)) {
+        ruleControls.set(selector, {value: '', label: '', handlers: {},
+            val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
+            text(value) { this.label = value; return this; },
+            prop(key, value) { this[key] = value; return this; },
+            on(event, fn) { this.handlers[event] = fn; return this; }
+        });
+    }
+    return ruleControls.get(selector);
+}
+vm.runInNewContext(rulesScript, {
+    document: ruleDocument, MihomoUI: UI,
+    $: selector => selector === ruleDocument ? {ready: fn => fn()} : ruleControl(selector),
+    ajaxGet: (url, params, done) => ruleRequests.push({url, params, done})
+});
+const ruleEvent = (id, event = 'click') => ruleControl('#runtime-rule-' + id).handlers[event]();
+const ruleCells = () => ruleDocument.getElementById('runtime-rule-rows').children.map(row => row.children.map(cell => cell.textContent));
+const ruleStatus = () => ruleControl('#runtime-rule-state').label;
+const activateRules = () => ruleControl('a[href="#routing-rules"]').handlers['shown.bs.tab']();
+assert.equal(ruleRequests.length, 0, 'Opening Policy Routing does not eagerly fetch all core rules');
+activateRules(); activateRules(); ruleEvent('refresh');
+assert.equal(ruleRequests.length, 1, 'Only one runtime rules request can be in flight');
+assert.equal(ruleRequests[0].url, '/api/mihomo/dashboard/rules');
+assert.equal(ruleControl('#runtime-rule-refresh').disabled, true);
+ruleRequests[0].done(null, 'error');
+assert.match(ruleStatus(), /unavailable/);
+assert.equal(ruleControl('#runtime-rule-refresh').disabled, false);
+activateRules();
+const ruleFixture = Array.from({length: 112}, (_, i) => ({position: i + 1, type: 'DomainSuffix',
+    payload: 'site-' + i + '.example.org', proxy: 'DIRECT'}));
+ruleFixture[75] = {position: 76, type: 'RuleSet', payload: '中文-provider', proxy: 'Proxy &lt;&amp;&gt;'};
+ruleFixture[111] = {position: 112, type: 'Match', payload: '', proxy: 'REJECT'};
+ruleRequests[1].done({ready: true, rows: ruleFixture}, 'success');
+assert.equal(ruleCells().length, 50);
+assert.equal(ruleCells()[0][0], '1');
+assert.equal(ruleControl('#runtime-rule-count').label, 'Showing 1–50 of 112 matches (112 loaded rules).');
+assert.equal(ruleDocument.getElementById('runtime-rule-type').children.length, 4, 'Rule types are unique');
+ruleEvent('next');
+assert.equal(ruleCells()[0][0], '51');
+assert.deepEqual(ruleCells()[25], ['76', 'RuleSet', '中文-provider', 'Proxy <&>'], 'Decode once and render proxy text safely');
+ruleEvent('next');
+assert.equal(ruleCells().length, 12);
+assert.equal(ruleControl('#runtime-rule-next').disabled, true);
+ruleEvent('prev');
+assert.equal(ruleCells()[0][0], '51');
+function searchRules(query) {
+    ruleControl('#runtime-rule-search').val(query); ruleEvent('search', 'input');
+}
+searchRules('  PROXY <&>  ');
+assert.deepEqual(ruleCells(), [['76', 'RuleSet', '中文-provider', 'Proxy <&>']], 'Search finds rows beyond the first page and matches decoded proxy targets');
+searchRules('中文'); assert.equal(ruleCells()[0][0], '76');
+searchRules('match'); assert.equal(ruleCells()[0][0], '112', 'Rule type is searchable');
+searchRules('site-9'); assert.equal(ruleCells().length, 11, 'Payload search covers all pages');
+ruleControl('#runtime-rule-type').val('Match'); ruleEvent('type', 'change');
+assert.equal(ruleCells()[0][0], 'No matching rules.', 'Text and exact type filters combine');
+assert.equal(ruleControl('#runtime-rule-count').label, 'Showing 0–0 of 0 matches (112 loaded rules).');
+searchRules(''); assert.deepEqual(ruleCells(), [['112', 'Match', '', 'REJECT']]);
+ruleEvent('clear');
+assert.equal(ruleControl('#runtime-rule-type').value, '');
+assert.equal(ruleCells()[0][0], '1');
+searchRules('.*'); assert.equal(ruleCells()[0][0], 'No matching rules.', 'Search treats regular-expression metacharacters literally');
+assert.equal(ruleRequests.length, 2, 'Filtering and paging issue no controller requests');
+activateRules(); assert.equal(ruleRequests.length, 2, 'Tab switches retain the snapshot');
+ruleEvent('clear'); ruleEvent('next'); ruleEvent('next'); ruleEvent('refresh');
+ruleRequests[2].done({ready: false, rows: []}, 'success');
+assert.match(ruleStatus(), /last successful snapshot/);
+assert.equal(ruleCells()[0][0], '101', 'Failure retains the last successful page with a stale warning');
+ruleEvent('refresh');
+ruleRequests[3].done({ready: true, rows: ruleFixture.slice(0, 2)}, 'success');
+assert.equal(ruleCells()[0][0], '1', 'Shrinking snapshots clamp the current page');
+assert.match(ruleStatus(), /Snapshot loaded/);
+ruleControl('#runtime-rule-type').val('DomainSuffix'); ruleEvent('type', 'change'); searchRules('site-1');
+ruleEvent('refresh'); ruleRequests[4].done({ready: true, rows: ruleFixture}, 'success');
+assert.equal(ruleControl('#runtime-rule-type').value, 'DomainSuffix');
+assert.equal(ruleControl('#runtime-rule-search').value, 'site-1', 'Refresh preserves filters');
+ruleEvent('refresh'); ruleRequests[5].done({ready: true, rows: []}, 'success');
+assert.equal(ruleControl('#runtime-rule-type').value, '', 'Removed types fall back to all types');
+assert.equal(ruleControl('#runtime-rule-count').label, 'Showing 0–0 of 0 matches (0 loaded rules).');
+assert.equal(ruleControl('#runtime-rule-prev').disabled, true);
+assert.equal(ruleControl('#runtime-rule-next').disabled, true);
+console.log('Runtime rule search, type filters, full-snapshot paging, safe text, lazy refresh and failures: all checks passed');

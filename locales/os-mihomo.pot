@@ -1765,3 +1765,67 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "…"
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "All rule types"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Clear filters"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Next"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "No matching rules."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Position"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Previous"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Proxy target"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Rule type"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Rule value"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt
+msgid "Runtime rules"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Runtime rules are unavailable. Check the service and controller, then refresh."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Runtime rules could not be refreshed. Showing the last successful snapshot."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Search runtime rules"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Search the loaded top-level Mihomo rules by type, value or proxy target. Position preserves controller order. This is a text search, not a routing simulation; rule-set contents are not expanded."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Showing %s–%s of %s matches (%s loaded rules)."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Snapshot loaded. Refresh to read the current runtime rules."
+msgstr ""

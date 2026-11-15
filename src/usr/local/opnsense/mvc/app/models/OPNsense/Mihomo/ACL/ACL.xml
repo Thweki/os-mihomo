@@ -28,6 +28,7 @@
             <pattern>api/mihomo/dashboard/overview</pattern>
             <pattern>api/mihomo/dashboard/proxies</pattern>
             <pattern>api/mihomo/dashboard/connections</pattern>
+            <pattern>api/mihomo/dashboard/rules</pattern>
             <pattern>api/mihomo/dashboard/runtime_status</pattern>
             <pattern>api/mihomo/dashboard/safety</pattern>
             <pattern>api/mihomo/service/status</pattern>

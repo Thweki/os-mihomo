@@ -1349,3 +1349,67 @@ msgstr "订阅更新任务已提交"
 
 msgid "Settings partly applied"
 msgstr "设置部分应用，仍需处理失败步骤"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "All rule types"
+msgstr "所有规则类型"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Clear filters"
+msgstr "清除筛选"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Next"
+msgstr "下一页"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "No matching rules."
+msgstr "没有匹配的规则。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Position"
+msgstr "位置"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Previous"
+msgstr "上一页"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Proxy target"
+msgstr "目标代理"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Rule type"
+msgstr "规则类型"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Rule value"
+msgstr "规则匹配内容"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt
+msgid "Runtime rules"
+msgstr "运行时规则"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Runtime rules are unavailable. Check the service and controller, then refresh."
+msgstr "无法获取运行时规则。请检查服务和控制器，然后刷新。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Runtime rules could not be refreshed. Showing the last successful snapshot."
+msgstr "无法刷新运行时规则。当前显示上次成功加载的快照。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Search runtime rules"
+msgstr "搜索运行时规则"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Search the loaded top-level Mihomo rules by type, value or proxy target. Position preserves controller order. This is a text search, not a routing simulation; rule-set contents are not expanded."
+msgstr "按类型、匹配内容或目标代理搜索已加载的 Mihomo 顶层规则。位置保留控制器中的顺序。此功能仅搜索文本，不模拟路由，也不展开规则集内容。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Showing %s–%s of %s matches (%s loaded rules)."
+msgstr "显示第 %s–%s 条，共匹配 %s 条（已加载 %s 条规则）。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
+msgid "Snapshot loaded. Refresh to read the current runtime rules."
+msgstr "快照已加载。点击刷新以读取当前运行时规则。"
