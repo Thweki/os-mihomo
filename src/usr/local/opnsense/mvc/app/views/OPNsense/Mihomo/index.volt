@@ -278,12 +278,50 @@
         /* ------------------------------------------------------------------ *
          * 活动连接表格
          * ------------------------------------------------------------------ */
+        function connectionAddressCell(column, row) {
+            const source = column.id === 'source';
+            const address = MihomoUI.decodeApiText(row[source ? 'sourceIP' : 'destinationIP']);
+            const cell = MihomoUI.element(document, 'span', {}, MihomoUI.decodeApiText(row[column.id]));
+            if (address) {
+                const label = (source ? {{ lang._('Copy source IP address') | json_encode }} : {{ lang._('Copy destination IP address') | json_encode }}) + ': ' + address;
+                const button = MihomoUI.element(document, 'button', {type: 'button', class: 'btn btn-xs btn-default cmd-copy-address',
+                    style: 'margin-left:4px', 'data-address': address, 'aria-label': label, title: label});
+                button.appendChild(MihomoUI.element(document, 'i', {class: 'fa fa-copy fa-fw', 'aria-hidden': 'true'}));
+                cell.appendChild(button);
+            }
+            return cell.outerHTML;
+        }
+
+        let addressCopyAttempt = 0;
+        $('#grid-connections').on('click', '.cmd-copy-address', async function (event) {
+            event.stopPropagation();
+            const address = $(this).attr('data-address');
+            if (!address) { return; }
+            const attempt = ++addressCopyAttempt;
+            $('#connection-copy-state').text('');
+            $('#connection-copy-manual').prop('hidden', true);
+            $('#connection-copy-value').val('');
+            try {
+                await navigator.clipboard.writeText(address);
+                if (attempt === addressCopyAttempt) {
+                    $('#connection-copy-state').text({{ lang._('IP address copied.') | json_encode }});
+                }
+            } catch (error) {
+                if (attempt === addressCopyAttempt) {
+                    $('#connection-copy-state').text({{ lang._('Clipboard unavailable. Copy the selected IP address manually.') | json_encode }});
+                    $('#connection-copy-manual').prop('hidden', false);
+                    $('#connection-copy-value').val(address).focus().select();
+                }
+            }
+        });
+
         $("#grid-connections").UIBootgrid({
             'search': '/api/mihomo/dashboard/connections',
             'options': {
                 'rowSelect': false,
                 'multiSelect': false,
                 'formatters': {
+                    'addressformatter': connectionAddressCell,
                     'bytesformatter': function (column, row) {
                         return fmtBytes(row[column.id]);
                     },
@@ -506,8 +544,8 @@
                 <table id="grid-connections" class="table table-condensed table-hover table-striped table-responsive" data-editDialog="">
                     <thead>
                         <tr>
-                            <th data-column-id="host" data-type="string">{{ lang._('Host') }}</th>
-                            <th data-column-id="source" data-width="11em" data-type="string">{{ lang._('Source') }}</th>
+                            <th data-column-id="host" data-type="string" data-formatter="addressformatter">{{ lang._('Host') }}</th>
+                            <th data-column-id="source" data-width="11em" data-type="string" data-formatter="addressformatter">{{ lang._('Source') }}</th>
                             <th data-column-id="network" data-width="5em" data-type="string">{{ lang._('Network') }}</th>
                             <th data-column-id="type" data-width="5em" data-type="string">{{ lang._('Type') }}</th>
                             <th data-column-id="rule" data-width="10em" data-type="string">{{ lang._('Rule') }}</th>
@@ -524,6 +562,11 @@
                     <tfoot>
                     </tfoot>
                 </table>
+                </div>
+                <p id="connection-copy-state" class="text-muted" role="status"></p>
+                <div id="connection-copy-manual" hidden>
+                    <label for="connection-copy-value">{{ lang._('IP address to copy') }}</label>
+                    <input id="connection-copy-value" type="text" class="form-control" readonly>
                 </div>
             </div>
         </div>

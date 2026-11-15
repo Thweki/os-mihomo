@@ -1404,3 +1404,23 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copy source IP address"
+msgstr "复制源 IP 地址"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copy destination IP address"
+msgstr "复制目标 IP 地址"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "IP address copied."
+msgstr "IP 地址已复制。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Clipboard unavailable. Copy the selected IP address manually."
+msgstr "剪贴板不可用。请手动复制已选中的 IP 地址。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "IP address to copy"
+msgstr "待复制的 IP 地址"

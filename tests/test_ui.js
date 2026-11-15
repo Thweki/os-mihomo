@@ -539,3 +539,111 @@ assert(favoriteNotice.includes('only for this page visit'));
 assert.equal(displayedGroups()[0], specialName);
 assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
 console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
+
+// Run the actual connection formatter and delegated click handler. DOM values
+// remain text/attributes even when controller strings contain markup or quotes.
+const addressScript = indexView.match(/        function connectionAddressCell\(column, row\) \{[\s\S]*?(?=        \$\("#grid-connections"\)\.UIBootgrid)/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+const copyControls = new Map();
+let addressClick, renderedCell;
+function copyControl(selector) {
+    if (!copyControls.has(selector)) {
+        copyControls.set(selector, {value: '', label: '', hidden: true, focused: false, selected: false,
+            text(value) { this.label = value; return this; },
+            val(value) { this.value = value; return this; },
+            prop(key, value) { this[key] = value; return this; },
+            focus() { this.focused = true; return this; },
+            select() { this.selected = true; return this; }});
+    }
+    return copyControls.get(selector);
+}
+const copyContext = {
+    document: {createElement(tag) {
+        const node = doc.createElement(tag);
+        // Capture the real DOM tree immediately before Bootgrid serialization.
+        Object.defineProperty(node, 'outerHTML', {get() { renderedCell = this; return 'serialized cell'; }});
+        return node;
+    }},
+    MihomoUI: UI, navigator: {},
+    $: selector => selector === '#grid-connections' ? {on(event, selector, fn) {
+        assert.equal(event, 'click'); assert.equal(selector, '.cmd-copy-address'); addressClick = fn;
+    }} : typeof selector === 'object' ? {attr: key => selector.getAttribute(key)} : copyControl(selector)
+};
+vm.createContext(copyContext);
+vm.runInContext(addressScript, copyContext);
+assert(indexView.includes("'addressformatter': connectionAddressCell"));
+for (const column of ['source', 'host']) {
+    assert.match(indexView, new RegExp('<th data-column-id="' + column + '"[^>]+data-formatter="addressformatter"'));
+}
+assert.match(indexView, /id="connection-copy-state"[^>]+role="status"/);
+assert.match(indexView, /id="connection-copy-value"[^>]+readonly/);
+const addressRow = {host: encode('<host>&amp;"'), source: '192.0.2.8:50000',
+    sourceIP: '192.0.2.8', destinationIP: '2001:db8::9'};
+function renderAddress(id, row = addressRow) {
+    assert.equal(copyContext.connectionAddressCell({id}, row), 'serialized cell');
+    return renderedCell;
+}
+const sourceCell = renderAddress('source');
+assert.equal(sourceCell.textContent, addressRow.source);
+const sourceCopy = sourceCell.children[0];
+assert.equal(sourceCopy.attrs['data-address'], '192.0.2.8');
+assert.equal(sourceCopy.attrs['aria-label'], 'Copy source IP address: 192.0.2.8');
+const hostCell = renderAddress('host'), destinationCopy = hostCell.children[0];
+assert.equal(hostCell.textContent, '<host>&amp;"', 'Decode display text exactly once');
+assert.equal(destinationCopy.attrs['data-address'], '2001:db8::9');
+assert.equal(destinationCopy.attrs.title, 'Copy destination IP address: 2001:db8::9');
+for (const button of [sourceCopy, destinationCopy]) {
+    assert.equal(button.attrs.type, 'button', 'Native keyboard activation');
+    assert.equal(button.children[0].attrs['aria-hidden'], 'true');
+}
+for (const missing of [undefined, null, '']) {
+    assert.equal(renderAddress('host', {...addressRow, destinationIP: missing}).children.length, 0);
+    assert.equal(renderAddress('source', {...addressRow, sourceIP: missing}).children.length, 0);
+}
+const hostileAddress = '" data-unexpected="x<>&amp;';
+const hostileButton = renderAddress('host', {...addressRow, destinationIP: encode(hostileAddress)}).children[0];
+assert.equal(hostileButton.attrs['data-address'], hostileAddress);
+assert(!Object.hasOwn(hostileButton.attrs, 'data-unexpected'));
+assert.equal(renderAddress('source', {...addressRow, sourceIP: '2001:db8::8'}).children[0].attrs['data-address'], '2001:db8::8');
+const copyState = copyControl('#connection-copy-state'), manualCopy = copyControl('#connection-copy-manual');
+const copyValue = copyControl('#connection-copy-value');
+let stoppedCopies = 0;
+const clickAddress = button => addressClick.call(button, {stopPropagation() { stoppedCopies++; }});
+(async () => {
+    const copied = [];
+    let finishCopy;
+    copyContext.navigator.clipboard = {writeText(value) { copied.push(value); return new Promise(resolve => { finishCopy = resolve; }); }};
+    const pending = clickAddress(destinationCopy);
+    assert.deepEqual(copied, ['2001:db8::9'], 'Write starts directly in the click gesture, using metadata rather than hostname');
+    assert.equal(copyState.label, '', 'Never claim success before the clipboard resolves');
+    finishCopy(); await pending;
+    assert.equal(copyState.label, 'IP address copied.');
+    assert.equal(manualCopy.hidden, true);
+    for (const clipboard of [undefined, {}, {writeText() { throw new Error('Unavailable'); }},
+        {writeText() { return Promise.reject(new Error('Permission denied')); }}]) {
+        copyContext.navigator.clipboard = clipboard;
+        await clickAddress(sourceCopy);
+        assert.equal(copyState.label, 'Clipboard unavailable. Copy the selected IP address manually.');
+        assert.equal(manualCopy.hidden, false);
+        assert.equal(copyValue.value, '192.0.2.8');
+        assert(copyValue.focused && copyValue.selected);
+    }
+    copyContext.navigator.clipboard = {writeText(value) { copied.push(value); return Promise.resolve(); }};
+    // A new button after table reload needs no new handler registration.
+    const refreshedButton = renderAddress('source', {...addressRow, sourceIP: '2001:db8::10'}).children[0];
+    await clickAddress(refreshedButton);
+    assert.equal(copied.at(-1), '2001:db8::10');
+    assert.equal(copyState.label, 'IP address copied.');
+    assert.equal(manualCopy.hidden, true);
+    assert.equal(copyValue.value, '');
+    let rejectOldCopy;
+    copyContext.navigator.clipboard = {writeText() { return new Promise((resolve, reject) => { rejectOldCopy = reject; }); }};
+    const oldCopy = clickAddress(sourceCopy);
+    copyContext.navigator.clipboard = {writeText() { return Promise.resolve(); }};
+    await clickAddress(destinationCopy);
+    rejectOldCopy(new Error('Late failure')); await oldCopy;
+    assert.equal(copyState.label, 'IP address copied.', 'An old failure cannot replace the latest result');
+    assert.equal(manualCopy.hidden, true);
+    assert.equal(stoppedCopies, 8);
+    console.log('Connection copy UI: IPv4/IPv6, safe DOM, missing IPs, reloads, clipboard success/failure, manual fallback and stale results passed');
+})().catch(error => { console.error(error); process.exitCode = 1; });

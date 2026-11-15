@@ -236,6 +236,9 @@ class Controller
             $rows[] = [
                 'id' => (string)($conn['id'] ?? ''),
                 'host' => $host,
+                // Keep addresses separate from endpoints; splitting on ':' loses IPv6 data.
+                'sourceIP' => (string)($meta['sourceIP'] ?? ''),
+                'destinationIP' => (string)($meta['destinationIP'] ?? ''),
                 'source' => (string)($meta['sourceIP'] ?? '') . (isset($meta['sourcePort']) ? ':' . $meta['sourcePort'] : ''),
                 'destination' => (string)($meta['destinationIP'] ?? '') . (isset($meta['destinationPort']) ? ':' . $meta['destinationPort'] : ''),
                 'network' => strtoupper((string)($meta['network'] ?? '')),

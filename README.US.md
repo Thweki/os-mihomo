@@ -29,6 +29,8 @@ In **Proxy Groups**, click the star beside a group to pin its card first, or bes
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
+In **Active Connections**, use the copy icon beside **Source** for the source IP or beside **Host** for the destination IP. Hover or focus the button to identify its address. Copying uses the IP reported by Mihomo, without a port or IPv6 brackets; it does not resolve hostnames or substitute the displayed host. Missing IPs have no copy button. If the browser blocks clipboard access (including on HTTP), a selected read-only field lets you copy manually. This also works with view-only privileges and makes no extra API requests.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.
