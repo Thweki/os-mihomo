@@ -101,11 +101,12 @@
                     return;
                 }
                 ajaxGet('/api/mihomo/routing/netplan', {}, function (net, s2) {
-                    if (s2 !== 'success') {
+                    if (s2 !== 'success' || net.status !== 'ok') {
                         return;
                     }
                     lastPlan = {
                         version: preview.version,
+                        networkVersion: net.version,
                         rules: preview.rules || [],
                         warnings: preview.warnings || [],
                         changes: net.changes || [],
@@ -167,7 +168,7 @@
                                         dialog(({{ lang._('Apply failed') | json_encode }}), decode(r1['message'] || ''), BootstrapDialog.TYPE_DANGER);
                                         return;
                                     }
-                                    ajaxCall('/api/mihomo/routing/netapply', {}, function (r2) {
+                                    ajaxCall('/api/mihomo/routing/netapply', {version: lastPlan.networkVersion}, function (r2) {
                                         const out = [];
                                         out.push('[mihomo]');
                                         (r1['messages'] || []).forEach(function (m) { out.push('  ' + m); });

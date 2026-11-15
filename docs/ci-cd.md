@@ -14,7 +14,7 @@ All Actions are pinned to commit SHAs. Default permissions are read-only; only t
 ```sh
 python3 tools/check_publication.py
 python3 tools/validate.py
-# FreeBSD only, with Python 3, PHP (including SimpleXML), Git and build tools:
+# FreeBSD only, with Python 3, PHP (including SimpleXML and DOM), Git and build tools:
 sh scripts/ci_build.sh
 ```
 
@@ -69,3 +69,19 @@ For an isolated signing verification without changing client settings, build a p
 Local instructions, work logs, original screenshots, device exports and one-off diagnostics are excluded. Only the three reviewed, sanitized README images in `docs/assets/` are allowed, with exact SHA-256 checksums pinned in `tools/check_publication.py`. Replacing an image requires a new visual privacy review and checksum update; text scanning cannot detect sensitive pixels.
 
 CI rejects tracked files that match `.gitignore`, unexpected files, private host addresses, home-directory paths, private keys and token patterns. Distributed configuration accepts only documented example credentials. Production signing keys, locally downloaded test runtimes and generated outputs remain ignored.
+
+## Network XML concurrency fixtures
+
+`php tests/test_network.php` exercises overlapping core/plugin writers, stale revisions,
+private unique backups and staging, inode-preserving persistence, guarded rollback,
+Unbound round trips, and API lock release before synchronous configd calls. The tests
+use temporary XML and a small core persistence double; they do not reload a firewall.
+The network plan revision is carried through apply and each subsequent stage. Automatic
+rollback refuses backups without a recorded revision, or any intervening configuration
+save. Core persistence may reformat XML while preserving unrelated configuration nodes.
+
+Local B1 verification (2026-11-15): `python3 tools/validate.py --frontend-only` passed
+publication, translations, XML, JavaScript/UI, deterministic archive and shell checks.
+PHP CLI was unavailable, so PHP lint and all PHP fixtures (including the new network
+suite) were skipped locally. Full PHP checks are wired into Ubuntu validation and the
+FreeBSD package job; live appliance persistence/reload behavior was not exercised locally.

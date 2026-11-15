@@ -24,7 +24,7 @@
  * 设计要点（安全第一）:
  *   · 全程**只增不改**：已存在的接口块/网关/规则不重复添加，不删除任何既有配置；
  *   · 改动前把 /conf/config.xml 备份到 /conf/config.xml.mihomo-bak.<ts>（可一键还原）；
- *   · 文本级插入（不做 DOM 重新序列化），其余内容逐字节保留 —— 与本项目「最小 diff」原则一致；
+ *   · 文本级插入后经核心配置 API 持久化，保留其余配置 —— 与本项目「最小 diff」原则一致；
  *   · 只处理 <policy>路由规则</policy>：仅为请求里列出的接口创建规则；其他未绑定接口一条都不加；
  *   · 结束后执行 `configctl filter reload`，并回报生成的 pf 规则里是否出现 route-to。
  *
@@ -34,8 +34,27 @@
  * All rights reserved. 详见 models/OPNsense/Mihomo/Config.php 头部 BSD 许可条款。
  */
 
+require_once 'config.inc';
+require_once __DIR__ . '/write_common.php';
+require_once dirname(__DIR__, 2) . '/mvc/app/models/OPNsense/Mihomo/NetworkConfig.php';
+
+use OPNsense\Mihomo\NetworkConfig;
+
 $CONFIG_FILE = '/conf/config.xml';
 $BACKUP_GLOB = '/conf/config.xml.mihomo-bak.*';
+
+function network_backups(): array
+{
+    $paths = array_filter(glob($GLOBALS['BACKUP_GLOB']) ?: [],
+        static fn($path) => preg_match('/\.mihomo-bak\.[0-9]{8}_[0-9]{6}(?:_[0-9]{6}_[a-f0-9]{12})?$/D', $path));
+    sort($paths);
+    return array_values($paths);
+}
+
+set_exception_handler(static function (Throwable $error): void {
+    out(['status' => 'failed', 'message' => $error->getMessage()]);
+    exit(0);
+});
 $GATEWAY_NAME = 'MIHOMO_TUN';
 $RULE_MARKER = 'Mihomo policy routing';
 $RULE_MARKER_LOCAL = 'Mihomo local bypass';
@@ -174,8 +193,7 @@ function current_state(): array
         }
     }
 
-    $backups = glob($GLOBALS['BACKUP_GLOB']) ?: [];
-    sort($backups);
+    $backups = network_backups();
 
     $deviceUp = false;
     [$rc, $out] = run_command('ifconfig ' . escapeshellarg($device));
@@ -458,37 +476,27 @@ if ($action === 'check' || $action === 'plan') {
     if (!preg_match('@^/tmp/mihomo-[A-Za-z0-9.]{6,}$@', $staging) || !is_file($staging)) {
         fail('invalid staging file: ' . $staging, 2);
     }
-    $payload = json_decode((string)file_get_contents($staging), true);
+    $payload = json_decode(mihomo_staging($staging), true);
     if (!is_array($payload)) {
         fail('invalid staging payload', 2);
     }
     $plan['interfaces'] = array_values(array_filter(array_map('strval', $payload['interfaces'] ?? [])));
     $plan['gateway'] = trim((string)($payload['gateway'] ?? ''));
-    out(build_plan($plan));
+    $transaction = new NetworkConfig((string)($payload['version'] ?? ''));
+    $result = build_plan($plan);
+    $result['version'] = $transaction->version;
+    $transaction->close();
+    out($result);
     exit(0);
 }
 
 if ($action === 'rollback') {
-    $backups = glob($BACKUP_GLOB) ?: [];
-    sort($backups);
-    /* 允许指定要还原的备份（绝对路径且必须在备份目录内），否则用最近的 */
+    $transaction = new NetworkConfig();
+    $backups = network_backups();
     $requested = trim((string)($argv[2] ?? ''));
-    $last = '';
-    if ($requested !== '') {
-        if (!preg_match('@^/conf/config\.xml\.mihomo-bak\.[0-9_]+$@', $requested) || !is_file($requested)) {
-            fail('invalid backup file: ' . $requested, 2);
-        }
-        $last = $requested;
-    } else {
-        $last = end($backups) ?: '';
-    }
-    if ($last === '' || !is_file($last)) {
-        fail('no backup found (' . $BACKUP_GLOB . ')', 2);
-    }
-    if (!copy($last, $CONFIG_FILE)) {
-        fail('unable to restore ' . $last, 3);
-    }
-    chmod($CONFIG_FILE, 0644);
+    $last = $requested !== '' ? $requested : (end($backups) ?: '');
+    $transaction->rollback($last);
+    $transaction->close();
     [$rc, $filterOut] = run_command('configctl filter reload');
     out([
         'status' => 'ok',
@@ -509,7 +517,7 @@ $staging = $argv[2] ?? '';
 if (!preg_match('@^/tmp/mihomo-[A-Za-z0-9.]{6,}$@', $staging) || !is_file($staging)) {
     fail('invalid staging file: ' . $staging, 2);
 }
-$payload = json_decode((string)file_get_contents($staging), true);
+$payload = json_decode(mihomo_staging($staging), true);
 if (!is_array($payload)) {
     fail('invalid staging payload', 2);
 }
@@ -533,12 +541,14 @@ $interfaces = array_values(array_unique($interfaces));
 $verify = !array_key_exists('verify', $payload) || (bool)$payload['verify'];
 $verifyOnly = (bool)($payload['verify_only'] ?? false);
 
-$before = (string)file_get_contents($CONFIG_FILE);
+$transaction = new NetworkConfig((string)($payload['version'] ?? ''));
+$before = $transaction->before;
 $after = $before;
 $messages = [];
 
 /* 第三段：只重载 + 自检（不再改 config.xml —— 规则已由核心防火墙模块写入） */
 if ($verifyOnly) {
+    $transaction->close();
     [$rc, $filterOut] = run_command('configctl filter reload');
     $messages[] = $rc === 0 ? 'filter reload: OK' : 'filter reload failed: ' . $filterOut;
     [$rc2, $routeOut] = run_command("pfctl -sr | grep 'route-to' | grep -c 'tun_mihomo'");
@@ -717,34 +727,14 @@ if ($interfaces === []) {
 }
 
 if ($after === $before) {
-    out(['status' => 'ok', 'messages' => array_merge($messages, ['nothing changed']), 'diff' => '']);
+    out(['status' => 'ok', 'messages' => array_merge($messages, ['nothing changed']), 'diff' => '', 'version' => $transaction->version]);
     exit(0);
 }
 
-/* ---------------- 5. 备份 + 原子写入 ---------------- */
-$backup = '/conf/config.xml.mihomo-bak.' . date('Ymd_His');
-if (!copy($CONFIG_FILE, $backup)) {
-    fail('unable to create backup ' . $backup, 3);
-}
-chmod($backup, 0600);
-
-$tmp = $CONFIG_FILE . '.mihomo-new';
-if (file_put_contents($tmp, $after) === false) {
-    fail('unable to write ' . $tmp, 3);
-}
-/* XML 结构自检：能被解析才落盘 */
-libxml_use_internal_errors(true);
-$doc = new DOMDocument();
-if (!$doc->loadXML($after)) {
-    @unlink($tmp);
-    $err = libxml_get_last_error();
-    fail('generated config.xml is not valid XML: ' . ($err ? trim($err->message) : 'unknown'), 1);
-}
-if (!rename($tmp, $CONFIG_FILE)) {
-    @unlink($tmp);
-    fail('unable to install ' . $CONFIG_FILE, 3);
-}
-chmod($CONFIG_FILE, 0644);
+/* ---------------- 5. 备份 + 核心配置持久化 ---------------- */
+$saved = $transaction->commit($after);
+$backup = $saved['backup'];
+$transaction->close();
 $messages[] = 'config.xml written (backup ' . basename($backup) . ')';
 
 /* ---------------- 6. 重载过滤器 + 安全自检（不通过就自动回滚） ----------------
@@ -760,6 +750,8 @@ if (!$verify) {
         'status' => 'ok',
         'messages' => $messages,
         'diff' => diff_text($before, $after, 'config.xml'),
+        'version' => $saved['version'],
+        'backup' => $backup,
         'state' => current_state(),
     ]);
     exit(0);
@@ -773,8 +765,9 @@ if ($interfaces !== []) {
     [$rc2, $routeOut] = run_command("pfctl -sr | grep 'route-to' | grep -c 'tun_mihomo'");
     $routeCount = (int)trim($routeOut);
     if ($routeCount < 1) {
-        copy($backup, $CONFIG_FILE);
-        chmod($CONFIG_FILE, 0644);
+        $recovery = new NetworkConfig($saved['version']);
+        $recovery->rollback($backup);
+        $recovery->close();
         run_command('configctl filter reload');
         fail(
             "safety check failed: no pf route-to rule points at tun_mihomo; config.xml was restored from "
@@ -794,5 +787,7 @@ out([
     'status' => 'ok',
     'messages' => $messages,
     'diff' => diff_text($before, $after, 'config.xml'),
+    'version' => $saved['version'],
+    'backup' => $backup,
     'state' => current_state(),
 ]);
