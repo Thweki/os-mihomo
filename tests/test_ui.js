@@ -170,28 +170,96 @@ console.log('DOM names, native keyboard controls, focus/scroll, polling backoff/
 const settingsView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt'), 'utf8');
 const applyFunction = settingsView.match(/        function applySettings\(\) \{[\s\S]*?\n        \}/)[0].replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+const applyHistoryScript = settingsView.match(/        const applyHistory = \[\];[\s\S]*?(?=        function applySettings)/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 let versionValue = 'original-version';
 const writeRequests = [], messages = [];
+class SettingsNode {
+    constructor() { this.children = []; this.label = ''; }
+    prop() { return this; }
+    val(value) { versionValue = value; return this; }
+    text(value) { if (value === undefined) { return this.label; } this.label = value; return this; }
+    empty() { this.children = []; return this; }
+    append(node) { this.children.push(node); return this; }
+    attr() { return this; }
+    html() { throw new Error('History must render labels as text'); }
+}
+const historyBody = new SettingsNode();
+const fieldLabel = new SettingsNode().text('Controller <secret> & key');
+let changedFields = ['mihomo.general.secret', 'mihomo.managed'];
 const settingsContext = {
-    $: selector => ({prop: () => {}, val: value => { versionValue = value; }}),
-    syncManagedHidden: () => {}, getFormData: () => ({version: versionValue, mihomo: {enabled: '0'}}),
+    $: selector => selector === '#settings-history-body' ? historyBody : selector === fieldLabel ? fieldLabel : new SettingsNode(),
+    document: {getElementById: id => { assert.equal(id, 'control_label_mihomo.general.secret'); return fieldLabel; }},
+    MANAGED_INPUT: 'mihomo.managed',
+    syncManagedHidden: () => {}, getFormData: () => ({version: versionValue, mihomo: {secret: 'do-not-retain-test-value'}}),
     ajaxCall: (url, data, done) => writeRequests.push({url, data, done}),
     handleFormValidation: () => {}, showResult: (...args) => messages.push(args),
     MihomoUI: UI, BootstrapDialog: {TYPE_DANGER: 'danger', TYPE_SUCCESS: 'success'},
-    formChanges: () => [], reloadForm: () => {}, loadRawConfig: () => {}
+    formChanges: () => changedFields, reloadForm: () => {}, loadRawConfig: () => {}
 };
-vm.runInNewContext(applyFunction + '\napplySettings();', settingsContext);
+vm.runInNewContext(applyHistoryScript + applyFunction, settingsContext);
+const historyRows = () => historyBody.children.map(row => row.children.map(cell => cell.label));
+assert.deepEqual(historyRows(), [['No settings applies on this page yet.']]);
+vm.runInNewContext('applySettings();', settingsContext);
+assert.equal(historyRows()[0][2], 'Saving settings');
 assert.equal(writeRequests[0].data.version, 'original-version');
 writeRequests[0].done({status: 'failed', message: 'Configuration changed. Reload before saving.'}, 'success');
 assert.equal(writeRequests.length, 1, 'A stale model cannot reach apply');
 assert.equal(messages.at(-1)[2], 'danger');
+assert.equal(historyRows()[0][2], 'Save failed');
+assert.equal(historyRows()[0][1], 'Controller <secret> & key, Write locks');
 vm.runInNewContext('applySettings();', settingsContext);
+changedFields = []; // Later edits must not change the captured attempt labels.
 writeRequests[1].done({result: 'saved', version: 'after-model-save'}, 'success');
+assert.equal(historyRows()[0][2], 'Applying settings');
 assert.equal(writeRequests[2].url, '/api/mihomo/settings/apply');
 assert.equal(writeRequests[2].data.version, 'after-model-save');
-writeRequests[2].done({status: 'partial', message: 'Cron failed after configuration was saved.'});
+writeRequests[2].done({status: 'partial', state: 'partial', message: 'Cron failed after configuration was saved.'}, 'success');
 assert.equal(messages.at(-1)[2], 'danger', 'Partial completion is not reported as success');
 assert.equal(versionValue, 'after-model-save');
+assert.equal(historyRows()[0][2], 'Settings partly applied');
+assert.equal(historyRows()[0][1], 'Controller <secret> & key, Write locks');
+
+// Each attempt adds exactly the existing save/apply requests, with no history API.
+for (const [state, label] of [
+    ['completed', 'Settings applied'], ['unchanged', 'No file changes needed'],
+    ['accepted', 'Restart accepted; readiness unconfirmed'], ['failed', 'Apply failed']
+]) {
+    const before = writeRequests.length;
+    vm.runInNewContext('applySettings();', settingsContext);
+    writeRequests[before].done({result: 'saved', version: 'next-version'}, 'success');
+    writeRequests[before + 1].done({status: state === 'failed' ? 'failed' : 'ok', state, message: 'do-not-retain-server-message'}, 'success');
+    assert.equal(writeRequests.length, before + 2);
+    assert.equal(historyRows()[0][1], 'Reapply saved settings');
+    assert.equal(historyRows()[0][2], label);
+    assert(!Number.isNaN(Date.parse(historyRows()[0][0])));
+}
+for (const [data, status] of [[null, 'error'], [{status: 'ok'}, 'success'],
+    [{status: 'ok', state: 'partial'}, 'success'], [{status: 'ok', state: 'completed'}, 'error']]) {
+    vm.runInNewContext('applySettings();', settingsContext);
+    writeRequests.at(-1).done({result: 'saved', version: 'next-version'}, 'success');
+    writeRequests.at(-1).done(data, status);
+    assert.equal(historyRows()[0][2], 'Outcome unconfirmed; check current settings before retrying');
+}
+// A failed transport during save must not send apply or claim no changes occurred.
+const requestsBeforeLostSave = writeRequests.length;
+vm.runInNewContext('applySettings();', settingsContext);
+writeRequests.at(-1).done(null, 'error');
+assert.equal(writeRequests.length, requestsBeforeLostSave + 1);
+assert.equal(historyRows()[0][2], 'Outcome unconfirmed; check current settings before retrying');
+vm.runInNewContext('applySettings();', settingsContext);
+writeRequests.at(-1).done({result: 'saved'}, 'success'); // Missing version cannot confirm the save.
+assert.equal(writeRequests.length, requestsBeforeLostSave + 2);
+assert.equal(historyRows()[0][2], 'Outcome unconfirmed; check current settings before retrying');
+assert.equal(historyRows().length, 10);
+assert(!historyRows().some(row => row[2] === 'Save failed'), 'Oldest attempt is evicted');
+const retainedHistory = vm.runInNewContext('JSON.stringify(applyHistory)', settingsContext);
+assert(!retainedHistory.includes('do-not-retain'));
+assert(!retainedHistory.includes('Cron failed'));
+assert(!retainedHistory.includes('version'));
+assert(settingsView.includes('Reloading clears this list.'));
+assert(settingsView.includes('id="settings-history-body"'));
+console.log('Recent settings applies: bounded history, captured labels, outcomes, transport uncertainty and privacy passed');
 
 // Exercise the real overview request function, including its metadata cadence.
 const indexView = fs.readFileSync(require('node:path').join(__dirname,

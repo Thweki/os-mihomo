@@ -102,6 +102,8 @@ Candidates are validated in unique files on the target filesystem, then the actu
 
 Action `state` distinguishes `unchanged`, `completed`, `accepted`, `failed` and `partial`. Cron and service reloads occur after the file transaction; failures report partial completion, and failed Cron reloads remain pending for retry. An accepted restart does not prove service readiness. Logs mask URLs and common secret fields; configuration editors and history still expose their content to authorized configuration administrators.
 
+Settings also shows the latest 10 apply/reapply attempts made on the open page, with start times, submitted field names and outcomes. This list distinguishes save failures, partial applies, unchanged files, accepted restarts and unconfirmed responses. It retains no field values or backend messages and makes no extra requests. Reloading clears it; YAML edits and other operators' actions are not included. Submitted field names are not proof that those files changed.
+
 New OPNsense privileges separate `Mihomo (view)`, `Mihomo (operate)` and `Mihomo (configure)` for status/redacted logs, runtime control and configuration/credentials. Combine as needed. Existing full `Mihomo` grants remain compatible. Native settings model save/import retain the existing full-admin requirement. Read-only users cannot select proxies, change mode, close connections or write settings. View privileges do not grant raw YAML, subscription credentials or backup contents.
 
 ### Subscription updates
