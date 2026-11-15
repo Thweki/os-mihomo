@@ -77,6 +77,45 @@ namespace {
         \OPNsense\Mihomo\Config::setFileOverride(null);
     }
     echo "Controller metadata response types: passed\n";
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        $dashboard = new \OPNsense\Mihomo\Api\DashboardController();
+        $validRules = [
+            ['type' => 'DomainSuffix', 'payload' => 'example.org', 'proxy' => 'Proxy <&>', 'size' => -1],
+            ['type' => 'RuleSet', 'payload' => '中文', 'proxy' => 'DIRECT'],
+            ['type' => 'Match', 'payload' => '', 'proxy' => 'REJECT'],
+        ];
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['rules' => $validRules, 'extra' => 'not exposed']);
+        $result = $dashboard->rulesAction();
+        expect($result === ['ready' => true, 'rows' => [
+            ['position' => 1, 'type' => 'DomainSuffix', 'payload' => 'example.org', 'proxy' => 'Proxy <&>'],
+            ['position' => 2, 'type' => 'RuleSet', 'payload' => '中文', 'proxy' => 'DIRECT'],
+            ['position' => 3, 'type' => 'Match', 'payload' => '', 'proxy' => 'REJECT'],
+        ]], 'Runtime rules expose only ordered display fields, including empty MATCH payloads');
+        expect(\OPNsense\Mihomo\ControllerHttpFixture::$url === 'http://127.0.0.1:9090/rules', 'Reads the runtime rules endpoint');
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = '{"rules":[]}';
+        expect($dashboard->rulesAction() === ['ready' => true, 'rows' => []], 'Empty rules are available');
+        foreach (['null', '42', '"text"', '{invalid', '{}', '{"rules":null}', '{"rules":"text"}',
+            '{"rules":{"named":{}}}', '{"rules":[null]}', '{"rules":[{"type":[],"payload":"","proxy":""}]}',
+            '{"rules":[{"type":"Match","proxy":"DIRECT"}]}',
+            json_encode(['rules' => [$validRules[0], ['type' => 'Match', 'payload' => '', 'proxy' => []]]])] as $body) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = $body;
+            expect($dashboard->rulesAction() === ['ready' => false, 'rows' => []], 'Malformed rules cannot become an empty or partial successful snapshot');
+        }
+        foreach ([false, json_encode(['rules' => $validRules])] as $body) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = $body;
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+            expect($dashboard->rulesAction() === ['ready' => false, 'rows' => []], 'Transport and HTTP errors are unavailable');
+        }
+        $acl = simplexml_load_file($app . 'models/OPNsense/Mihomo/ACL/ACL.xml');
+        expect(in_array('api/mihomo/dashboard/rules', array_map('strval',
+            iterator_to_array($acl->{'page-vpn-mihomo-view'}->patterns->pattern, false)), true), 'View privilege can read runtime rules');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+    }
+    echo "Runtime rule snapshot, ordering, schema, failure and read-only API: passed\n";
     class Request {
         public function isPost() { return true; }
         public function getPost($name, $filter = null, $default = null) { return $default; }

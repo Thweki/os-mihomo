@@ -252,6 +252,32 @@ class Controller
         return $snapshot + ['rows' => $rows];
     }
 
+    /** Read-only top-level rules in controller order; never return the raw response. */
+    public static function ruleRows(): array
+    {
+        $result = self::get('/rules');
+        $rules = $result['data']['rules'] ?? null;
+        $unavailable = ['ready' => false, 'rows' => []];
+        if (!$result['ok'] || !is_array($rules) || !array_is_list($rules)) {
+            return $unavailable;
+        }
+        $rows = [];
+        foreach ($rules as $index => $rule) {
+            // Reject incomplete snapshots rather than silently changing rule order.
+            if (!is_array($rule) || !is_string($rule['type'] ?? null)
+                || !is_string($rule['payload'] ?? null) || !is_string($rule['proxy'] ?? null)) {
+                return $unavailable;
+            }
+            $rows[] = [
+                'position' => $index + 1,
+                'type' => $rule['type'],
+                'payload' => $rule['payload'],
+                'proxy' => $rule['proxy'],
+            ];
+        }
+        return ['ready' => true, 'rows' => $rows];
+    }
+
     /** 关闭单条连接（id 为空时关闭全部） */
     public static function closeConnection(string $id = ''): array
     {

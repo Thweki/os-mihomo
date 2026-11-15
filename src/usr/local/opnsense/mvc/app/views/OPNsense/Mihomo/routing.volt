@@ -11,11 +11,15 @@
 <script src="{{ cache_safe('/js/mihomo/ui.js') }}"></script>
 <ul class="nav nav-tabs" id="routing-tabs" role="tablist">
     <li class="active"><a href="#routing-current" data-toggle="tab">{{ lang._('Current forwarding') }}</a></li>
+    <li><a href="#routing-rules" data-toggle="tab">{{ lang._('Runtime rules') }}</a></li>
     <li><a href="#routing-configuration" data-toggle="tab">{{ lang._('Policy configuration') }}</a></li>
 </ul>
 <div class="tab-content">
     <div id="routing-current" class="tab-pane active">
         {{ partial('OPNsense/Mihomo/network_status', ['network_id':'routing-network']) }}
+    </div>
+    <div id="routing-rules" class="tab-pane">
+        {{ partial('OPNsense/Mihomo/runtime_rules') }}
     </div>
     <div id="routing-configuration" class="tab-pane">
 
