@@ -410,7 +410,7 @@ function trafficPage() {
         sessionStorage: {getItem() { throw new Error('Storage denied'); }, setItem() { throw new Error('Storage denied'); }},
         ajaxGet: (url, params, done) => { assert.equal(url, '/api/mihomo/dashboard/overview'); reads.push(done); }
     });
-    vm.runInContext(trafficScript, context);
+    vm.runInContext('function renderModeHint() {}\n' + trafficScript, context);
     return {element, context, reads,
         request() { now += 2000; vm.runInContext('loadOverview();', context); },
         respond(download, upload, ready = true, alive = true) {
@@ -495,7 +495,9 @@ const modeContext = {
     trafficHistory: {add: () => ({down: null, up: null})}, drawTraffic: () => {},
     overviewPoller: {refresh: () => { modeRefreshes++; }},
     ajaxCall: (url, data, done) => modeWrites.push({url, data, done}),
-    setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; }
+    setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; },
+    trafficTotals: { update() {} },
+    drawTrafficTotals() {}
 };
 const modeScript = indexView.match(/        function renderModeHint\(\) \{[\s\S]*?\n        \}\);/)[0];
 const modeOverviewScript = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0];
