@@ -36,7 +36,13 @@ function control(selector) {
             writes: 0, textWrites: 0, layoutReads: 0, scrollWrites: 0,
             0: {scrollHeight: 100}, val(value) { if (value === undefined) { return this.value; } this.writes++; this.value = value; return this; },
             text(value) { this.textWrites++; this.label = value; return this; },
-            prop(key) { return this[key]; }, on(event, fn) { this.handlers[event] = fn; return this; },
+            prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+            css(styles) {
+                this.styles = {...this.styles, ...styles};
+                if (this.wrapHeights) { this[0].scrollHeight = this.wrapHeights[this.wrap]; }
+                return this;
+            },
+            on(event, fn) { this.handlers[event] = fn; return this; },
             change(fn) { return this.on('change', fn); }, click(fn) { return this.on('click', fn); },
             scrollTop(value) { if (value === undefined) { this.layoutReads++; return this.top; } this.scrollWrites++; this.top = value; return this; },
             outerHeight() { this.layoutReads++; return 50; }};
@@ -50,8 +56,11 @@ const logView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt'), 'utf8');
 const logScript = logView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
     .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+const logDownloads = [];
 vm.runInNewContext(logScript, {
     document: fakeDocument,
+    Blob: class { constructor(parts) { logDownloads.push(parts.join('')); } },
+    URL: {createObjectURL: () => 'blob:log-test', revokeObjectURL() {}},
     $: selector => selector === fakeDocument ? {ready: fn => fn()} : control(selector),
     ajaxGet: (url, params, done) => requests.push({params, done}),
     setInterval: fn => { logTimer = fn; }, MihomoUI: {decodeApiText: value => { logDecodes++; return decode(value); }}
@@ -135,6 +144,56 @@ const emptyWork = logWork();
 logTimer(); respondLog('');
 assert.deepEqual(logWork(), emptyWork, 'Empty logs also skip unchanged poll work');
 console.log('Unchanged log polling, recovery, filtering, queued scrolling and cache invalidation: all checks passed');
+
+// Run the real wrap control against long, unbroken Unicode text. Only presentation
+// may change, even when polling has no new content or a filter is active.
+assert.match(logView, /<label\b[^>]*for="log-wrap"[^>]*>[\s\S]*?lang\._\('Wrap lines'\)/);
+assert.match(logView, /<input\b[^>]*id="log-wrap"[^>]*type="checkbox"[^>]*aria-controls="log-viewer"[^>]*checked/);
+assert.match(logView, /<textarea\b[^>]*id="log-viewer"[^>]*wrap="soft"/);
+assert.match(logView, /white-space: pre-wrap; overflow-wrap: anywhere;/);
+const wrapControl = control('#log-wrap');
+assert.equal(wrapControl.checked, true, 'Each page visit starts wrapped');
+const longLog = '中文 https://example.invalid/' + 'long-path'.repeat(100) + '\t<&>\nsecond line\n';
+logTimer(); respondLog(longLog);
+viewer[0].selectionStart = 3; viewer[0].selectionEnd = 70;
+viewer.wrapHeights = {soft: 600, off: 150};
+viewer[0].scrollHeight = 600; viewer.top = 550;
+const beforeWrap = [requests.length, logDecodes, viewer.writes, control('#log-match-state').textWrites];
+const toggleWrap = enabled => { wrapControl.checked = enabled; wrapControl.handlers.change(); };
+toggleWrap(false);
+assert.equal(viewer.wrap, 'off');
+assert.equal(viewer.styles['white-space'], 'pre');
+assert.equal(viewer.styles['overflow-wrap'], 'normal', 'Unbroken URLs must also stop wrapping');
+assert.equal(viewer.top, 150, 'Follow the bottom after shrinking the wrapped content');
+assert.deepEqual([requests.length, logDecodes, viewer.writes, control('#log-match-state').textWrites], beforeWrap,
+    'Wrapping neither fetches nor decodes nor rewrites/recounts the log');
+assert.equal(viewer.value, longLog.trimEnd());
+assert.deepEqual([viewer[0].selectionStart, viewer[0].selectionEnd], [3, 70]);
+toggleWrap(true);
+assert.equal(viewer.wrap, 'soft');
+assert.equal(viewer.styles['white-space'], 'pre-wrap');
+assert.equal(viewer.styles['overflow-wrap'], 'anywhere');
+assert.equal(viewer.top, 600, 'Follow the bottom after expanding the wrapped content');
+viewer.top = 0;
+toggleWrap(false);
+assert.equal(viewer.top, 0, 'Do not force a reader of older entries to the bottom');
+control('#log-filter').value = 'second'; control('#log-filter').handlers.input();
+logTimer(); respondLog(longLog);
+assert.equal(viewer.value, 'second line');
+assert.equal(viewer.wrap, 'off', 'Filtering and unchanged polls retain the wrapping choice');
+control('#log-source').value = 'subscription'; control('#log-source').handlers.change();
+respondLog('second source\n');
+assert.equal(viewer.wrap, 'off', 'Source switches and changed responses retain the wrapping choice');
+assert.equal(viewer.value, 'second source');
+fakeDocument.createElement = tag => { assert.equal(tag, 'a'); return {click() {}}; };
+control('#downloadAct').handlers.click();
+assert.equal(requests.at(-1).params.lines, 5000);
+respondLog(longLog);
+assert.equal(logDownloads.at(-1), longLog, 'Download keeps full logical lines regardless of wrapping/filter');
+control('#log-filter').value = ''; control('#log-filter').handlers.input();
+toggleWrap(true);
+assert.equal(viewer.value, 'second source', 'Toggling back does not replace the current log');
+console.log('Log wrapping: defaults, long Unicode lines, selection, tail following, filtering, polling, source changes and downloads passed');
 
 // The same renderer used by the dashboard runs against a strict DOM fixture.
 // HTML parsing is deliberately unavailable: dynamic names must be text/attributes.

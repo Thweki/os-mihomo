@@ -19,7 +19,9 @@ Open **VPN → Proxy Suite** after installation.
 | Settings | Native forms, write locks, change previews and discard, reapply, advanced options, YAML editing and validation, configuration comparison and DNS status |
 | Policy Routing | Current forwarding and rule details; interface policies, change previews, network bindings, configuration history and restore |
 | Subscription | Submit updates; view task state, last success, exit code and execution logs |
-| Log File | Filter loaded lines, pause refresh, switch sources and line counts, download or clear logs |
+| Log File | Filter loaded lines, toggle line wrapping, pause refresh, switch sources and line counts, download or clear logs |
+
+In **Log File**, clear **Wrap lines** to keep each log entry on one line and scroll horizontally; enable it to fit long lines to the panel, including long URLs. Wrapping starts enabled on each page visit. The choice survives filtering, refreshes and source changes during that visit. It only changes the display: line counts, selected text and downloads retain the original logical lines. If you are at the bottom, toggling keeps the newest entries in view.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 

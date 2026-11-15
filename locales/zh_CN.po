@@ -1419,3 +1419,7 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Wrap lines"
+msgstr "自动换行"

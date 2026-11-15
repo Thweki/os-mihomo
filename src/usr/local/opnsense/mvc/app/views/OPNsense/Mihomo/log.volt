@@ -23,6 +23,19 @@
                 : !lines.length ? {{ lang._('No matching log entries.') | json_encode }} : String(lines.length) + ' / ' + String(allLines.length));
         }
         $('#log-filter').on('input', renderLog);
+        $('#log-wrap').prop('checked', true).on('change', function () {
+            const $viewer = $('#log-viewer');
+            const atBottom = $viewer[0].scrollHeight - $viewer.scrollTop() - $viewer.outerHeight() < 40;
+            const wrap = $('#log-wrap').prop('checked');
+            // Change presentation only: retain the text, selection and logical line counts.
+            $viewer.prop('wrap', wrap ? 'soft' : 'off').css({
+                'white-space': wrap ? 'pre-wrap' : 'pre',
+                'overflow-wrap': wrap ? 'anywhere' : 'normal'
+            });
+            if (atBottom) {
+                $viewer.scrollTop($viewer[0].scrollHeight);
+            }
+        });
         function refreshLogs(scroll) {
             if (pending) { queued = true; queuedScroll = queuedScroll || scroll; return; }
             pending = true;
@@ -127,10 +140,11 @@
                     <label for="log-filter" style="flex:0 0 auto; white-space:nowrap;">{{ lang._('Filter log') }}</label>
                     <input id="log-filter" type="search" class="form-control" style="flex:1 1 200px; width:auto; max-width:100%;" placeholder="{{ lang._('Filter the loaded lines') }}">
                     <label style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-auto-refresh" type="checkbox" checked> {{ lang._('Auto refresh') }}</label>
+                    <label for="log-wrap" style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-wrap" type="checkbox" aria-controls="log-viewer" checked> {{ lang._('Wrap lines') }}</label>
                     <span id="log-match-state" class="text-muted" role="status"></span>
                 </div>
                 <p id="log-state" class="text-muted" role="status"></p>
-                <textarea aria-label="{{ lang._('Log contents') }}" id="log-viewer" class="form-control" rows="30" readonly
+                <textarea aria-label="{{ lang._('Log contents') }}" id="log-viewer" class="form-control" rows="30" wrap="soft" readonly
                           style="width: 100%; max-width: 100%; font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere;"></textarea>
             </div>
         </div>
