@@ -44,6 +44,8 @@ images/
 !/tests/test_runtime.php
 !/tests/test_writes.php
 !/tests/test_api.php
+!/tests/test_network_apply.php
+!/tests/test_network_api.php
 !/tests/test_build.py
 !/tests/test_repository.sh
 

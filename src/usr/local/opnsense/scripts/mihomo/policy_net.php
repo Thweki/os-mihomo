@@ -18,7 +18,7 @@
  *   ① verify=false     先建接口与网关 —— 防火墙的浮动规则带 gateway 字段，
  *                      网关还不存在时模型校验会直接报「网关无效」（实测踩过）
  *   ② 浮动规则         由 WebGUI 侧写入核心防火墙模块（本脚本不碰）
- *   ③ verify_only=true 只做 filter reload + 自检（pf 里必须出现 route-to），
+ *   ③ verify_only=true 只做 filter reload + 自检（核对全部绑定及解绑结果），
  *                      失败时报错，由 WebGUI 撤销刚写的规则
  *
  * 设计要点（安全第一）:
@@ -26,13 +26,18 @@
  *   · 改动前把 /conf/config.xml 备份到 /conf/config.xml.mihomo-bak.<ts>（可一键还原）；
  *   · 文本级插入（不做 DOM 重新序列化），其余内容逐字节保留 —— 与本项目「最小 diff」原则一致；
  *   · 只处理 <policy>路由规则</policy>：仅为请求里列出的接口创建规则；其他未绑定接口一条都不加；
- *   · 结束后执行 `configctl filter reload`，并回报生成的 pf 规则里是否出现 route-to。
+ *   · 结束后执行 `configctl filter reload`，核对已加载的全部绑定及解绑结果。
  *
- * 退出码: 0 成功 / 1 校验失败 / 2 参数或环境错误 / 3 写入失败
+ * 退出码: 0 返回 JSON（须检查 status） / 1 校验失败 / 2 参数或环境错误 / 3 写入失败
  *
  * Copyright (C) 2026  os-mihomo contributors
  * All rights reserved. 详见 models/OPNsense/Mihomo/Config.php 头部 BSD 许可条款。
  */
+
+require_once dirname(__DIR__, 2) . '/mvc/app/models/OPNsense/Mihomo/RuntimeStatus.php';
+require_once dirname(__DIR__, 2) . '/mvc/app/models/OPNsense/Mihomo/NetworkApply.php';
+
+use OPNsense\Mihomo\NetworkApply;
 
 $CONFIG_FILE = '/conf/config.xml';
 $BACKUP_GLOB = '/conf/config.xml.mihomo-bak.*';
@@ -489,15 +494,16 @@ if ($action === 'rollback') {
         fail('unable to restore ' . $last, 3);
     }
     chmod($CONFIG_FILE, 0644);
-    [$rc, $filterOut] = run_command('configctl filter reload');
-    out([
-        'status' => 'ok',
-        'messages' => [
-            sprintf('config.xml restored from %s', basename($last)),
-            $rc === 0 ? 'filter reload: OK' : 'filter reload failed: ' . $filterOut,
-        ],
-        'state' => current_state(),
-    ]);
+    $restored = (string)file_get_contents($CONFIG_FILE);
+    try {
+        $result = NetworkApply::reload($restored, NetworkApply::bindings($restored), 'run_command');
+    } catch (Throwable $error) {
+        $result = ['status' => 'failed', 'message' => $error->getMessage(), 'messages' => []];
+    }
+    $result['messages'][] = sprintf('config.xml restored from %s', basename($last));
+    $result['state'] = current_state();
+    // configd discards stdout on nonzero exits: the JSON status carries failure.
+    out($result);
     exit(0);
 }
 
@@ -539,35 +545,10 @@ $messages = [];
 
 /* 第三段：只重载 + 自检（不再改 config.xml —— 规则已由核心防火墙模块写入） */
 if ($verifyOnly) {
-    [$rc, $filterOut] = run_command('configctl filter reload');
-    $messages[] = $rc === 0 ? 'filter reload: OK' : 'filter reload failed: ' . $filterOut;
-    [$rc2, $routeOut] = run_command("pfctl -sr | grep 'route-to' | grep -c 'tun_mihomo'");
-    $routeCount = (int)trim($routeOut);
-    $messages[] = $interfaces === []
-        ? 'pf route-to rules into tun_mihomo after unbind: ' . $routeCount
-        : 'pf route-to rules into tun_mihomo: ' . $routeCount;
-
-    if ($interfaces !== [] && $routeCount < 1) {
-        /* 这里必须 **exit 0**：configd 在脚本非零退出时会丢掉 stdout，
-         * WebGUI 就只剩一句"(no output)"，看不到真实原因（实测踩过）。 */
-        out([
-            'status' => 'failed',
-            'message' => sprintf(
-                'safety check failed: firewall rules are written but no pf route-to rule points at %s. '
-                . 'Check that gateway %s uses interface %s (and that filter reload keeps it).',
-                $DEFAULT_DEVICE,
-                $GATEWAY_NAME,
-                interface_name_for_device((string)file_get_contents($CONFIG_FILE), $DEFAULT_DEVICE) ?: '?'
-            ),
-            'messages' => $messages,
-            'state' => current_state(),
-        ]);
-        @unlink($staging);
-        exit(0);
-    }
-
+    $result = NetworkApply::reload($before, $interfaces, 'run_command');
+    $result['state'] = current_state();
     @unlink($staging);
-    out(['status' => 'ok', 'messages' => $messages, 'state' => current_state()]);
+    out($result);
     exit(0);
 }
 
@@ -717,7 +698,11 @@ if ($interfaces === []) {
 }
 
 if ($after === $before) {
-    out(['status' => 'ok', 'messages' => array_merge($messages, ['nothing changed']), 'diff' => '']);
+    $result = $verify ? NetworkApply::reload($after, $interfaces, 'run_command') : ['status' => 'ok', 'messages' => []];
+    $result['messages'] = array_merge($messages, ['nothing changed'], $result['messages']);
+    $result['diff'] = '';
+    @unlink($staging);
+    out($result);
     exit(0);
 }
 
@@ -765,34 +750,24 @@ if (!$verify) {
     exit(0);
 }
 
-[$rc, $filterOut] = run_command('configctl filter reload');
-$messages[] = $rc === 0 ? 'filter reload: OK' : 'filter reload failed: ' . $filterOut;
-
-/* 关键自检：只要还有绑定，生成的 pf 规则就必须把流量送进 TUN 设备；否则立刻还原并报错 */
-if ($interfaces !== []) {
-    [$rc2, $routeOut] = run_command("pfctl -sr | grep 'route-to' | grep -c 'tun_mihomo'");
-    $routeCount = (int)trim($routeOut);
-    if ($routeCount < 1) {
-        copy($backup, $CONFIG_FILE);
+$result = NetworkApply::reload($after, $interfaces, 'run_command');
+$result['messages'] = array_merge($messages, $result['messages']);
+if ($result['status'] !== 'ok') {
+    if (!copy($backup, $CONFIG_FILE)) {
+        $result['rollback'] = ['status' => 'failed', 'message' => 'Unable to restore the configuration backup.'];
+    } else {
         chmod($CONFIG_FILE, 0644);
-        run_command('configctl filter reload');
-        fail(
-            "safety check failed: no pf route-to rule points at tun_mihomo; config.xml was restored from "
-            . basename($backup) . ". Check that the gateway interface is the TUN interface.",
-            1
-        );
+        try {
+            $result['rollback'] = NetworkApply::reload($before, NetworkApply::bindings($before), 'run_command');
+        } catch (Throwable $error) {
+            $result['rollback'] = ['status' => 'failed', 'message' => $error->getMessage()];
+        }
     }
-    $messages[] = 'pf route-to rules into tun_mihomo: ' . $routeCount;
-} else {
-    [$rc2, $routeOut] = run_command("pfctl -sr | grep 'route-to' | grep -c 'tun_mihomo'");
-    $messages[] = 'pf route-to rules into tun_mihomo after unbind: ' . (int)trim($routeOut);
+    $result['messages'][] = $result['rollback']['status'] === 'ok'
+        ? 'rollback: configuration restored and loaded PF bindings verified'
+        : 'rollback failed: ' . $result['rollback']['message'];
 }
-
 @unlink($staging);
-
-out([
-    'status' => 'ok',
-    'messages' => $messages,
-    'diff' => diff_text($before, $after, 'config.xml'),
-    'state' => current_state(),
-]);
+$result['diff'] = diff_text($before, $after, 'config.xml');
+$result['state'] = current_state();
+out($result);
