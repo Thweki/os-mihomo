@@ -23,6 +23,8 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+In **Proxy Groups**, use **Copy proxy name** beside a node to copy its exact name, or **Copy group selection** in a group header to copy a quoted `"group": "selection"` line for troubleshooting notes. Selection copies use the last displayed snapshot and are disabled when no selection is available; they describe the immediate group choice, which can itself be another group. These local actions require no extra privileges or settings and do not change routing. If clipboard access is unavailable (including HTTP or denied permission), a read-only text field opens with the text selected for manual copying. Only the names are included, exactly as displayed; configuration credentials are not fetched.
+
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)

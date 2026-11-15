@@ -104,10 +104,11 @@ class DomNode {
 }
 const doc = {activeElement: null, createElement(tag) { return new DomNode(this, tag); }};
 const groupBox = doc.createElement('div');
-const names = ['name" data-unexpected="value', "single' quote", '<tag>&value', '001', '中文\\name'];
+const names = ['name" data-unexpected="value', "single' quote", '<tag>&value', '001', '中文\\name', 'literal &gt; 😀\nnext\tline'];
 const encode = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-const groups = names.map(name => ({name: encode(name), type: 'Selector', members: [{name: encode(name), type: 'test', selected: true, delay: 20}]}));
-const render = () => UI.renderProxyGroups(groupBox, groups, {testGroup: 'Test group', testNode: 'Test node'}, value => value + ' ms', () => 'label-success');
+const groups = names.map(name => ({name: encode(name), now: encode(name), type: 'Selector', members: [{name: encode(name), type: 'test', selected: true, delay: 20}]}));
+const render = () => UI.renderProxyGroups(groupBox, groups, {testGroup: 'Test group', testNode: 'Test node',
+    copyName: 'Copy proxy name', copySelection: 'Copy group selection'}, value => value + ' ms', () => 'label-success');
 render();
 const lists = groupBox.querySelectorAll('ul[data-group]');
 assert.deepEqual(lists.map(node => node.getAttribute('data-group')), names);
@@ -115,18 +116,30 @@ const members = groupBox.querySelectorAll('li[data-member]');
 assert.deepEqual(members.map(node => node.getAttribute('data-member')), names);
 assert(members.every(node => !Object.hasOwn(node.attrs, 'data-unexpected')));
 const buttons = groupBox.querySelectorAll('button[data-focus-key]');
-assert.equal(buttons.length, names.length * 3);
+assert.equal(buttons.length, names.length * 5);
 assert(buttons.every(node => node.attrs.type === 'button'), 'Selection has native keyboard activation');
-assert.equal(buttons[1].attrs['aria-pressed'], 'true');
-assert.equal(buttons[2].attrs['aria-label'], 'Test node: ' + names[0]);
-assert.equal(buttons[1].children[1].textContent, ' ' + names[0] + ' ');
+assert.equal(buttons[2].attrs['aria-pressed'], 'true');
+assert.equal(buttons[3].attrs['aria-label'], 'Test node: ' + names[0]);
+assert.equal(buttons[2].children[1].textContent, ' ' + names[0] + ' ');
+const copyButtons = groupBox.querySelectorAll('button[data-copy-text]');
+names.forEach((name, i) => {
+    assert.equal(copyButtons[i * 2].attrs['data-copy-text'], JSON.stringify(name) + ': ' + JSON.stringify(name) + '\n');
+    assert.equal(copyButtons[i * 2 + 1].attrs['data-copy-text'], name, 'Copy names exactly, decoding only one API layer');
+    assert.equal(copyButtons[i * 2 + 1].attrs['aria-label'], 'Copy proxy name: ' + name);
+});
 lists[0].scrollTop = 172;
-doc.activeElement = buttons[1];
+doc.activeElement = copyButtons[1];
 render();
 assert.equal(groupBox.querySelectorAll('ul[data-group]')[0].scrollTop, 172);
-assert.notEqual(doc.activeElement, buttons[1], 'Refresh replaces nodes');
-assert.equal(doc.activeElement.attrs['data-focus-key'], buttons[1].attrs['data-focus-key'], 'Refresh restores keyboard focus by exact name');
+assert.notEqual(doc.activeElement, copyButtons[1], 'Refresh replaces nodes');
+assert.equal(doc.activeElement.attrs['data-focus-key'], copyButtons[1].attrs['data-focus-key'], 'Refresh restores copy-button focus by exact name');
 assert(groupBox.contains(doc.activeElement));
+groups[0].now = '';
+groups[1].now = encode('new <selection> &gt;');
+render();
+assert.equal(groupBox.querySelectorAll('button[data-copy-text]')[0].disabled, true, 'No selection must not copy an empty mapping');
+assert.equal(groupBox.querySelectorAll('button[data-copy-text]')[2].attrs['data-copy-text'],
+    JSON.stringify(names[1]) + ': "new <selection> &gt;"\n', 'Polling updates the selection to copy');
 
 // Fake timers prove non-overlap, hidden pause/resume, exponential retry and recovery.
 let hidden = false, callback, calls = 0, scheduled = null;
@@ -280,3 +293,77 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// Run the actual delegated copy handler. No controller, write API or browser HTML
+// parser is available: copying must remain a local action on the clicked snapshot.
+async function testProxyCopy() {
+    assert.equal(await UI.copyText('name', undefined), false);
+    assert.equal(await UI.copyText('name', {}), false);
+    assert.equal(await UI.copyText('name', {writeText() { throw new Error('blocked'); }}), false);
+    const copyControls = new Map();
+    let focused = false, selected = false;
+    function copyControl(selector) {
+        if (!copyControls.has(selector)) {
+            copyControls.set(selector, {
+                handlers: {}, value: '', label: '', hidden: true,
+                0: {focus() { focused = true; }, select() { selected = true; }},
+                on(event, delegate, fn) { this.handlers[fn ? delegate : event] = fn || delegate; return this; },
+                prop(key, value) { this[key] = value; return this; },
+                val(value) { this.value = value; return this; },
+                text(value) { this.label = value; return this; },
+                empty() { this.label = ''; return this; }
+            });
+        }
+        return copyControls.get(selector);
+    }
+    const clipboardWrites = [];
+    let finishWrite;
+    const browser = {clipboard: {writeText(text) {
+        clipboardWrites.push(text);
+        return new Promise(resolve => { finishWrite = resolve; });
+    }}};
+    const copyScript = indexView.match(/        let copying = false;[\s\S]*?(?=        let testing = false;)/)[0]
+        .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+    vm.runInNewContext(copyScript, {$: copyControl, navigator: browser, MihomoUI: UI});
+    const click = copyControl('#proxy-groups').handlers['.cmd-copy'];
+    const firstButton = copyButtons[1];
+    const pending = click.call(firstButton);
+    assert.equal(copyControl('#proxy-copy-state').label, 'Copying…');
+    assert.deepEqual(clipboardWrites, [names[0]], 'Clipboard starts in the user click, before yielding');
+    await click.call(copyButtons[3]);
+    assert.equal(clipboardWrites.length, 1, 'Pending writes cannot race with another copy');
+    render(); // A poll replaces the original button while the clipboard is pending.
+    finishWrite();
+    await pending;
+    assert.equal(copyControl('#proxy-copy-state').label, 'Copied to clipboard.');
+    assert.equal(copyControl('#proxy-copy-fallback').hidden, true);
+    assert.equal(copyControl('#proxy-copy-text').value, '');
+
+    const currentButtons = groupBox.querySelectorAll('button[data-copy-text]');
+    await click.call(currentButtons[0]);
+    assert.equal(clipboardWrites.length, 1, 'Unavailable group selections do not write');
+    browser.clipboard = {writeText() { return Promise.reject(new Error('permission denied')); }};
+    await click.call(currentButtons[2]);
+    assert.equal(copyControl('#proxy-copy-state').label, 'Clipboard unavailable. Copy the selected text below.');
+    assert.equal(copyControl('#proxy-copy-fallback').hidden, false);
+    assert.equal(copyControl('#proxy-copy-text').value, currentButtons[2].attrs['data-copy-text']);
+    assert(focused && selected, 'Manual fallback focuses and selects the captured text');
+    copyControl('#proxy-copy-dismiss').handlers.click();
+    assert.equal(copyControl('#proxy-copy-fallback').hidden, true);
+    assert.equal(copyControl('#proxy-copy-text').value, '');
+    assert.equal(copyControl('#proxy-copy-state').label, '');
+
+    browser.clipboard = undefined; // HTTP appliance or unsupported browser.
+    await click.call(currentButtons.at(-1));
+    assert.equal(copyControl('#proxy-copy-text').value, names.at(-1));
+    browser.clipboard = {writeText: async text => clipboardWrites.push(text)};
+    await click.call(currentButtons.at(-1));
+    assert.equal(clipboardWrites.at(-1), names.at(-1));
+    assert.equal(copyControl('#proxy-copy-fallback').hidden, true, 'Retry clears the manual fallback');
+    assert.equal(copyControl('#proxy-copy-text').value, '');
+    assert.equal(copyControl('#proxy-copy-state').label, 'Copied to clipboard.');
+    assert.match(indexView, /id="proxy-copy-state"[^>]*role="status"/);
+    assert.match(indexView, /<textarea id="proxy-copy-text"[^>]*readonly/);
+    console.log('Proxy copy: exact names/selections, polling snapshots, pending writes, denied/missing clipboard and manual fallback passed');
+}
+testProxyCopy().catch(error => { console.error(error); process.exitCode = 1; });
