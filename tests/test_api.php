@@ -15,9 +15,32 @@ namespace OPNsense\Core {
         public function configdpRun($action, $args) { self::$calls++; return self::$output; }
     }
 }
+namespace OPNsense\Mihomo {
+    // Namespace-local transport doubles exercise the real JSON decoder without
+    // opening sockets or requiring the cURL extension on portable PHP runners.
+    class ControllerHttpFixture {
+        public static string|false $body = '';
+        public static int $status = 200;
+        public static string $url = '';
+    }
+    function curl_init($url) { ControllerHttpFixture::$url = $url; return $url; }
+    function curl_setopt_array($handle, $options) { return true; }
+    function curl_exec($handle) { return ControllerHttpFixture::$body; }
+    function curl_getinfo($handle, $option) { return ControllerHttpFixture::$status; }
+    function curl_error($handle) { return 'Fixture transport failure'; }
+    function curl_close($handle) {}
+    function gettext($message) { return $message; }
+}
 namespace {
+    foreach (['CURLOPT_CUSTOMREQUEST', 'CURLOPT_RETURNTRANSFER', 'CURLOPT_CONNECTTIMEOUT',
+        'CURLOPT_TIMEOUT', 'CURLOPT_HTTPHEADER', 'CURLOPT_FOLLOWLOCATION', 'CURLINFO_HTTP_CODE'] as $name) {
+        define('OPNsense\\Mihomo\\' . $name, $name);
+    }
+    if (!function_exists('gettext')) {
+        function gettext(string $message): string { return $message; }
+    }
     $app = dirname(__DIR__) . '/src/usr/local/opnsense/mvc/app/';
-    foreach (['RequestParamsTrait', 'Logs', 'ActionResult', 'Subscription'] as $name) {
+    foreach (['RequestParamsTrait', 'Logs', 'ActionResult', 'Subscription', 'Config', 'Controller', 'Inspector', 'Safety'] as $name) {
         require_once $app . 'models/OPNsense/Mihomo/' . $name . '.php';
     }
     foreach (['Dashboard', 'Settings', 'Subscription', 'Routing', 'Log'] as $name) {
@@ -26,6 +49,34 @@ namespace {
     function expect($condition, $label) {
         if (!$condition) { throw new \RuntimeException($label); }
     }
+    // Use only the shipped example configuration, never appliance credentials.
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        foreach (['version' => ['version' => 'fixture', 'meta' => true],
+            'runningConfig' => ['mode' => 'rule', 'tun' => ['enable' => false]]] as $method => $valid) {
+            foreach (['"unexpected"', '""', '42', '1.5', 'true', 'false', 'null', '', '{invalid'] as $body) {
+                \OPNsense\Mihomo\ControllerHttpFixture::$body = $body;
+                expect(\OPNsense\Mihomo\Controller::$method() === null,
+                    $method . ' treats non-array JSON as unavailable without a TypeError');
+            }
+            foreach ([$valid, []] as $data) {
+                \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode($data);
+                expect(\OPNsense\Mihomo\Controller::$method() === $data, $method . ' preserves decoded arrays');
+            }
+            $path = $method === 'version' ? '/version' : '/configs';
+            expect(\OPNsense\Mihomo\ControllerHttpFixture::$url === 'http://127.0.0.1:9090' . $path,
+                $method . ' uses the expected controller endpoint');
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode($valid);
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+            expect(\OPNsense\Mihomo\Controller::$method() === null, $method . ' rejects unsuccessful HTTP responses');
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = false;
+            expect(\OPNsense\Mihomo\Controller::$method() === null, $method . ' handles transport failure');
+        }
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Controller metadata response types: passed\n";
     class Request {
         public function isPost() { return true; }
         public function getPost($name, $filter = null, $default = null) { return $default; }
@@ -61,6 +112,59 @@ namespace {
     }
     \OPNsense\Core\Backend::$output = json_encode(\OPNsense\Mihomo\ActionResult::make('completed'));
     expect($settings->configTestAction()['status'] === 'ok', 'Explicit validated result accepted');
+    $config = tempnam(sys_get_temp_dir(), 'mihomo-safety-');
+    file_put_contents($config, "external-controller: 127.0.0.1:9090\ntun:\n  enable: false\n");
+    \OPNsense\Mihomo\Config::setFileOverride($config);
+    $fixtures = [
+        'empty response' => ['', false, 'The backend did not return a valid action result.'],
+        'whitespace response' => [" \n\t", false, 'The backend did not return a valid action result.'],
+        'malformed JSON' => ['{"state":', false, 'The backend did not return a valid action result.'],
+        'incomplete envelope' => ['{"status":"ok"}', false, 'The backend did not return a valid action result.'],
+        'legacy success text' => ['Configuration is valid.', false, 'The backend did not return a valid action result.'],
+        'rejected configuration' => [
+            '{"status":"failed","state":"failed","changed":false,"code":"configuration_failed","message":"Mihomo rejected the configuration (exit 1)."}',
+            false, 'Mihomo rejected the configuration (exit 1).',
+        ],
+        'missing binary' => [
+            '{"status":"failed","state":"failed","changed":false,"code":"configuration_failed","message":"The mihomo binary is missing."}',
+            false, 'The mihomo binary is missing.',
+        ],
+        'successful validation' => [
+            '{"status":"ok","state":"unchanged","changed":false,"code":"valid","message":"Configuration validation passed."}',
+            true, 'Configuration validation passed.',
+        ],
+    ];
+    foreach (['accepted', 'partial', 'failed', 'completed'] as $state) {
+        $fixtures[$state . ' is not a validation result'] = [
+            json_encode(\OPNsense\Mihomo\ActionResult::make($state, false, 'valid', 'Validation pending.')),
+            false, 'Validation pending.',
+        ];
+    }
+    $fixtures['unrelated successful result'] = [
+        json_encode(\OPNsense\Mihomo\ActionResult::make('unchanged', false, 'unchanged', 'No changes.')),
+        false, 'No changes.',
+    ];
+    $fixtures['success depends on the envelope, not message words'] = [
+        json_encode(\OPNsense\Mihomo\ActionResult::make('unchanged', false, 'valid', 'No invalid syntax or error found.')),
+        true, 'No invalid syntax or error found.',
+    ];
+    try {
+        foreach ($fixtures as $label => [$output, $valid, $message]) {
+            \OPNsense\Core\Backend::$output = $output;
+            $report = \OPNsense\Mihomo\Safety::report(true);
+            $item = $report['items'][count($report['items']) - 1];
+            expect($item['level'] === ($valid ? 'info' : 'danger'), 'Safety validation severity: ' . $label);
+            expect($report['status'] === ($valid ? 'info' : 'danger'), 'Safety report severity: ' . $label);
+            expect($item['title'] === ($valid ? 'Configuration syntax is valid' : 'Configuration syntax is invalid'), 'Safety validation title: ' . $label);
+            expect($item['detail'] === $message, 'Safety validation message: ' . $label);
+        }
+        $report = \OPNsense\Mihomo\Safety::report(false);
+        expect(count($report['items']) === 1, 'Optional validation stays disabled by default');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        unlink($config);
+    }
+    echo "Safety structured validation results: passed\n";
     $raw = "converter https://example.invalid/path?token=fixture-value\nsecret: fixture-secret\nAuthorization: Bearer fixture-auth\n访问密钥：fixture-key\nnormal message";
     $redacted = \OPNsense\Mihomo\Logs::redact($raw);
     foreach (['fixture-value', 'fixture-secret', 'fixture-auth', 'fixture-key'] as $secret) {

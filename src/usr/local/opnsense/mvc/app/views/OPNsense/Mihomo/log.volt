@@ -14,6 +14,7 @@
 <script>
     $(document).ready(function () {
         let allLines = [], pending = false, queued = false, queuedScroll = false;
+        let lastContent = null;
         function renderLog() {
             const query = $('#log-filter').val().toLocaleLowerCase();
             const lines = allLines.filter(line => !query || line.toLocaleLowerCase().includes(query));
@@ -43,13 +44,18 @@
                     if (refreshAgain) { refreshLogs(nextScroll); }
                     return;
                 }
-                const content = MihomoUI.decodeApiText(data.content);
                 $('#log-state').text({{ lang._('Last read') | json_encode }} + ' · ' + new Date().toLocaleTimeString());
                 const $viewer = $('#log-viewer');
-                const atBottom = $viewer[0].scrollHeight - $viewer.scrollTop() - $viewer.outerHeight() < 40;
-                allLines = content ? content.replace(/\n$/, '').split('\n') : [];
-                renderLog();
-                if (scroll || atBottom) {
+                // Compare before decoding/filtering; idle polls need no textarea or layout work.
+                if (data.content !== lastContent) {
+                    const content = MihomoUI.decodeApiText(data.content);
+                    const atBottom = $viewer[0].scrollHeight - $viewer.scrollTop() - $viewer.outerHeight() < 40;
+                    allLines = content ? content.replace(/\n$/, '').split('\n') : [];
+                    renderLog();
+                    lastContent = data.content;
+                    scroll = scroll || atBottom;
+                }
+                if (scroll) {
                     $viewer.scrollTop($viewer[0].scrollHeight);
                 }
                 if (refreshAgain) { refreshLogs(nextScroll); }
@@ -57,6 +63,7 @@
         }
 
         $('#log-source').change(function () {
+            lastContent = null;
             allLines = []; renderLog();
             $('#log-state').text({{ lang._('Loading …') | json_encode }});
             refreshLogs(true);
