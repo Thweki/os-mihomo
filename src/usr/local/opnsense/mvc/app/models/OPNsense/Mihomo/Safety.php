@@ -181,16 +181,15 @@ class Safety
 
         /* --- 8. 配置语法校验（可选，较慢） --- */
         if ($validateConfig) {
-            $output = trim((string)$backend->configdRun('mihomo config-current'));
-            $valid = !str_contains($output, 'invalid') && !str_contains($output, 'error');
+            $result = ActionResult::parse((string)$backend->configdRun('mihomo config-current'));
+            // config-current reports successful validation without changing the configuration.
+            $valid = $result['state'] === 'unchanged' && $result['code'] === 'valid';
             $items[] = [
                 'level' => $valid ? self::LEVEL_INFO : self::LEVEL_DANGER,
                 'title' => $valid
                     ? gettext('Configuration syntax is valid')
                     : gettext('Configuration syntax is invalid'),
-                'detail' => self::shorten(
-                    $output === '' ? gettext('No output from the configuration test.') : $output
-                ),
+                'detail' => self::shorten($result['message']),
             ];
         }
 
