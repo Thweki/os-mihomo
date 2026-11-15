@@ -280,3 +280,64 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// Run the dashboard render path with fresh API objects and the real DOM renderer.
+// Unchanged polling must retain nodes, focus and scroll without allocating DOM.
+const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null;\n)?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+let groupAllocations = 0;
+const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
+const pollingBox = pollingDoc.createElement('div');
+const groupContext = vm.createContext({
+    $: selector => {
+        assert.equal(selector, '#proxy-groups');
+        return {0: pollingBox, html: text => {
+            const placeholder = pollingDoc.createElement('placeholder');
+            placeholder.textContent = text;
+            pollingBox.replaceChildren(placeholder);
+        }};
+    },
+    MihomoUI: UI, delayText: value => value + ' ms', delayClass: () => 'label-success'
+});
+vm.runInContext(renderGroupsScript, groupContext);
+const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
+    {name: 'First', type: 'test', selected: true, delay: 20},
+    {name: 'Second', type: 'test', selected: false, delay: 30}
+]}]};
+function pollGroups(response = groupResponse) {
+    groupContext.response = JSON.parse(JSON.stringify(response));
+    vm.runInContext('renderGroups(response);', groupContext);
+}
+pollGroups();
+const firstRow = pollingBox.children[0];
+const focusedButton = pollingBox.querySelectorAll('button[data-focus-key]')[1];
+pollingDoc.activeElement = focusedButton;
+pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop = 123;
+const initialAllocations = groupAllocations;
+for (let i = 0; i < 5; i++) { pollGroups(); }
+assert.equal(groupAllocations, initialAllocations, 'Unchanged API responses must allocate no DOM nodes');
+assert.equal(pollingBox.children[0], firstRow);
+assert.equal(pollingDoc.activeElement, focusedButton);
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 123);
+for (const change of [
+    () => { groupResponse.groups[0].members[0].delay = 40; },
+    () => { groupResponse.groups[0].members[0].selected = false; groupResponse.groups[0].members[1].selected = true; },
+    () => { groupResponse.groups[0].members.reverse(); },
+    () => { groupResponse.groups[0].members.pop(); }
+]) {
+    const previousRow = pollingBox.children[0];
+    change(); pollGroups();
+    assert.notEqual(pollingBox.children[0], previousRow, 'Changed proxy data must render');
+}
+// Both placeholder states invalidate the snapshot, even when recovery returns
+// exactly the same groups that were displayed before the interruption.
+for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
+    pollGroups(placeholder);
+    assert.equal(pollingBox.children[0].tagName, 'placeholder');
+    pollGroups();
+    assert.equal(pollingBox.children[0].tagName, 'div', 'Recovery must replace the placeholder');
+    const recoveredRow = pollingBox.children[0];
+    pollGroups();
+    assert.equal(pollingBox.children[0], recoveredRow);
+}
+console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
