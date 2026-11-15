@@ -149,8 +149,10 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
-    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites) {
+    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, nodeOrder = 'config') {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
+        const direction = nodeOrder === 'name-asc' ? 1 : nodeOrder === 'name-desc' ? -1 : 0;
+        const collator = direction ? new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'}) : null;
         function favoriteButton(kind, name, group) {
             const starred = favorites.has(kind, name);
             const label = kind === 'groups' ? labels.favoriteGroup : labels.favoriteProxy;
@@ -179,7 +181,13 @@
             header.appendChild(test);
             const list = el('ul', {class: 'list-group', 'data-group': name, 'aria-label': name,
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
-            const members = group.members || [];
+            let members = group.members || [];
+            if (collator) {
+                // Sort decoded display names on a copy; stable ties keep controller order.
+                members = members.map(member => ({member, name: decodeApiText(member.name)}))
+                    .sort((a, b) => direction * collator.compare(a.name, b.name)).map(item => item.member);
+            }
+            // The stable favorite partition preserves name order within both sections.
             (favorites ? favorites.order(members, 'proxies') : members).forEach(member => {
                 const memberName = decodeApiText(member.name);
                 const item = el('li', {class: 'list-group-item' + (member.selected ? ' active' : ''),

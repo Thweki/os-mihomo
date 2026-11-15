@@ -345,7 +345,7 @@ const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
-let favoriteNotice = '', testsDisabled = false, favoriteHandler;
+let favoriteNotice = '', testsDisabled = false, favoriteHandler, nodeOrderHandler;
 const dashboardStorage = new Map();
 const dashboardFavorites = new UI.ProxyFavorites(() => ({
     getItem: key => dashboardStorage.get(key) || null,
@@ -353,6 +353,9 @@ const dashboardFavorites = new UI.ProxyFavorites(() => ({
 }));
 const groupContext = vm.createContext({
     $: selector => {
+        if (selector === '#proxy-node-order') {
+            return {on: (event, handler) => { assert.equal(event, 'change'); nodeOrderHandler = handler; }};
+        }
         if (selector instanceof DomNode) { return {attr: key => selector.getAttribute(key)}; }
         if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
         if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
@@ -367,7 +370,7 @@ const groupContext = vm.createContext({
             pollingBox.replaceChildren(placeholder);
         }};
     },
-    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false,
+    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false, nodeOrder: 'config',
     delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
 vm.runInContext(renderGroupsScript, groupContext);
@@ -513,3 +516,75 @@ assert(favoriteNotice.includes('only for this page visit'));
 assert.equal(displayedGroups()[0], specialName);
 assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
 console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
+
+// Name order is presentation-only, natural, case-insensitive and stable on ties.
+const sortNames = ['Node 10', 'node 2', 'NODE 2', 'Node 1'];
+const sortGroups = [{name: 'Z group', members: sortNames.map((name, i) =>
+    Object.freeze({name, selected: i === 0, delay: [1, null, 500, 0][i]}))},
+    {name: 'A group', members: []}];
+sortGroups.forEach(group => { Object.freeze(group.members); Object.freeze(group); });
+Object.freeze(sortGroups);
+const renderSort = order => UI.renderProxyGroups(groupBox, sortGroups, {}, String, () => '', null, order);
+const sortedNames = () => groupBox.querySelectorAll('li[data-member]').map(node => node.attrs['data-member']);
+renderSort('name-asc');
+assert.deepEqual(sortedNames(), ['Node 1', 'node 2', 'NODE 2', 'Node 10']);
+renderSort('name-desc');
+assert.deepEqual(sortedNames(), ['Node 10', 'node 2', 'NODE 2', 'Node 1'], 'Descending keeps equal names in configuration order');
+for (const mode of ['config', undefined, 'unknown']) {
+    renderSort(mode);
+    assert.deepEqual(sortedNames(), sortNames);
+}
+// Decode once before comparing, so &lt; is sorted as <, and literal &gt; stays literal.
+const exactNames = ['z', '<node>', '&gt;', '中文', 'éclair', 'ÉCLAIR', 'node"quote'];
+UI.renderProxyGroups(groupBox, [{name: 'Encoded', members: exactNames.map(name => ({name: encode(name)}))}],
+    {}, String, () => '', null, 'name-asc');
+assert.deepEqual(sortedNames(), exactNames.slice().sort(new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'}).compare));
+
+const nodeOrderScript = indexView.match(/        \$\('#proxy-node-order'\)\.on\('change',[\s\S]*?\n        \}\);/)[0];
+assert(indexView.includes('label for="proxy-node-order"'), 'Sort control has an accessible label');
+for (const mode of ['config', 'name-asc', 'name-desc']) { assert(indexView.includes('option value="' + mode + '"')); }
+vm.runInContext(nodeOrderScript, groupContext);
+const orderBy = value => nodeOrderHandler.call({value});
+groupContext.latestGroups = null;
+orderBy('name-asc'); // Also safe before the first response.
+const sortResponse = {ready: true, groups: sortGroups};
+pollGroups(sortResponse);
+assert.deepEqual(displayedGroups(), ['Z group', 'A group'], 'Name order does not reorder group cards');
+assert.deepEqual(displayedMembers(), [['Node 1', 'node 2', 'NODE 2', 'Node 10'], []]);
+pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop = 65;
+pollingDoc.activeElement = pollingBox.querySelectorAll('button[data-focus-key]')[2];
+const sortFocus = pollingDoc.activeElement.attrs['data-focus-key'];
+groupContext.testing = true;
+orderBy('name-desc');
+assert.equal(testsDisabled, true);
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 65);
+assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], sortFocus);
+assert(pollingBox.contains(pollingDoc.activeElement));
+assert.deepEqual(displayedMembers(), [['Node 10', 'node 2', 'NODE 2', 'Node 1'], []]);
+assert.deepEqual(selectedNames(), ['Node 10']);
+const sortedRow = pollingBox.children[0];
+pollGroups(sortResponse);
+assert.equal(pollingBox.children[0], sortedRow, 'Unchanged polls keep sorted DOM');
+star('proxies', 'Node 1');
+star('proxies', 'Node 10');
+orderBy('name-asc');
+assert.deepEqual(displayedMembers()[0], ['Node 1', 'Node 10', 'node 2', 'NODE 2'], 'Sort within favorites and ordinary proxies');
+orderBy('config');
+assert.deepEqual(displayedMembers()[0], ['Node 10', 'Node 1', 'node 2', 'NODE 2'], 'Configuration order retains favorite pinning');
+star('proxies', 'Node 1');
+star('proxies', 'Node 10');
+assert.deepEqual(displayedMembers()[0], sortNames, 'Configuration order is fully restored');
+orderBy('name-asc');
+for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
+    pollGroups(placeholder);
+    orderBy('name-desc');
+    pollGroups(sortResponse);
+    assert.deepEqual(displayedMembers()[0], ['Node 10', 'node 2', 'NODE 2', 'Node 1']);
+}
+groupContext.testing = false;
+const updatedSortResponse = JSON.parse(JSON.stringify(sortResponse));
+updatedSortResponse.groups[0].members.push({name: 'Node 3'});
+pollGroups(updatedSortResponse);
+assert.deepEqual(displayedMembers()[0], ['Node 10', 'Node 3', 'node 2', 'NODE 2', 'Node 1'], 'New poll members use current order');
+assert.deepEqual(selectedNames(), ['Node 10']);
+console.log('Proxy name sorting, natural/stable order, exact names, favorites, controls, polling and recovery: all checks passed');

@@ -1401,3 +1401,23 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Node order"
+msgstr "节点排序"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Configuration order"
+msgstr "配置顺序"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Name (A–Z)"
+msgstr "名称（A–Z）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Name (Z–A)"
+msgstr "名称（Z–A）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Favorites stay first. Name order uses natural numbers and ignores case. Resets on page reload."
+msgstr "收藏仍置顶。名称排序按自然数字顺序比较，忽略大小写。重新加载页面后重置。"
