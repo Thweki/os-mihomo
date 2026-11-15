@@ -15,9 +15,29 @@ namespace OPNsense\Core {
         public function configdpRun($action, $args) { self::$calls++; return self::$output; }
     }
 }
+namespace OPNsense\Mihomo {
+    // Namespace-local transport doubles exercise the real JSON decoder without
+    // opening sockets or requiring the cURL extension on portable PHP runners.
+    class ControllerHttpFixture {
+        public static string|false $body = '';
+        public static int $status = 200;
+        public static string $url = '';
+    }
+    function curl_init($url) { ControllerHttpFixture::$url = $url; return $url; }
+    function curl_setopt_array($handle, $options) { return true; }
+    function curl_exec($handle) { return ControllerHttpFixture::$body; }
+    function curl_getinfo($handle, $option) { return ControllerHttpFixture::$status; }
+    function curl_error($handle) { return 'Fixture transport failure'; }
+    function curl_close($handle) {}
+    function gettext($message) { return $message; }
+}
 namespace {
+    foreach (['CURLOPT_CUSTOMREQUEST', 'CURLOPT_RETURNTRANSFER', 'CURLOPT_CONNECTTIMEOUT',
+        'CURLOPT_TIMEOUT', 'CURLOPT_HTTPHEADER', 'CURLOPT_FOLLOWLOCATION', 'CURLINFO_HTTP_CODE'] as $name) {
+        define('OPNsense\\Mihomo\\' . $name, $name);
+    }
     $app = dirname(__DIR__) . '/src/usr/local/opnsense/mvc/app/';
-    foreach (['RequestParamsTrait', 'Logs', 'ActionResult', 'Subscription'] as $name) {
+    foreach (['RequestParamsTrait', 'Logs', 'ActionResult', 'Subscription', 'Config', 'Controller'] as $name) {
         require_once $app . 'models/OPNsense/Mihomo/' . $name . '.php';
     }
     foreach (['Dashboard', 'Settings', 'Subscription', 'Routing', 'Log'] as $name) {
@@ -26,6 +46,34 @@ namespace {
     function expect($condition, $label) {
         if (!$condition) { throw new \RuntimeException($label); }
     }
+    // Use only the shipped example configuration, never appliance credentials.
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        foreach (['version' => ['version' => 'fixture', 'meta' => true],
+            'runningConfig' => ['mode' => 'rule', 'tun' => ['enable' => false]]] as $method => $valid) {
+            foreach (['"unexpected"', '""', '42', '1.5', 'true', 'false', 'null', '', '{invalid'] as $body) {
+                \OPNsense\Mihomo\ControllerHttpFixture::$body = $body;
+                expect(\OPNsense\Mihomo\Controller::$method() === null,
+                    $method . ' treats non-array JSON as unavailable without a TypeError');
+            }
+            foreach ([$valid, []] as $data) {
+                \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode($data);
+                expect(\OPNsense\Mihomo\Controller::$method() === $data, $method . ' preserves decoded arrays');
+            }
+            $path = $method === 'version' ? '/version' : '/configs';
+            expect(\OPNsense\Mihomo\ControllerHttpFixture::$url === 'http://127.0.0.1:9090' . $path,
+                $method . ' uses the expected controller endpoint');
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode($valid);
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+            expect(\OPNsense\Mihomo\Controller::$method() === null, $method . ' rejects unsuccessful HTTP responses');
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = false;
+            expect(\OPNsense\Mihomo\Controller::$method() === null, $method . ' handles transport failure');
+        }
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Controller metadata response types: passed\n";
     class Request {
         public function isPost() { return true; }
         public function getPost($name, $filter = null, $default = null) { return $default; }
