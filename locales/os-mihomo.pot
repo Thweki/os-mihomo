@@ -2,6 +2,14 @@ msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Collapse group"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Expand group"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
 msgid "%s (answering)"
 msgstr ""
@@ -1784,4 +1792,64 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "…"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Saving settings"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Applying settings"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "No file changes needed"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Restart accepted; readiness unconfirmed"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Outcome unconfirmed; check current settings before retrying"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "No settings applies on this page yet."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Recent settings applies"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Latest 10 attempts on this page, newest first. Reloading clears this list. Field names describe submitted edits, not confirmed file changes. Values are not retained. YAML edits and other operators are not included."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Started"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Outcome"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Favorite group"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Members: %s"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Favorite proxy"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Favorites could not be saved in this browser. They will last only for this page visit."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged."
 msgstr ""
