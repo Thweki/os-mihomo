@@ -1413,3 +1413,42 @@ msgstr "显示第 %s–%s 条，共匹配 %s 条（已加载 %s 条规则）。"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt
 msgid "Snapshot loaded. Refresh to read the current runtime rules."
 msgstr "快照已加载。点击刷新以读取当前运行时规则。"
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Saving settings"
+msgstr "正在保存设置"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Applying settings"
+msgstr "正在应用设置"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "No file changes needed"
+msgstr "无需更改文件"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Restart accepted; readiness unconfirmed"
+msgstr "重启请求已接受；服务就绪状态未确认"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Outcome unconfirmed; check current settings before retrying"
+msgstr "结果未确认；重试前请检查当前设置"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "No settings applies on this page yet."
+msgstr "此页面尚无设置应用记录。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Recent settings applies"
+msgstr "最近的设置应用记录"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Latest 10 attempts on this page, newest first. Reloading clears this list. Field names describe submitted edits, not confirmed file changes. Values are not retained. YAML edits and other operators are not included."
+msgstr "显示此页面最近 10 次尝试，最新的在前。重新加载页面会清空列表。字段名称表示提交的编辑，不代表已确认的文件更改。不保留字段值。不包含 YAML 编辑或其他操作员的操作。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Started"
+msgstr "开始时间"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Outcome"
+msgstr "结果"
