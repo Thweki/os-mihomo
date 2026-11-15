@@ -25,6 +25,8 @@ Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, wit
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
+**Proxy selection snapshots:** In Overview → Proxy Groups, enter a name and click **Save snapshot** to capture current manual `Selector` group selections. Choose a saved name and click **Restore snapshot** to preview and confirm changes, or **Delete snapshot** to remove it. Up to 20 snapshots persist in this browser for the current firewall origin; clearing browser storage removes them. Names must be unique and 1–80 characters. Snapshots contain only group/member names, not credentials or configuration files, and exclude automatic groups. Restore reads current groups first and refuses all changes if a saved group/member is missing or its type changed. Unchanged selections and groups added since capture are left alone. Writes run sequentially and stop on failure; earlier changes remain active and the failed selection may be unconfirmed. Restore is not atomic across groups or other operators; check the refreshed groups before retrying. No restore runs automatically.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.

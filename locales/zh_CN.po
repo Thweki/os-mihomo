@@ -1389,3 +1389,91 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Enter a snapshot name of 1 to 80 characters."
+msgstr "请输入 1 至 80 个字符的快照名称。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "That snapshot name already exists. Delete it first or choose another name."
+msgstr "此快照名称已存在。请先删除原快照或使用其他名称。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Up to 20 snapshots can be saved. Delete one first."
+msgstr "最多可保存 20 个快照，请先删除一个。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "No manual Selector groups are available to save."
+msgstr "没有可保存的手动 Selector 代理组。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Could not read current selections. No changes were made."
+msgstr "无法读取当前选择，未作任何更改。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Snapshot storage is unavailable or invalid. No snapshot was saved or deleted."
+msgstr "快照存储不可用或数据无效，未保存或删除快照。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Choose a snapshot"
+msgstr "选择快照"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Reading current selections…"
+msgstr "正在读取当前选择…"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Snapshot saved in this browser."
+msgstr "快照已保存在此浏览器中。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Snapshot deleted."
+msgstr "快照已删除。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore blocked: missing groups, members or changed group types. No changes were made."
+msgstr "无法恢复：代理组或成员缺失，或代理组类型已改变。未作任何更改。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "All saved selections are already active."
+msgstr "所有保存的选择均已生效。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore these selections? This changes live routing. Other groups are left as they are."
+msgstr "恢复这些选择？这会改变实时路由，其他代理组保持不变。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore cancelled. No changes were made."
+msgstr "已取消恢复，未作任何更改。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Selections applied"
+msgstr "已应用的选择"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore stopped; this selection is unconfirmed. Earlier changes remain active. Check current groups before retrying:"
+msgstr "恢复已停止，此项选择的结果未确认。此前的更改仍然生效，请检查当前代理组后再重试："
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Save manual Selector groups as named snapshots (up to 20). Stored only in this browser for this firewall address. Restore checks availability before changing live selections; configuration files and automatic groups are not saved."
+msgstr "将手动 Selector 代理组保存为命名快照（最多 20 个），仅存储在此浏览器中，按防火墙地址区分。恢复前会检查可用性，再更改实时选择；不保存配置文件及自动代理组。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Snapshot name"
+msgstr "快照名称"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Save snapshot"
+msgstr "保存快照"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Saved snapshots"
+msgstr "已保存的快照"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore snapshot"
+msgstr "恢复快照"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Delete snapshot"
+msgstr "删除快照"

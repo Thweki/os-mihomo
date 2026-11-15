@@ -21,6 +21,69 @@
             return {'&amp;': '&', '&lt;': '<', '&gt;': '>'}[entity];
         });
     }
+    // Browser-local, per-origin selections only; never retain controller metadata.
+    class ProxySnapshots {
+        constructor(storage) { this.storage = storage; this.key = 'mihomo.proxySnapshots.v1'; }
+        read() {
+            const raw = this.storage.getItem(this.key);
+            if (raw === null) { return []; }
+            const data = JSON.parse(raw);
+            const text = value => typeof value === 'string' && value.length > 0;
+            if (!data || data.version !== 1 || !Array.isArray(data.snapshots) || data.snapshots.length > 20
+                || data.snapshots.some(item => !item || !text(item.name) || item.name.length > 80
+                    || !Array.isArray(item.selections) || !item.selections.length
+                    || item.selections.some(pair => !pair || !text(pair.group) || !text(pair.member))
+                    || new Set(item.selections.map(pair => pair.group)).size !== item.selections.length)
+                || new Set(data.snapshots.map(item => item.name)).size !== data.snapshots.length) {
+                throw new Error('storage');
+            }
+            return data.snapshots.map(item => ({name: item.name,
+                selections: item.selections.map(pair => ({group: pair.group, member: pair.member}))}));
+        }
+        save(name, groups) {
+            name = name.trim();
+            if (!name || name.length > 80) { throw new Error('name'); }
+            const snapshots = this.read();
+            if (snapshots.some(item => item.name === name)) { throw new Error('duplicate'); }
+            if (snapshots.length >= 20) { throw new Error('limit'); }
+            const selections = snapshotGroups(groups).filter(group => group.type === 'Selector').map(group => {
+                if (!group.now || !group.members.includes(group.now)) { throw new Error('groups'); }
+                return {group: group.name, member: group.now};
+            });
+            if (!selections.length) { throw new Error('empty'); }
+            snapshots.push({name, selections});
+            this.storage.setItem(this.key, JSON.stringify({version: 1, snapshots}));
+            return name;
+        }
+        remove(name) {
+            const snapshots = this.read().filter(item => item.name !== name);
+            this.storage.setItem(this.key, JSON.stringify({version: 1, snapshots}));
+        }
+    }
+    function snapshotGroups(groups) {
+        if (!Array.isArray(groups)) { throw new Error('groups'); }
+        const result = groups.map(group => {
+            if (!group || typeof group.name !== 'string' || !group.name || typeof group.type !== 'string'
+                || typeof group.now !== 'string' || !Array.isArray(group.members)
+                || group.members.some(member => !member || typeof member.name !== 'string' || !member.name)) {
+                throw new Error('groups');
+            }
+            return {name: decodeApiText(group.name), type: group.type, now: decodeApiText(group.now),
+                members: group.members.map(member => decodeApiText(member.name))};
+        });
+        if (new Set(result.map(group => group.name)).size !== result.length) { throw new Error('groups'); }
+        return result;
+    }
+    function planProxySnapshot(snapshot, groups) {
+        const current = new Map(snapshotGroups(groups).map(group => [group.name, group]));
+        const changes = [], missing = [];
+        snapshot.selections.forEach(pair => {
+            const group = current.get(pair.group);
+            if (!group || group.type !== 'Selector' || !group.members.includes(pair.member)) { missing.push(pair.group); }
+            else if (group.now !== pair.member) { changes.push({group: pair.group, member: pair.member, previous: group.now}); }
+        });
+        return {changes, missing};
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -179,5 +242,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxySnapshots, planProxySnapshot};
 }));
