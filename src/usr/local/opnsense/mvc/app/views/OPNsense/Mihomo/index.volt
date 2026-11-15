@@ -306,7 +306,24 @@
         /* ------------------------------------------------------------------ *
          * 活动连接表格
          * ------------------------------------------------------------------ */
-        $("#grid-connections").UIBootgrid({
+        let closingVisible = false, connectionsLoading = true;
+        function visibleConnectionIds() {
+            const ids = new Set();
+            $('#grid-connections tbody .cmd-close-connection').each(function () {
+                const id = $(this).attr('data-id');
+                // Empty IDs mean "close all" to the existing endpoint.
+                if (typeof id === 'string' && id.trim() !== '' && !/[\x00-\x1f\x7f]/.test(id)) { ids.add(id); }
+            });
+            return Array.from(ids);
+        }
+        function updateConnectionActions() {
+            $('#close-visible-connections').prop('disabled', closingVisible || connectionsLoading || !visibleConnectionIds().length);
+            $('#close-all-connections, #grid-connections .cmd-close-connection').prop('disabled', closingVisible);
+        }
+        $("#grid-connections").on('load.rs.jquery.bootgrid', function () {
+            connectionsLoading = true;
+            updateConnectionActions();
+        }).UIBootgrid({
             'search': '/api/mihomo/dashboard/connections',
             'options': {
                 'rowSelect': false,
@@ -338,6 +355,8 @@
                 }
             }
         }).on('loaded.rs.jquery.bootgrid', function () {
+            connectionsLoading = false;
+            updateConnectionActions();
             $('[data-toggle="tooltip"]').tooltip({ 'container': 'body' });
             $('.cmd-close-connection').off('click').on('click', function () {
                 closeConnections($(this).attr('data-id'));
@@ -345,6 +364,7 @@
         });
 
         function closeConnections(id) {
+            if (closingVisible) { return; }
             ajaxCall('/api/mihomo/dashboard/close_connection', {id: id}, function (data, status) {
                 if (status === 'success' && data && data.status === 'ok') {
                     $('#dashboard-action-state').empty();
@@ -353,6 +373,42 @@
             });
         }
         $('#close-all-connections').click(function () { closeConnections(''); });
+        $('#close-visible-connections').click(function () {
+            if (closingVisible || connectionsLoading) { return; }
+            // Capture exactly the rendered page before opening the confirmation.
+            // Later searches, page changes and arrivals cannot expand this batch.
+            const ids = visibleConnectionIds();
+            if (!ids.length) { return; }
+            closingVisible = true;
+            updateConnectionActions();
+            BootstrapDialog.confirm({
+                type: BootstrapDialog.TYPE_WARNING,
+                title: {{ lang._('Close visible connections?') | json_encode }},
+                message: {{ lang._('Close %s connections shown on this page? Hidden rows, other pages and new connections are excluded. Applications may reconnect.') | json_encode }}.replace('%s', ids.length),
+                callback: function (confirmed) {
+                    if (!confirmed) {
+                        closingVisible = false;
+                        updateConnectionActions();
+                        return;
+                    }
+                    const progress = function (state) {
+                        $('#close-visible-state').text({{ lang._('Close requests completed: %s; failed or unconfirmed: %s.') | json_encode }}
+                            .replace('%s', state.completed + '/' + ids.length).replace('%s', state.failed));
+                    };
+                    progress({completed: 0, failed: 0});
+                    MihomoUI.runLimited(ids, 3, function (id, done) {
+                        ajaxCall('/api/mihomo/dashboard/close_connection', {id: id}, function (data, status) {
+                            done(status === 'success' && data && data.status === 'ok');
+                        });
+                    }, progress, function () {
+                        closingVisible = false;
+                        $('#grid-connections').bootgrid('reload');
+                        updateConnectionActions();
+                        overviewPoller.refresh();
+                    });
+                }
+            });
+        });
 
         /* ------------------------------------------------------------------ *
          * 流量图 + 轮询
@@ -525,12 +581,16 @@
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-exchange text-muted"></i> <b>{{ lang._('Active Connections') }}</b>
                 <span class="pull-right">
+                    <button type="button" id="close-visible-connections" class="btn btn-xs btn-default" disabled>
+                        <i class="fa fa-times fa-fw"></i> {{ lang._('Close visible') }}
+                    </button>
                     <button type="button" id="close-all-connections" class="btn btn-xs btn-default">
                         <i class="fa fa-times-circle fa-fw"></i> {{ lang._('Close all') }}
                     </button>
                 </span>
             </div>
             <div style="padding: 12px;">
+                <div id="close-visible-state" class="text-muted" role="status" aria-live="polite"></div>
                 <div class="table-responsive">
                 <table id="grid-connections" class="table table-condensed table-hover table-striped table-responsive" data-editDialog="">
                     <thead>
