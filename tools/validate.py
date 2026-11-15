@@ -95,6 +95,7 @@ def main():
         subprocess.run(['php', str(ROOT / 'tests/test_runtime.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_patch.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_writes.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_network.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_api.php')], check=True)
     for path in (ROOT / 'packaging/freebsd').glob('+*INSTALL'):
         text = path.read_text(encoding='utf-8')

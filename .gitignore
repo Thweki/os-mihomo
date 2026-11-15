@@ -43,6 +43,10 @@ images/
 !/tests/test_ui.js
 !/tests/test_runtime.php
 !/tests/test_writes.php
+!/tests/test_network.php
+!/tests/fixtures/
+/tests/fixtures/*
+!/tests/fixtures/network/
 !/tests/test_api.php
 !/tests/test_build.py
 !/tests/test_subscription.py

@@ -358,6 +358,35 @@ now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
 
+// Carry the reviewed network revision through the two distinct apply requests.
+const routingView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt'), 'utf8');
+const collectNetworkPlan = routingView.match(/        function collectPlan\(done\) \{[\s\S]*?\n        \}/)[0];
+const networkApplyHandler = routingView.match(/        \$\('#applyPolicyAct'\)\.click\(function \(\) \{[\s\S]*?\n        \}\);/)[0]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+const networkRequests = [], networkDialogs = [];
+let applyNetworkClick;
+const networkContext = {
+    $: selector => ({click: fn => { applyNetworkClick = fn; }, css() { return this; }, text() { return this; }}),
+    ajaxGet: (url, data, done) => networkRequests.push({url, data, done}),
+    ajaxCall: (url, data, done) => networkRequests.push({url, data, done}),
+    BootstrapDialog: {show: data => networkDialogs.push(data)},
+    planText: () => '', dialog: () => {}, decode: text => text, loadState: () => {}
+};
+vm.runInNewContext('let lastPlan;\n' + collectNetworkPlan + '\n' + networkApplyHandler, networkContext);
+applyNetworkClick();
+networkRequests[0].done({version: 'yaml-preview'}, 'success');
+networkRequests[1].done({status: 'ok', version: 'reviewed-network'}, 'success');
+networkDialogs[0].buttons[1].action({close: () => {}});
+assert.equal(networkRequests[2].data.version, 'yaml-preview');
+networkRequests[2].done({status: 'ok'});
+assert.equal(networkRequests[3].url, '/api/mihomo/routing/netapply');
+assert.equal(networkRequests[3].data.version, 'reviewed-network', 'Network apply uses the reviewed revision');
+applyNetworkClick();
+networkRequests[4].done({version: 'new-yaml-preview'}, 'success');
+networkRequests[5].done({status: 'failed', message: 'Configuration changed'}, 'success');
+assert.equal(networkDialogs.length, 1, 'A conflicting network plan cannot offer apply');
+console.log('Network plan/apply revision handoff and conflicting preview: all checks passed');
 // Exercise the actual mode hint, overview renderer and mode-change handler together.
 const translateModeScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
     (_, label) => JSON.stringify(label));
