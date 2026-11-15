@@ -288,11 +288,19 @@
         /* ------------------------------------------------------------------ *
          * 活动连接表格
          * ------------------------------------------------------------------ */
-        $("#grid-connections").UIBootgrid({
+        let connectionsReady = false;
+        $("#grid-connections").on('load.rs.jquery.bootgrid', function () {
+            connectionsReady = false;
+            $('#connection-visible-count').text('—');
+        }).UIBootgrid({
             'search': '/api/mihomo/dashboard/connections',
             'options': {
                 'rowSelect': false,
                 'multiSelect': false,
+                'responseHandler': function (response) {
+                    connectionsReady = !!(response && response.ready === true && Array.isArray(response.rows));
+                    return response;
+                },
                 'formatters': {
                     'bytesformatter': function (column, row) {
                         return fmtBytes(row[column.id]);
@@ -320,6 +328,9 @@
                 }
             }
         }).on('loaded.rs.jquery.bootgrid', function () {
+            $('#connection-visible-count').text(connectionsReady
+                ? fmtCount($('#grid-connections').bootgrid('getCurrentRows').length)
+                : {{ lang._('Unavailable') | json_encode }});
             $('[data-toggle="tooltip"]').tooltip({ 'container': 'body' });
             $('.cmd-close-connection').off('click').on('click', function () {
                 closeConnections($(this).attr('data-id'));
@@ -505,6 +516,7 @@
         <div class="content-box">
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-exchange text-muted"></i> <b>{{ lang._('Active Connections') }}</b>
+                <span class="text-muted" role="status">{{ lang._('Visible connections') }}: <span id="connection-visible-count">—</span></span>
                 <span class="pull-right">
                     <button type="button" id="close-all-connections" class="btn btn-xs btn-default">
                         <i class="fa fa-times-circle fa-fw"></i> {{ lang._('Close all') }}

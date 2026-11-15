@@ -625,3 +625,65 @@ assert.equal(groupList(foldNames[1]).getAttribute('hidden'), '', 'Groups expand 
 // A new page runs the actual initializer again; no browser persistence is used.
 assert.equal(vm.runInNewContext(collapseStateScript + '\ncollapsedGroups.size;'), 0);
 console.log('Group collapse: defaults, exact names, accessibility, focus, independent toggles, polling/recovery, favorites and full-group tests passed');
+
+// Run the real connections grid setup, not a copy of the count calculation.
+// No AJAX/storage APIs are supplied: counting must reuse the grid's existing data.
+const connectionScript = indexView.match(/ \* 活动连接表格[\s\S]*?\*\/([\s\S]*?)(?=        function closeConnections)/)[1]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+const countFunction = indexView.match(/        function fmtCount\(value\) \{[\s\S]*?\n        \}/)[0];
+const connectionEvents = {};
+let connectionOptions, currentConnectionRows = [], visibleConnectionCount;
+const connectionGrid = {
+    on(event, handler) { connectionEvents[event] = handler; return this; },
+    UIBootgrid(config) {
+        connectionOptions = config.options;
+        assert.equal(typeof connectionEvents['load.rs.jquery.bootgrid'], 'function',
+            'Loading handler must be registered before the first grid request');
+        connectionEvents['load.rs.jquery.bootgrid']();
+        return this;
+    },
+    bootgrid(action) { assert.equal(action, 'getCurrentRows'); return currentConnectionRows; }
+};
+vm.runInNewContext(countFunction + connectionScript, {
+    $: selector => {
+        if (selector === '#grid-connections') { return connectionGrid; }
+        if (selector === '#connection-visible-count') {
+            return {text: value => { visibleConnectionCount = value; }};
+        }
+        if (selector === '[data-toggle="tooltip"]') { return {tooltip: () => {}}; }
+        assert.equal(selector, '.cmd-close-connection');
+        return {off() { return this; }, on() { return this; }};
+    }
+});
+assert.equal(visibleConnectionCount, '—', 'Initial loading must not claim zero connections');
+assert.match(indexView, /role="status">\{\{ lang\._\('Visible connections'\) \}\}: <span id="connection-visible-count">—<\/span>/);
+function loadCountPage(rows, response = {ready: true, rows, total: 9000, rowCount: 50}) {
+    connectionEvents['load.rs.jquery.bootgrid']();
+    assert.equal(visibleConnectionCount, '—', 'Refresh invalidates the old count immediately');
+    const before = JSON.stringify(response);
+    assert.equal(connectionOptions.responseHandler(response), response, 'Preserve the framework response');
+    assert.equal(JSON.stringify(response), before, 'Counting does not mutate the response');
+    currentConnectionRows = rows;
+    connectionEvents['loaded.rs.jquery.bootgrid']();
+}
+loadCountPage([{id: 'one'}, {id: 'two'}]);
+assert.equal(visibleConnectionCount, '2', 'Count this page, not total matches or the page-size setting');
+loadCountPage([{id: 'last'}]);
+assert.equal(visibleConnectionCount, '1', 'A shorter last page/search result replaces the old count');
+loadCountPage([]);
+assert.equal(visibleConnectionCount, '0', 'No matches is a valid zero, not the empty-table placeholder row');
+loadCountPage(Array.from({length: 1234}, (_, id) => ({id})));
+assert.equal(visibleConnectionCount, (1234).toLocaleString(), 'All-rows mode uses localized number formatting');
+for (const response of [{ready: false, rows: []}, {ready: true}, {ready: true, rows: null}, {}, null]) {
+    loadCountPage([], response);
+    assert.equal(visibleConnectionCount, 'Unavailable', 'Unavailable/malformed responses must not claim zero');
+}
+loadCountPage([{id: 'recovered'}]);
+assert.equal(visibleConnectionCount, '1', 'A successful retry restores the count');
+connectionEvents['load.rs.jquery.bootgrid'](); // Transport failure: no responseHandler callback.
+assert.equal(visibleConnectionCount, '—', 'Failed requests cannot leave the previous count visible');
+connectionEvents['loaded.rs.jquery.bootgrid'](); // Some grid versions also emit loaded on failure.
+assert.equal(visibleConnectionCount, 'Unavailable', 'Do not count retained rows after a failed request');
+loadCountPage([]);
+assert.equal(visibleConnectionCount, '0', 'Recovery can also be an empty table');
+console.log('Visible connection count: current page, search/empty results, refresh, locale formatting, failure and recovery passed');

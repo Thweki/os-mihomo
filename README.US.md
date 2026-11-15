@@ -23,6 +23,8 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+In **Active Connections**, **Visible connections** counts the rows on the current table page after each search, page change or refresh. Empty results show zero; loading shows `—` and an unavailable controller shows **Unavailable**. This count describes the table's latest loaded snapshot, excludes other pages, and is separate from the live total above. It adds no requests or settings.
+
 Each **Proxy Groups** card shows **Members: N**, the number of direct entries reported by the controller, including nested groups and DIRECT/REJECT choices. Empty groups show zero. Counts refresh with the group list, making changes after subscription updates easy to spot; they do not indicate how many proxies are healthy.
 
 Use the chevron beside a group's member count to **Collapse group** or **Expand group** (also available with Enter or Space). Collapsing folds away the member list while keeping the group name, type, count, favorite and group latency-test controls visible. Choices are remembered by exact group name for this page visit, including after polling, reordering or controller recovery; reloading starts with all groups expanded. Collapsing does not change routing or selections, and group latency tests still test every member.
