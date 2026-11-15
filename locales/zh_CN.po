@@ -1419,3 +1419,24 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+msgid "Edit local note"
+msgstr "编辑本地备注"
+
+msgid "Local proxy note"
+msgstr "代理本地备注"
+
+msgid "Use at most 160 characters for a local note."
+msgstr "本地备注不能超过 160 个字符。"
+
+msgid "Local note saved."
+msgstr "本地备注已保存。"
+
+msgid "Note changes could not be saved in this browser. They will last only for this page visit."
+msgstr "无法在此浏览器中保存备注更改，仅在本次页面访问中有效。"
+
+msgid "Up to 160 characters. Save an empty note to remove it. Notes stay in this browser and are shared by exact proxy name across groups."
+msgstr "最多 160 个字符。保存空备注可删除备注。备注保存在此浏览器中，完整代理名称相同的节点在各分组中共享备注。"
+
+msgid "Save note"
+msgstr "保存备注"

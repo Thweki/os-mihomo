@@ -173,6 +173,7 @@
          * 代理分组
          * ------------------------------------------------------------------ */
         const favorites = new MihomoUI.ProxyFavorites();
+        const proxyNotes = new MihomoUI.ProxyNotes();
         const collapsedGroups = new Set(); // Page visit only; reload starts expanded.
         let latestGroups = null;
         let renderedGroups = null;
@@ -203,13 +204,48 @@
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }},
                 favoriteGroup: {{ lang._('Favorite group') | json_encode }},
-                favoriteProxy: {{ lang._('Favorite proxy') | json_encode }}
-            }, delayText, delayClass, favorites, collapsedGroups);
+                favoriteProxy: {{ lang._('Favorite proxy') | json_encode }},
+                editNote: {{ lang._('Edit local note') | json_encode }}
+            }, delayText, delayClass, favorites, collapsedGroups, proxyNotes);
             if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
 
         let testing = false;
+        // Keep the editor outside the polled group DOM so drafts survive refreshes.
+        let noteName = null, noteFocusKey = null;
+        function closeNoteEditor() {
+            $('#proxy-note-editor').prop('hidden', true);
+            $('#proxy-note-text').val('');
+            noteName = null;
+            const box = $('#proxy-groups')[0];
+            const button = Array.from(box.querySelectorAll('button[data-focus-key]'))
+                .find(node => node.getAttribute('data-focus-key') === noteFocusKey);
+            (button || box).focus({preventScroll: true});
+        }
+        $('#proxy-groups').on('click', '.cmd-proxy-note', function () {
+            noteName = $(this).attr('data-name');
+            noteFocusKey = $(this).attr('data-focus-key');
+            $('#proxy-note-name').text(noteName);
+            $('#proxy-note-editor').prop('hidden', false);
+            $('#proxy-note-text').val(proxyNotes.get(noteName))[0].focus();
+        });
+        $('#proxy-note-editor').on('submit', function (event) {
+            event.preventDefault();
+            if (noteName === null) { return; }
+            const result = proxyNotes.set(noteName, $('#proxy-note-text').val());
+            if (result === 'invalid') {
+                $('#proxy-note-state').text({{ lang._('Use at most 160 characters for a local note.') | json_encode }});
+                return;
+            }
+            $('#proxy-note-state').text(result === 'saved'
+                ? {{ lang._('Local note saved.') | json_encode }}
+                : {{ lang._('Note changes could not be saved in this browser. They will last only for this page visit.') | json_encode }});
+            renderedGroups = null;
+            if (latestGroups) { renderGroups(latestGroups); }
+            closeNoteEditor();
+        });
+        $('#proxy-note-cancel').on('click', closeNoteEditor);
         $('#proxy-groups').on('click', '.cmd-collapse-group', function () {
             const name = $(this).attr('data-group');
             if (collapsedGroups.has(name)) { collapsedGroups.delete(name); }
@@ -512,7 +548,15 @@
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
             <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
-            <div style="padding: 12px;" id="proxy-groups">
+            <form id="proxy-note-editor" hidden style="padding:0 12px;">
+                <label for="proxy-note-text">{{ lang._('Local proxy note') }}: <span id="proxy-note-name" style="overflow-wrap:anywhere;"></span></label>
+                <input id="proxy-note-text" type="text" maxlength="160" class="form-control" aria-describedby="proxy-note-help" autocomplete="off">
+                <p id="proxy-note-help" class="text-muted">{{ lang._('Up to 160 characters. Save an empty note to remove it. Notes stay in this browser and are shared by exact proxy name across groups.') }}</p>
+                <button type="submit" class="btn btn-primary">{{ lang._('Save note') }}</button>
+                <button type="button" id="proxy-note-cancel" class="btn btn-default">{{ lang._('Cancel') }}</button>
+            </form>
+            <p id="proxy-note-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div style="padding: 12px;" id="proxy-groups" tabindex="-1">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>
             </div>
         </div>
