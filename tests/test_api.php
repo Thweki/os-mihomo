@@ -100,6 +100,52 @@ namespace {
         }
     }
     expect(\OPNsense\Core\Backend::$calls === 0, 'Read-only calls never reach configd');
+    foreach (['Config', 'Safety'] as $name) {
+        require_once $app . 'models/OPNsense/Mihomo/' . $name . '.php';
+    }
+    $config = tempnam(sys_get_temp_dir(), 'mihomo-controller-safety-');
+    \OPNsense\Mihomo\Config::setFileOverride($config);
+    $bindings = [
+        ':9090' => false,
+        '0.0.0.0:9090' => false,
+        '*:9090' => false,
+        '[::]:9090' => false,
+        '[0:0:0:0:0:0:0:0]:9090' => false,
+        '192.0.2.1:9090' => false,
+        '[2001:db8::1]:9090' => false,
+        'controller.example.invalid:9090' => false,
+        '127.0.0.1:9090' => true,
+        '127.0.0.2:9090' => true,
+        'localhost:9090' => true,
+        '[::1]:9090' => true,
+        '[0:0:0:0:0:0:0:1]:9090' => true,
+        '127.0.0.1' => false,
+        '::1:9090' => false,
+        'localhost:invalid' => false,
+        '' => true,
+    ];
+    try {
+        foreach ($bindings as $bind => $loopback) {
+            foreach (['', 'fixture-controller-token'] as $secret) {
+                file_put_contents($config, "external-controller: \"{$bind}\"\nsecret: \"{$secret}\"\ntun:\n  enable: false\n");
+                $items = array_column(\OPNsense\Mihomo\Safety::report(false)['items'], 'level', 'title');
+                expect(isset($items['External controller is reachable from the network']) === !$loopback,
+                    'Controller exposure warning: ' . $bind);
+                expect(isset($items['External controller is exposed without a secret']) === (!$loopback && $secret === ''),
+                    'Unauthenticated controller danger: ' . $bind);
+                if (!$loopback && $secret === '') {
+                    expect($items['External controller is exposed without a secret'] === 'danger',
+                        'Exposed controller must be dangerous: ' . $bind);
+                }
+                expect(isset($items['External controller has no secret (loopback only)']) === ($loopback && $secret === ''),
+                    'Loopback reassurance requires a loopback binding: ' . $bind);
+            }
+        }
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        unlink($config);
+    }
+    echo "Controller binding safety reports: passed\n";
     $settings = new \OPNsense\Mihomo\Api\SettingsController();
     foreach (['', 'FATAL: invalid config', 'Configuration is valid.', '{"status":"ok"}', '{"state":"failed","status":"ok","changed":"no","code":[],"message":"invalid"}'] as $output) {
         \OPNsense\Core\Backend::$output = $output;
