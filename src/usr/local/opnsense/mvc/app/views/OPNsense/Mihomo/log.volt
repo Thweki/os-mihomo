@@ -15,14 +15,24 @@
     $(document).ready(function () {
         let allLines = [], pending = false, queued = false, queuedScroll = false;
         let lastContent = null;
+        function withoutTimestamp(line) {
+            // Only known leading core/subscription timestamps; never strip dates in messages.
+            return line.replace(/^(?:time="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})"|\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\])[ \t]+/, '');
+        }
         function renderLog() {
             const query = $('#log-filter').val().toLocaleLowerCase();
             const lines = allLines.filter(line => !query || line.toLocaleLowerCase().includes(query));
-            $('#log-viewer').val(lines.join('\n'));
+            const visible = $('#log-hide-timestamps').prop('checked') ? lines.map(withoutTimestamp) : lines;
+            $('#log-viewer').val(visible.join('\n'));
             $('#log-match-state').text(!allLines.length ? {{ lang._('No log entries yet.') | json_encode }}
                 : !lines.length ? {{ lang._('No matching log entries.') | json_encode }} : String(lines.length) + ' / ' + String(allLines.length));
         }
         $('#log-filter').on('input', renderLog);
+        $('#log-hide-timestamps').change(function () {
+            const top = $('#log-viewer').scrollTop();
+            renderLog();
+            $('#log-viewer').scrollTop(top);
+        });
         function refreshLogs(scroll) {
             if (pending) { queued = true; queuedScroll = queuedScroll || scroll; return; }
             pending = true;
@@ -127,6 +137,7 @@
                     <label for="log-filter" style="flex:0 0 auto; white-space:nowrap;">{{ lang._('Filter log') }}</label>
                     <input id="log-filter" type="search" class="form-control" style="flex:1 1 200px; width:auto; max-width:100%;" placeholder="{{ lang._('Filter the loaded lines') }}">
                     <label style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-auto-refresh" type="checkbox" checked> {{ lang._('Auto refresh') }}</label>
+                    <label style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-hide-timestamps" type="checkbox"> {{ lang._('Hide timestamps') }}</label>
                     <span id="log-match-state" class="text-muted" role="status"></span>
                 </div>
                 <p id="log-state" class="text-muted" role="status"></p>

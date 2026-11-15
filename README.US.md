@@ -19,7 +19,9 @@ Open **VPN → Proxy Suite** after installation.
 | Settings | Native forms, write locks, change previews and discard, reapply, advanced options, YAML editing and validation, configuration comparison and DNS status |
 | Policy Routing | Current forwarding and rule details; interface policies, change previews, network bindings, configuration history and restore |
 | Subscription | Submit updates; view task state, last success, exit code and execution logs |
-| Log File | Filter loaded lines, pause refresh, switch sources and line counts, download or clear logs |
+| Log File | Filter loaded lines, hide timestamps, pause refresh, switch sources and line counts, download or clear logs |
+
+In **Log File**, select **Hide timestamps** to make messages easier to scan; clear it to restore timestamps instantly, even with auto refresh paused. This hides recognized leading core (`time="…"`) and subscription (`[YYYY-MM-DD HH:MM:SS]`) timestamps only. Unknown formats and dates inside messages stay visible. Filtering still searches the full original lines, and downloads retain timestamps. The choice lasts for this page visit across refreshes and source changes; reloading shows timestamps again.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 

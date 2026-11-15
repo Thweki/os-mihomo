@@ -29,7 +29,7 @@ console.log('UI history, formatting and API text decoding: all checks passed');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const controls = new Map(), requests = [], fakeDocument = {hidden: false};
-let logTimer, logDecodes = 0;
+let logTimer, logDecodes = 0, downloadedLog;
 function control(selector) {
     if (!controls.has(selector)) {
         const item = {value: '', checked: false, label: '', handlers: {}, top: 100,
@@ -54,6 +54,8 @@ vm.runInNewContext(logScript, {
     document: fakeDocument,
     $: selector => selector === fakeDocument ? {ready: fn => fn()} : control(selector),
     ajaxGet: (url, params, done) => requests.push({params, done}),
+    Blob: class { constructor(parts) { downloadedLog = parts.join(''); } },
+    URL: {createObjectURL: () => 'blob:test', revokeObjectURL: () => {}},
     setInterval: fn => { logTimer = fn; }, MihomoUI: {decodeApiText: value => { logDecodes++; return decode(value); }}
 });
 assert.equal(requests.length, 1);
@@ -135,6 +137,71 @@ const emptyWork = logWork();
 logTimer(); respondLog('');
 assert.deepEqual(logWork(), emptyWork, 'Empty logs also skip unchanged poll work');
 console.log('Unchanged log polling, recovery, filtering, queued scrolling and cache invalidation: all checks passed');
+
+// Timestamp visibility runs through the real view, retaining original lines for
+// search/download and leaving unrecognized prefixes and message dates intact.
+const hideTime = control('#log-hide-timestamps');
+assert.match(logView, /<label[^>]*><input id="log-hide-timestamps" type="checkbox">/,
+    'Timestamp hiding is labelled and off on each page visit');
+const timestampLines = [
+    'time="2026-11-15T12:34:56.123456789+08:00" level=info msg="connected &amp; ready"',
+    'time="2026-11-15T04:34:56Z" level=warning msg="retry at 2026-11-16"',
+    'time="2026-11-15T04:34:56.001-05:00" level=debug msg="trace"',
+    '[2026-11-15 12:34:56] Subscription task finished (exit=0).',
+    'plain message with time="2026-11-15T04:34:56Z" inside',
+    '    continuation [2026-11-15 12:34:56]',
+    'time="unknown" level=info msg="keep unknown prefix"',
+    '[INFO] Keep severity',
+    '[2026-11-15 12:34:56] [2026-11-16 12:34:56] Message date',
+    ''
+];
+const timestampContent = timestampLines.join('\n') + '\n';
+logTimer(); respondLog(timestampContent);
+const originalLog = viewer.value;
+assert.equal(originalLog, decode(timestampLines.join('\n')));
+control('#log-auto-refresh').checked = false;
+viewer.top = 17;
+const timestampRequests = requests.length, timestampDecodes = logDecodes;
+hideTime.checked = true; hideTime.handlers.change();
+assert.equal(viewer.value, [
+    'level=info msg="connected & ready"',
+    'level=warning msg="retry at 2026-11-16"',
+    'level=debug msg="trace"',
+    'Subscription task finished (exit=0).',
+    ...timestampLines.slice(4, 8),
+    '[2026-11-16 12:34:56] Message date', ''
+].join('\n'));
+assert.equal(viewer.top, 17, 'Toggling preserves the scroll offset');
+assert.equal(requests.length, timestampRequests, 'Toggling while paused needs no fetch');
+assert.equal(logDecodes, timestampDecodes, 'Toggling uses the decoded cache');
+assert.equal(control('#log-match-state').label, '10 / 10');
+control('#log-filter').value = '+08:00'; control('#log-filter').handlers.input();
+assert.equal(viewer.value, 'level=info msg="connected & ready"', 'Hidden timestamps remain searchable');
+assert.equal(control('#log-match-state').label, '1 / 10');
+control('#log-filter').value = 'no match'; control('#log-filter').handlers.input();
+assert.equal(viewer.value, '');
+control('#log-filter').value = ''; control('#log-filter').handlers.input();
+control('#refreshAct').handlers.click(); respondLog(timestampContent);
+assert(!viewer.value.startsWith('time='), 'Unchanged refresh retains timestamp hiding');
+fakeDocument.createElement = () => ({click() {}});
+control('#downloadAct').handlers.click();
+assert.equal(requests.at(-1).params.lines, 5000);
+respondLog(timestampContent);
+assert.equal(downloadedLog, decode(timestampContent), 'Downloads retain full timestamps and trailing newlines');
+hideTime.checked = false; hideTime.handlers.change();
+assert.equal(viewer.value, originalLog, 'Showing timestamps restores exact decoded content');
+hideTime.checked = true; hideTime.handlers.change();
+control('#log-source').value = 'subscription'; control('#log-source').handlers.change();
+assert.equal(viewer.value, '');
+respondLog('[2026-11-15 13:00:00] New subscription task\n');
+assert.equal(viewer.value, 'New subscription task', 'Source changes retain the choice for new content');
+control('#log-lines').value = '300'; control('#log-lines').handlers.change();
+respondLog('[2026-11-15 13:01:00] Finished\n');
+assert.equal(viewer.value, 'Finished', 'Line count changes retain timestamp hiding');
+control('#refreshAct').handlers.click(); requests.at(-1).done(null, 'error');
+hideTime.checked = false; hideTime.handlers.change();
+assert.equal(viewer.value, '[2026-11-15 13:01:00] Finished', 'Failed reads retain restorable timestamps');
+console.log('Log timestamp toggle: defaults, formats, paused rendering, search, downloads and refreshes passed');
 
 // The same renderer used by the dashboard runs against a strict DOM fixture.
 // HTML parsing is deliberately unavailable: dynamic names must be text/attributes.

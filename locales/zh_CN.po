@@ -381,6 +381,9 @@ msgstr "文件（config.yaml）"
 msgid "Fill recommended values"
 msgstr "填入推荐值"
 
+msgid "Hide timestamps"
+msgstr "隐藏时间戳"
+
 msgid "Filter log"
 msgstr "筛选日志"
 

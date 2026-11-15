@@ -487,6 +487,10 @@ msgid "Fill recommended values"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Hide timestamps"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
 msgid "Filter log"
 msgstr ""
 
