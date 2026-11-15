@@ -3,6 +3,12 @@ msgstr ""
 "Language: zh_CN\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Collapse group"
+msgstr "折叠分组"
+
+msgid "Expand group"
+msgstr "展开分组"
+
 msgid "Members: %s"
 msgstr "成员数：%s"
 

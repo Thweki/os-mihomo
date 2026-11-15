@@ -365,7 +365,7 @@ const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
-let favoriteNotice = '', testsDisabled = false, favoriteHandler;
+let favoriteNotice = '', testsDisabled = false, favoriteHandler, collapseHandler, testGroupHandler;
 const dashboardStorage = new Map();
 const dashboardFavorites = new UI.ProxyFavorites(() => ({
     getItem: key => dashboardStorage.get(key) || null,
@@ -373,14 +373,27 @@ const dashboardFavorites = new UI.ProxyFavorites(() => ({
 }));
 const groupContext = vm.createContext({
     $: selector => {
-        if (selector instanceof DomNode) { return {attr: key => selector.getAttribute(key)}; }
+        if (selector instanceof DomNode) {
+            return {attr: key => selector.getAttribute(key), closest: target => {
+                assert.equal(target, '.content-box');
+                const card = pollingBox.children[0].children.map(column => column.children[0]).find(node => node.contains(selector));
+                return {find: target => {
+                    assert.equal(target, '.cmd-test');
+                    return {each: fn => card.querySelectorAll('button[data-name]')
+                        .filter(node => node.attrs.class.includes(' cmd-test')).forEach(node => fn.call(node))};
+                }};
+            }};
+        }
         if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
         if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
             return {prop: (key, value) => { assert.equal(key, 'disabled'); testsDisabled = value; }};
         }
         assert.equal(selector, '#proxy-groups');
         return {0: pollingBox, on: (event, target, handler) => {
-            assert.equal(event, 'click'); assert.equal(target, '.cmd-favorite'); favoriteHandler = handler;
+            assert.equal(event, 'click');
+            if (target === '.cmd-collapse-group') { collapseHandler = handler; }
+            else if (target === '.cmd-test-group') { testGroupHandler = handler; }
+            else { assert.equal(target, '.cmd-favorite'); favoriteHandler = handler; }
         }, html: text => {
             const placeholder = pollingDoc.createElement('placeholder');
             placeholder.textContent = text;
@@ -390,7 +403,8 @@ const groupContext = vm.createContext({
     MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false,
     delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
-vm.runInContext(renderGroupsScript, groupContext);
+const collapseStateScript = indexView.match(/        const collapsedGroups = new Set\(\);[^\n]*/)[0];
+vm.runInContext(collapseStateScript + '\n' + renderGroupsScript, groupContext);
 const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
     {name: 'First', type: 'test', selected: true, delay: 20},
     {name: 'Second', type: 'test', selected: false, delay: 30}
@@ -539,6 +553,78 @@ assert(favoriteNotice.includes('only for this page visit'));
 assert.equal(displayedGroups()[0], specialName);
 assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
 console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
+
+// Exercise the real collapse handler and renderer. No API or storage is available
+// to this handler: folding cards must be a purely local display operation.
+const collapseClickScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-collapse-group',[\s\S]*?\n        \}\);/)[0];
+vm.runInContext(collapseClickScript, groupContext);
+const foldNames = [...names, '__proto__', 'literal &gt;', 'Empty'];
+const foldResponse = {ready: true, groups: foldNames.map(name => ({name: encode(name), type: 'Selector',
+    members: name === 'Empty' ? [] : [{name: 'Selected', selected: true, delay: 20}, {name: 'Other', delay: 40}]}))};
+const originalFoldResponse = JSON.stringify(foldResponse);
+const collapseButtons = () => pollingBox.querySelectorAll('button[aria-expanded]');
+const groupList = name => pollingBox.querySelectorAll('ul[data-group]').find(node => node.attrs['data-group'] === name);
+function fold(name) {
+    const button = collapseButtons().find(node => node.attrs['data-group'] === name);
+    assert.equal(button.attrs.type, 'button', 'Collapse supports native Enter/Space activation');
+    pollingDoc.activeElement = button;
+    collapseHandler.call(button);
+    assert(pollingBox.contains(pollingDoc.activeElement));
+    assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], button.attrs['data-focus-key']);
+}
+pollGroups(foldResponse);
+assert(collapseButtons().every(button => button.attrs['aria-expanded'] === 'true'), 'All groups start expanded');
+for (const name of foldNames) {
+    fold(name);
+    const list = groupList(name), button = pollingDoc.activeElement;
+    assert.equal(list.getAttribute('hidden'), '', 'Collapsed member controls are hidden from display and keyboard navigation');
+    assert.equal(button.attrs['aria-expanded'], 'false');
+    assert.equal(button.attrs['aria-controls'], list.attrs.id);
+    assert.equal(button.attrs['aria-label'], 'Expand group: ' + name);
+    const card = pollingBox.children[0].children.map(column => column.children[0]).find(node => node.contains(list));
+    assert(card.attrs.style.includes('height:auto;'), 'Collapsed cards release their fixed height');
+    assert.equal(card.querySelectorAll('span[data-member-count]')[0].textContent, name === 'Empty' ? 'Members: 0' : 'Members: 2');
+}
+const collapsedRow = pollingBox.children[0];
+pollGroups(foldResponse);
+assert.equal(pollingBox.children[0], collapsedRow, 'Unchanged polls retain collapsed DOM');
+assert.equal(JSON.stringify(foldResponse), originalFoldResponse);
+foldResponse.groups[0].members[0].delay = 90;
+foldResponse.groups[0].members[0].selected = false;
+foldResponse.groups[0].members[1].selected = true;
+pollGroups(foldResponse);
+star('groups', foldNames[0]);
+assert.equal(displayedGroups()[0], foldNames[0]);
+assert(collapseButtons().every(button => button.attrs['aria-expanded'] === 'false'), 'Changed polls and favorites preserve folds by exact name');
+for (const placeholder of [{ready: false}, {ready: true, groups: []}, {ready: true, groups: [{name: 'New group'}]}]) {
+    pollGroups(placeholder);
+    if (placeholder.groups && placeholder.groups.length) {
+        assert.equal(collapseButtons()[0].attrs['aria-expanded'], 'true', 'New groups start expanded');
+    }
+    pollGroups(foldResponse);
+    assert(collapseButtons().every(button => button.attrs['aria-expanded'] === 'false'), 'Missing groups keep their choice on recovery');
+}
+// The existing group-test click path must include hidden members, not just visible rows.
+let foldedTestNames;
+groupContext.testNodes = values => { foldedTestNames = Array.from(values); };
+const testGroupScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-test-group',[\s\S]*?\n        \}\);/)[0];
+vm.runInContext(testGroupScript, groupContext);
+const groupTest = pollingBox.querySelectorAll('button[data-group]').find(button =>
+    button.attrs.class.includes('cmd-test-group') && button.attrs['data-group'] === foldNames[0]);
+testGroupHandler.call(groupTest);
+assert.deepEqual(foldedTestNames, ['Selected', 'Other']);
+groupContext.testing = true;
+fold(foldNames[0]);
+assert.equal(testsDisabled, true, 'Expanding during tests keeps probe controls disabled');
+groupContext.testing = false;
+assert.equal(groupList(foldNames[0]).getAttribute('hidden'), null);
+assert.equal(pollingDoc.activeElement.attrs['aria-label'], 'Collapse group: ' + foldNames[0]);
+assert.equal(groupList(foldNames[0]).querySelectorAll('li[data-member]')[1].attrs.class, 'list-group-item active',
+    'Expanding shows the latest controller selection');
+assert.equal(groupList(foldNames[1]).getAttribute('hidden'), '', 'Groups expand independently');
+// A new page runs the actual initializer again; no browser persistence is used.
+assert.equal(vm.runInNewContext(collapseStateScript + '\ncollapsedGroups.size;'), 0);
+console.log('Group collapse: defaults, exact names, accessibility, focus, independent toggles, polling/recovery, favorites and full-group tests passed');
 
 // Run the real connection controls against rendered-page and delayed-request fixtures.
 // Rows outside the current page/search never enter the DOM selection.
