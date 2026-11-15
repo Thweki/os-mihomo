@@ -22,8 +22,9 @@ namespace OPNsense\Mihomo {
         public static string|false $body = '';
         public static int $status = 200;
         public static string $url = '';
+        public static int $calls = 0;
     }
-    function curl_init($url) { ControllerHttpFixture::$url = $url; return $url; }
+    function curl_init($url) { ControllerHttpFixture::$calls++; ControllerHttpFixture::$url = $url; return $url; }
     function curl_setopt_array($handle, $options) { return true; }
     function curl_exec($handle) { return ControllerHttpFixture::$body; }
     function curl_getinfo($handle, $option) { return ControllerHttpFixture::$status; }
@@ -83,6 +84,61 @@ namespace {
         public function getQuery($name, $filter = null, $default = null) { return $default; }
         public function getJsonRawBody() { return []; }
     }
+    $clientConnections = [
+        ['metadata' => ['sourceIP' => '192.0.2.1', 'sourcePort' => 1000, 'network' => 'tcp'], 'download' => 100, 'upload' => 20],
+        ['metadata' => ['sourceIP' => '192.0.2.1', 'sourcePort' => 2000, 'network' => 'udp'], 'download' => 300, 'upload' => 40],
+        ['metadata' => ['sourceIP' => '2001:db8::1'], 'download' => 200, 'upload' => 300],
+        ['metadata' => ['sourceIP' => '2001:0db8:0:0:0:0:0:1'], 'download' => 100, 'upload' => 100],
+        ['metadata' => ['sourceIP' => '192.0.2.2'], 'download' => 0, 'upload' => 0],
+        ['download' => -10, 'upload' => 7],
+        ['metadata' => ['sourceIP' => '<invalid>'], 'download' => 'bad', 'upload' => 3],
+    ];
+    $clientSummary = \OPNsense\Mihomo\Controller::connectionClients($clientConnections);
+    expect($clientSummary === ['rows' => [
+        ['source' => '2001:db8::1', 'connections' => 2, 'download' => 300, 'upload' => 400],
+        ['source' => '192.0.2.1', 'connections' => 2, 'download' => 400, 'upload' => 60],
+        ['source' => '', 'connections' => 2, 'download' => 0, 'upload' => 10],
+        ['source' => '192.0.2.2', 'connections' => 1, 'download' => 0, 'upload' => 0],
+    ], 'total' => 4], 'Client totals combine ports/protocols and IPv6 spellings, rank combined bytes, retain idle and unknown clients');
+    expect(\OPNsense\Mihomo\Controller::connectionClients([]) === ['rows' => [], 'total' => 0], 'Empty active snapshot has no clients');
+    $manyClients = [];
+    for ($i = 1; $i <= 15; $i++) {
+        $manyClients[] = ['metadata' => ['sourceIP' => '192.0.2.' . $i], 'download' => $i, 'upload' => 0];
+    }
+    $topClients = \OPNsense\Mihomo\Controller::connectionClients($manyClients);
+    expect($topClients['total'] === 15 && count($topClients['rows']) === 10, 'Response bounds rows but counts all clients');
+    expect(array_column($topClients['rows'], 'download') === range(15, 6), 'Top ten selected after sorting all connections');
+    $ties = array_map(static fn ($ip) => ['metadata' => ['sourceIP' => $ip], 'upload' => 10], ['192.0.2.2', '192.0.2.1']);
+    expect(\OPNsense\Mihomo\Controller::connectionClients($ties) === \OPNsense\Mihomo\Controller::connectionClients(array_reverse($ties)), 'Equal-byte ordering is independent of snapshot order');
+    $overview = new \OPNsense\Mihomo\Api\DashboardController();
+    $overview->request = new class extends Request {
+        public string $metadata = '0';
+        public function getPost($name, $filter = null, $default = null) {
+            return $name === 'metadata' ? $this->metadata : $default;
+        }
+    };
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        foreach (['0', '1'] as $metadata) {
+            $overview->request->metadata = $metadata;
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode([
+                'connections' => $clientConnections, 'downloadTotal' => 999999, 'uploadTotal' => 888888,
+            ]);
+            $beforeCalls = \OPNsense\Mihomo\ControllerHttpFixture::$calls;
+            $data = $overview->overviewAction();
+            expect($data['runtime']['clients'] === $clientSummary, 'Both overview modes expose the active snapshot summary, not lifetime totals');
+            expect(\OPNsense\Mihomo\ControllerHttpFixture::$calls - $beforeCalls === ($metadata === '0' ? 1 : 3), 'Client summary adds no controller requests');
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['connections' => []]);
+        expect($overview->overviewAction()['runtime']['clients'] === ['rows' => [], 'total' => 0], 'Closed connections disappear rather than accumulate');
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = false;
+        expect($overview->overviewAction()['runtime']['clients'] === null, 'Unavailable snapshot is distinct from no active clients');
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['connections' => $clientConnections]);
+        expect($overview->overviewAction()['runtime']['clients'] === $clientSummary, 'Recovery restores current client totals');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Client traffic aggregation and overview snapshot contracts: passed\n";
     $guarded = [
         'Dashboard' => ['selectProxy', 'setMode', 'closeConnection', 'testDelay'],
         'Settings' => ['set', 'apply', 'import', 'configSet'],

@@ -224,6 +224,30 @@
             if (replacement) { replacement.focus({preventScroll: true}); }
         }
     }
+    function renderConnectionClients(container, summary, labels) {
+        const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
+        if (!summary || !summary.rows.length) {
+            container.replaceChildren(el('p', {class: 'text-muted'}, summary ? labels.empty : labels.unavailable));
+            return;
+        }
+        const table = el('table', {class: 'table table-condensed table-striped'});
+        table.appendChild(el('caption', {}, labels.shown + ': ' + summary.rows.length + ' / ' + summary.total));
+        const head = el('thead'), headings = el('tr');
+        [labels.source, labels.connections, labels.download, labels.upload].forEach(label => {
+            headings.appendChild(el('th', {scope: 'col'}, label));
+        });
+        head.appendChild(headings); table.appendChild(head);
+        const body = el('tbody');
+        summary.rows.forEach(client => {
+            const row = el('tr');
+            row.appendChild(el('th', {scope: 'row'}, decodeApiText(client.source) || labels.unknown));
+            row.appendChild(el('td', {}, Number(client.connections).toLocaleString()));
+            row.appendChild(el('td', {}, formatBytes(client.download)));
+            row.appendChild(el('td', {}, formatBytes(client.upload)));
+            body.appendChild(row);
+        });
+        table.appendChild(body); container.replaceChildren(table);
+    }
     function theme(container) {
         const probe = document.createElement('div');
         probe.setAttribute('aria-hidden', 'true');
@@ -237,5 +261,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, renderConnectionClients, ProxyFavorites};
 }));

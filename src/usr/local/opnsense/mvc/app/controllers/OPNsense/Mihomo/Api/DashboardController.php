@@ -35,6 +35,7 @@ class DashboardController extends ApiControllerBase
     public function overviewAction()
     {
         $snapshot = Controller::snapshot();
+        $clients = $snapshot['ready'] ? Controller::connectionClients($snapshot['connections']) : null;
         if ($this->stringParam('metadata', '1') === '0') {
             return [
                 'controller' => ['alive' => (bool)$snapshot['ready']],
@@ -43,6 +44,7 @@ class DashboardController extends ApiControllerBase
                     'uploadTotal' => (int)($snapshot['uploadTotal'] ?? 0),
                     'memory' => (int)($snapshot['memory'] ?? 0),
                     'connections' => $snapshot['ready'] ? count($snapshot['connections']) : 0,
+                    'clients' => $clients,
                     'ready' => $snapshot['ready'], 'error' => (string)($snapshot['error'] ?? ''),
                 ],
             ];
@@ -64,6 +66,7 @@ class DashboardController extends ApiControllerBase
                 'uploadTotal' => (int)($snapshot['uploadTotal'] ?? 0),
                 'memory' => (int)($snapshot['memory'] ?? 0),
                 'connections' => $snapshot['ready'] ? count($snapshot['connections']) : 0,
+                'clients' => $clients,
                 'ready' => $snapshot['ready'],
                 'error' => (string)($snapshot['error'] ?? ''),
             ],

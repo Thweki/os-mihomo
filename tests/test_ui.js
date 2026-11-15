@@ -346,7 +346,8 @@ const overviewRequests = [];
 let now = 100000;
 const overviewContext = {
     Date: {now: () => now}, ajaxGet: (url, data, done) => overviewRequests.push({url, data, done}),
-    renderOverview: () => {}, drawTraffic: () => {}, trafficHistory: {add: () => {}}, $: () => ({text: () => {}})
+    renderOverview: () => {}, renderClients: () => {}, drawTraffic: () => {},
+    trafficHistory: {add: () => {}}, $: () => ({text: () => {}})
 };
 vm.runInNewContext('let lastMetadata = 0;\n' + overviewFunction + '\nloadOverview();', overviewContext);
 assert.equal(overviewRequests[0].data.metadata, 1);
@@ -380,6 +381,7 @@ const modeContext = {
     $: modeControl, Date: {now: () => 1000}, processMemory: null,
     fmtCount: String, fmtBytes: String, fmtRate: String,
     trafficHistory: {add: () => ({down: null, up: null})}, drawTraffic: () => {},
+    renderClients: () => {}, // Client rendering is exercised separately below.
     overviewPoller: {refresh: () => { modeRefreshes++; }},
     ajaxCall: (url, data, done) => modeWrites.push({url, data, done}),
     setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; }
@@ -522,6 +524,67 @@ for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
 
+// Client traffic uses the overview snapshot, never the paged connection grid.
+// Run the real load/render path to cover failures, unchanged polls and recovery.
+const clientScript = indexView.match(/        let renderedClients;[\s\S]*?(?=        \/\* -)/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+const clientBox = doc.createElement('div'), clientRequests = [], clientPollResults = [];
+const clientContext = vm.createContext({
+    document: {getElementById: id => { assert.equal(id, 'client-traffic'); return clientBox; }},
+    $: () => ({text() {}, val() {}, data() { return false; }}),
+    MihomoUI: UI, lastMetadata: 0, lastHistorySave: 0, processMemory: null,
+    fmtCount: String, fmtBytes: UI.formatBytes, fmtRate: String,
+    trafficHistory: {add: () => ({down: null, up: null}), samples: []},
+    drawTraffic() {}, renderModeHint() {}, // Mode hints are exercised separately above.
+    sessionStorage: {setItem() {}},
+    ajaxGet: (url, params, done) => clientRequests.push({url, params, done}),
+    done: ok => clientPollResults.push(ok)
+});
+vm.runInContext(clientScript, clientContext);
+function pollClients(data, status = 'success') {
+    vm.runInContext('loadOverview(done);', clientContext);
+    assert.equal(clientRequests.at(-1).url, '/api/mihomo/dashboard/overview');
+    clientRequests.at(-1).done(data, status);
+}
+const clientResponse = {controller: {alive: true}, runtime: {ready: true, clients: {total: 14, rows: [
+    {source: '2001:db8::1', connections: 2, download: 1536, upload: 1024},
+    {source: '', connections: 1, download: 0, upload: 0},
+    {source: '&lt;img src=x onerror=alert(1)&gt;&amp;amp;', connections: 1, download: 0, upload: 0}
+]}}};
+const clientRows = () => clientBox.children[0].children[2].children.map(row => row.children.map(cell => cell.textContent));
+pollClients(clientResponse);
+assert.equal(clientBox.children[0].tagName, 'table');
+assert.equal(clientBox.children[0].children[0].textContent, 'Clients shown: 3 / 14');
+assert.deepEqual(clientRows(), [
+    ['2001:db8::1', '2', UI.formatBytes(1536), UI.formatBytes(1024)],
+    ['Unknown source', '1', UI.formatBytes(0), UI.formatBytes(0)],
+    ['<img src=x onerror=alert(1)>&amp;', '1', UI.formatBytes(0), UI.formatBytes(0)]
+]);
+assert.equal(clientBox.children[0].children[1].children[0].children[0].attrs.scope, 'col');
+assert.equal(clientBox.children[0].children[2].children[0].children[0].attrs.scope, 'row');
+const retainedClientTable = clientBox.children[0];
+pollClients(JSON.parse(JSON.stringify(clientResponse)));
+assert.equal(clientBox.children[0], retainedClientTable, 'Identical client summaries retain table nodes');
+clientResponse.runtime.clients.rows[0].download = 2048;
+pollClients(clientResponse);
+assert.notEqual(clientBox.children[0], retainedClientTable);
+assert.equal(clientRows()[0][2], UI.formatBytes(2048));
+for (const unavailable of [null, {runtime: {ready: false}}, {runtime: {ready: true}, controller: {alive: false}}]) {
+    pollClients(unavailable);
+    assert.equal(clientBox.children[0].tagName, 'p');
+    assert.equal(clientBox.children[0].textContent, 'Client traffic is unavailable.', 'Failures cannot leave unmarked stale client totals');
+    pollClients(clientResponse);
+    assert.equal(clientBox.children[0].tagName, 'table', 'The same snapshot reappears after recovery');
+}
+pollClients(clientResponse, 'error');
+assert.equal(clientBox.children[0].textContent, 'Client traffic is unavailable.');
+assert.equal(clientPollResults.at(-1), false);
+pollClients({controller: {alive: true}, runtime: {ready: true, clients: {rows: [], total: 0}}});
+assert.equal(clientBox.children[0].textContent, 'No active connections.');
+assert.equal(clientPollResults.at(-1), true);
+pollClients(clientResponse);
+assert.equal(clientBox.children[0].tagName, 'table');
+console.log('Client traffic rendering, active-only totals, unavailable/empty states and overview polling: all checks passed');
 // Favorites store exact decoded names, independently for groups and proxies.
 let savedFavorites = null;
 const favoriteStorage = {

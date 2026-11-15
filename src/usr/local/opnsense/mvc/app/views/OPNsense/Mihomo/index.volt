@@ -121,10 +121,28 @@
             drawTraffic();
         });
 
+        let renderedClients;
+        function renderClients(summary) {
+            const snapshot = JSON.stringify(summary || null);
+            if (snapshot === renderedClients) { return; }
+            MihomoUI.renderConnectionClients(document.getElementById('client-traffic'), summary, {
+                source: {{ lang._('Source IP') | json_encode }},
+                connections: {{ lang._('Active Connections') | json_encode }},
+                download: {{ lang._('Download') | json_encode }},
+                upload: {{ lang._('Upload') | json_encode }},
+                shown: {{ lang._('Clients shown') | json_encode }},
+                unknown: {{ lang._('Unknown source') | json_encode }},
+                empty: {{ lang._('No active connections.') | json_encode }},
+                unavailable: {{ lang._('Client traffic is unavailable.') | json_encode }}
+            });
+            renderedClients = snapshot;
+        }
+
         function renderOverview(data) {
             const runtime = data['runtime'] || {};
             const controller = data['controller'] || {};
             const config = data['config'] || {};
+            renderClients(runtime.ready && controller.alive ? runtime.clients : null);
 
             $('#stat-connections').text(fmtCount(runtime['connections']));
             $('#stat-download').text(fmtBytes(runtime['downloadTotal']));
@@ -161,6 +179,7 @@
                     if (metadata) { lastMetadata = Date.now(); }
                     renderOverview(data);
                 } else {
+                    renderClients(null);
                     trafficHistory.add(Date.now(), null, null, false);
                     $('#stat-rate-down, #stat-rate-up').text('—');
                     drawTraffic();
@@ -502,6 +521,18 @@
 </div>
 
 <div class="row"><section class="col-xs-12">{{ partial('OPNsense/Mihomo/network_status', ['network_id':'overview-network']) }}</section></div>
+
+<div class="row">
+    <section class="col-xs-12">
+        <div class="content-box" style="padding:12px 14px;">
+            <h4>{{ lang._('Client traffic') }}</h4>
+            <p class="text-muted">{{ lang._('Top 10 source IPs by bytes transferred on currently active connections. Closed connections are excluded; this is not a usage history.') }}</p>
+            <div class="table-responsive" id="client-traffic">
+                <p class="text-muted">{{ lang._('Loading …') }}</p>
+            </div>
+        </div>
+    </section>
+</div>
 
 <div class="row">
     <section class="col-xs-12">
