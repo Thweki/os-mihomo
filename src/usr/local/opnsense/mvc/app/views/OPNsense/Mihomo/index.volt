@@ -180,6 +180,10 @@
                 return;
             }
             const groups = data['groups'] || [];
+            const health = MihomoUI.summarizeProxyLatency(groups);
+            $('#proxy-health-summary').text({{ lang._('Responding') | json_encode }} + ': ' + fmtCount(health.responding)
+                + ' · ' + {{ lang._('Timed out') | json_encode }} + ': ' + fmtCount(health.timedOut)
+                + ' · ' + {{ lang._('Untested') | json_encode }} + ': ' + fmtCount(health.untested));
             if (groups.length === 0) {
                 $box.html(('<div class="text-muted" style="padding: 12px;">' + {{ lang._('No proxy groups are defined in the configuration.') | json_encode }} + '</div>'));
                 return;
@@ -232,7 +236,10 @@
             ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
                 const ok = status === 'success' && data && data.ready;
                 if (data && status === 'success') { renderGroups(data); }
-                if (!ok) { $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }}); }
+                if (!ok) {
+                    $('#proxy-health-summary').text({{ lang._('Status unavailable') | json_encode }});
+                    $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }});
+                }
                 done(!!ok);
             });
         }
@@ -461,6 +468,11 @@
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div style="padding:0 12px;">
+                <b>{{ lang._('Proxy latency summary') }}</b>
+                <p id="proxy-health-summary" role="status">{{ lang._('Loading …') }}</p>
+                <p class="text-muted">{{ lang._('Latest recorded tests, not live availability. Each proxy is counted once; nested groups and direct/reject/pass entries are excluded.') }}</p>
+            </div>
             <div style="padding: 12px;" id="proxy-groups">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>
             </div>

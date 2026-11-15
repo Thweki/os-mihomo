@@ -111,6 +111,22 @@
         }
         pump();
     }
+    // Count the latest recorded result once per proxy, excluding group references
+    // and built-in routing actions. Missing history is not a failed latency test.
+    function summarizeProxyLatency(groups) {
+        const groupNames = new Set(groups.map(group => group.name));
+        const seen = new Set();
+        const summary = {responding: 0, timedOut: 0, untested: 0};
+        groups.forEach(group => (group.members || []).forEach(member => {
+            if (groupNames.has(member.name) || seen.has(member.name)
+                || ['direct', 'reject', 'rejectdrop', 'pass'].includes(String(member.type).toLowerCase())) { return; }
+            seen.add(member.name);
+            if (!Number.isFinite(member.delay)) { summary.untested++; }
+            else if (member.delay > 0) { summary.responding++; }
+            else { summary.timedOut++; }
+        }));
+        return summary;
+    }
     // Every dynamic value reaches textContent/setAttribute, never HTML parsing.
     function element(doc, tag, attrs, text) {
         const node = doc.createElement(tag);
@@ -179,5 +195,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, summarizeProxyLatency, element, renderProxyGroups};
 }));

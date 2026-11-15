@@ -212,3 +212,60 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// Summarize recorded latency once per actual proxy, not once per group membership.
+const latencyGroups = [{name: 'automatic', members: [
+    {name: 'fast', type: 'Shadowsocks', delay: 24},
+    {name: 'timeout', type: 'Vmess', delay: 0},
+    {name: 'failed', type: 'Trojan', delay: -1},
+    {name: 'new', type: 'Vless', delay: null},
+    {name: 'missing', type: 'Vless'},
+    {name: 'invalid', type: 'Vless', delay: '20'},
+    {name: 'nonfinite', type: 'Vless', delay: NaN},
+    {name: 'direct', type: 'Direct', delay: 10},
+    {name: 'reject', type: 'Reject', delay: 0},
+    {name: 'drop', type: 'RejectDrop', delay: 0},
+    {name: 'pass', type: 'Pass', delay: null}
+]}, {name: 'selector', members: [
+    {name: 'automatic', type: 'URLTest', delay: 24},
+    {name: 'fast', type: 'Shadowsocks', delay: 24},
+    {name: 'slow &lt;node&gt;', type: 'Trojan', delay: 950}
+]}];
+assert.deepEqual(UI.summarizeProxyLatency(latencyGroups), {responding: 2, timedOut: 2, untested: 4});
+assert.deepEqual(UI.summarizeProxyLatency([]), {responding: 0, timedOut: 0, untested: 0});
+assert.deepEqual(UI.summarizeProxyLatency([{name: 'empty'}]), {responding: 0, timedOut: 0, untested: 0});
+assert.deepEqual(UI.summarizeProxyLatency([{name: 'special', members: names.map(name => ({name: encode(name), delay: 1}))}]),
+    {responding: names.length, timedOut: 0, untested: 0});
+
+// Run the dashboard's real polling/rendering code: failure must not leave old
+// health counts visible, recovery and empty configurations must replace them.
+const healthControls = new Map(), healthRequests = [], healthResults = [];
+function healthControl(selector) {
+    if (!healthControls.has(selector)) {
+        healthControls.set(selector, {0: {}, value: '', text(value) { this.value = value; }, html() {}});
+    }
+    return healthControls.get(selector);
+}
+const groupFunctions = ['renderGroups', 'loadGroups'].map(name => indexView.match(
+    new RegExp('        function ' + name + '\\([^)]*\\) \\{[\\s\\S]*?\\n        \\}'))[0]).join('\n')
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInNewContext(groupFunctions + '\nloadGroups(done);', {
+    $: healthControl, testing: false, delayText: () => {}, delayClass: () => {}, fmtCount: String,
+    MihomoUI: {...UI, renderProxyGroups: () => {}},
+    ajaxGet: (url, params, callback) => healthRequests.push(callback),
+    done: ok => healthResults.push(ok)
+});
+const health = healthControl('#proxy-health-summary');
+healthRequests[0]({ready: true, groups: latencyGroups}, 'success');
+assert.equal(health.value, 'Responding: 2 · Timed out: 2 · Untested: 4');
+healthRequests[0](null, 'error');
+assert.equal(health.value, 'Status unavailable');
+healthRequests[0]({ready: true, groups: latencyGroups}, 'success');
+assert.equal(health.value, 'Responding: 2 · Timed out: 2 · Untested: 4');
+healthRequests[0]({ready: false, groups: []}, 'success');
+assert.equal(health.value, 'Status unavailable');
+healthRequests[0]({ready: true, groups: []}, 'success');
+assert.equal(health.value, 'Responding: 0 · Timed out: 0 · Untested: 0');
+assert.deepEqual(healthResults, [true, false, true, false, true]);
+assert(indexView.includes('id="proxy-health-summary"'));
+console.log('Proxy latency summary: deduplication, exclusions, unknown results, failure and recovery passed');

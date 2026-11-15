@@ -1349,3 +1349,18 @@ msgstr "订阅更新任务已提交"
 
 msgid "Settings partly applied"
 msgstr "设置部分应用，仍需处理失败步骤"
+
+msgid "Proxy latency summary"
+msgstr "代理延迟概况"
+
+msgid "Responding"
+msgstr "有响应"
+
+msgid "Timed out"
+msgstr "超时"
+
+msgid "Untested"
+msgstr "未测试"
+
+msgid "Latest recorded tests, not live availability. Each proxy is counted once; nested groups and direct/reject/pass entries are excluded."
+msgstr "显示最近记录的测试结果，不代表实时可用性。每个代理仅统计一次，不包含嵌套分组及 direct/reject/pass 条目。"
