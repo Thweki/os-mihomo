@@ -126,6 +126,14 @@
             const controller = data['controller'] || {};
             const config = data['config'] || {};
 
+            if (!runtime.ready || !controller.alive) {
+                $('#stat-rules').text({{ lang._('Unavailable') | json_encode }});
+                lastMetadata = 0;
+            } else if (Object.prototype.hasOwnProperty.call(runtime, 'ruleCount')) {
+                $('#stat-rules').text(Number.isSafeInteger(runtime.ruleCount) && runtime.ruleCount >= 0
+                    ? fmtCount(runtime.ruleCount) : {{ lang._('Unavailable') | json_encode }});
+            }
+
             $('#stat-connections').text(fmtCount(runtime['connections']));
             $('#stat-download').text(fmtBytes(runtime['downloadTotal']));
             $('#stat-upload').text(fmtBytes(runtime['uploadTotal']));
@@ -161,6 +169,8 @@
                     if (metadata) { lastMetadata = Date.now(); }
                     renderOverview(data);
                 } else {
+                    $('#stat-rules').text({{ lang._('Unavailable') | json_encode }});
+                    lastMetadata = 0;
                     trafficHistory.add(Date.now(), null, null, false);
                     $('#stat-rate-down, #stat-rate-up').text('—');
                     drawTraffic();
@@ -466,6 +476,7 @@
     <span>{{ lang._('Downloaded') }}: <span id="stat-download">—</span></span>
     <span>{{ lang._('Uploaded') }}: <span id="stat-upload">—</span></span>
     <span>{{ lang._('Core version') }}: <span id="mihomo-version">—</span></span>
+    <span title="{{ lang._('Runtime top-level rules; rule-provider contents are not expanded. Refreshed every 30 seconds while this page is visible.') }}">{{ lang._('Loaded routing rules') }}: <span id="stat-rules">—</span></span>
 </div></section></div>
 
 <div class="row">

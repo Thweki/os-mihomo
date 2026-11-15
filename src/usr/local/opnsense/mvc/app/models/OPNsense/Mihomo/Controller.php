@@ -133,6 +133,19 @@ class Controller
         return $result['ok'] && is_array($result['data']) ? $result['data'] : null;
     }
 
+    /** 运行态顶层规则数；不展开规则集合，读取失败时返回 null。 */
+    public static function ruleCount(): ?int
+    {
+        $result = self::get('/rules', 3);
+        if (!$result['ok']) {
+            return null;
+        }
+        // Preserve JSON object/array types: {"rules":{}} is not an empty list.
+        $data = json_decode($result['raw']);
+        $rules = is_object($data) ? ($data->rules ?? null) : null;
+        return is_array($rules) ? count($rules) : null;
+    }
+
     /**
      * 代理列表，整理成「组 + 成员」结构，附带最近一次延迟。
      *
