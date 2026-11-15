@@ -146,3 +146,86 @@ namespace {
     } finally { if (is_file($marker)) { unlink($marker); } }
     echo "API read-only guards, strict action results, redaction and ACL: passed\n";
 }
+
+/** Exercise the real REST decode and group projection without network or appliance I/O. */
+namespace OPNsense\Mihomo {
+    class Fixture {
+        public static array $proxies = [];
+        public static int $historyReads = 0;
+    }
+    // Namespace-local transport doubles work even when ext-curl is unavailable.
+    const CURLOPT_CUSTOMREQUEST = 1, CURLOPT_RETURNTRANSFER = 2, CURLOPT_CONNECTTIMEOUT = 3,
+        CURLOPT_TIMEOUT = 4, CURLOPT_HTTPHEADER = 5, CURLOPT_FOLLOWLOCATION = 6, CURLINFO_HTTP_CODE = 7;
+    function curl_init($url) {
+        if ($url !== 'http://127.0.0.1:9090/proxies') { throw new \RuntimeException('Unexpected request'); }
+        return new \stdClass();
+    }
+    function curl_setopt_array($handle, $options) {}
+    function curl_exec($handle) { return json_encode(['proxies' => Fixture::$proxies]); }
+    function curl_getinfo($handle, $option) { return 200; }
+    function curl_error($handle) { return ''; }
+    function curl_close($handle) {}
+    function array_reverse($array, $preserveKeys = false) {
+        Fixture::$historyReads++;
+        return \array_reverse($array, $preserveKeys);
+    }
+}
+namespace {
+    require dirname(__DIR__) . '/src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Controller.php';
+    use OPNsense\Mihomo\Controller;
+    use OPNsense\Mihomo\Fixture;
+    $config = tempnam(sys_get_temp_dir(), 'mihomo-proxies-');
+    file_put_contents($config, "external-controller: 127.0.0.1:9090\n");
+    \OPNsense\Mihomo\Config::setFileOverride($config);
+    try {
+        $nodes = [
+            'shared' => ['type' => 'Test', 'history' => [['delay' => 10], ['delay' => '42'], ['delay' => null]]],
+            'zero' => ['history' => [['delay' => 12], ['delay' => 0]]],
+            'negative' => ['history' => [['delay' => -1]]],
+            'empty' => ['history' => []],
+            'no-delay' => ['history' => [['time' => 'fixture']]],
+            '001' => ['history' => [['delay' => 7]]],
+            '1' => ['history' => [['delay' => 8]]],
+        ];
+        $members = array_merge(array_keys($nodes), ['missing']);
+        $expectedDelays = [42, 0, -1, null, null, 7, 8, null];
+        Fixture::$proxies = $nodes;
+        for ($i = 19; $i >= 0; $i--) {
+            Fixture::$proxies[sprintf('group-%02d', $i)] = [
+                'type' => 'Selector', 'all' => $members, 'now' => $i % 2 ? 'zero' : 'shared',
+            ];
+        }
+        $result = Controller::proxyGroups();
+        expect($result['ready'] && $result['error'] === '', 'Successful response preserved');
+        expect(count($result['groups']) === 20, 'Every group remains present');
+        foreach ($result['groups'] as $i => $group) {
+            expect($group['name'] === sprintf('group-%02d', $i), 'Groups remain sorted');
+            expect($group['type'] === 'Selector', 'Group type preserved');
+            expect(array_column($group['members'], 'name') === $members, 'Member order and names preserved');
+            expect(array_column($group['members'], 'delay') === $expectedDelays, 'Latest non-null delay preserved');
+            expect(array_column($group['members'], 'alive') === [true, false, false, false, false, true, true, false],
+                'Alive state still follows delay');
+            expect($group['members'][0]['type'] === 'Test' && $group['members'][7]['type'] === '', 'Member types preserved');
+            foreach ($group['members'] as $member) {
+                expect($member['selected'] === ($member['name'] === ($i % 2 ? 'zero' : 'shared')),
+                    'Selection remains specific to each group');
+            }
+        }
+        expect(Fixture::$historyReads <= count($members), 'Shared histories must be processed at most once per response, including null delays');
+
+        // Repeated polls must observe changed histories, including previously missing nodes.
+        Fixture::$proxies['shared']['history'][] = ['delay' => 99];
+        Fixture::$proxies['missing'] = ['history' => [['delay' => 15]]];
+        Fixture::$historyReads = 0;
+        $next = Controller::proxyGroups();
+        expect($next['groups'][0]['members'][0]['delay'] === 99, 'New response refreshes a cached delay');
+        expect($next['groups'][0]['members'][7]['delay'] === 15, 'New response refreshes a cached null');
+        expect(Fixture::$historyReads <= count($members), 'Subsequent responses also reuse shared histories');
+        Fixture::$proxies = [];
+        expect(Controller::proxyGroups()['groups'] === [], 'Empty response does not retain old groups');
+        echo "Proxy groups: shared history work bounded per response, output and freshness preserved\n";
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        unlink($config);
+    }
+}
