@@ -373,7 +373,7 @@ const ruleContext = {
 };
 const overviewRenderer = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0]
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
-vm.runInNewContext(overviewRenderer + '\n' + overviewFunction, ruleContext);
+vm.runInNewContext('function renderModeHint() {}\n' + overviewRenderer + '\n' + overviewFunction, ruleContext);
 const renderRuleCount = (runtime, alive = true) => {
     ruleContext.data = {runtime: {ready: true, ...runtime}, controller: {alive}};
     vm.runInNewContext('renderOverview(data);', ruleContext);
