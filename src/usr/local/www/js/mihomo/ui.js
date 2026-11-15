@@ -167,12 +167,15 @@
         const row = el('div', {class: 'row'});
         (favorites ? favorites.order(groups, 'groups') : groups).forEach(group => {
             const name = decodeApiText(group.name);
+            const members = group.members || [];
             const column = el('div', {class: 'col-md-6', style: 'margin-bottom:15px'});
             const card = el('div', {class: 'content-box', style: 'height:300px;margin-bottom:0;display:flex;flex-direction:column'});
             const header = el('div', {style: 'padding:10px 12px;flex:0 0 auto'});
             if (favorites) { header.appendChild(favoriteButton('groups', name, name)); }
             header.appendChild(el('b', {}, name + ' '));
             header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-info'}, decodeApiText(group.type)));
+            header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-default',
+                style: 'margin-left:6px', 'data-member-count': members.length}, labels.memberCount.replace('%s', members.length)));
             const test = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-test-group pull-right',
                 'data-group': name, 'data-focus-key': JSON.stringify(['group', name]), 'aria-label': labels.testGroup + ': ' + name, title: labels.testGroup});
             test.appendChild(el('i', {class: 'fa fa-tachometer fa-fw', 'aria-hidden': 'true'}));
@@ -185,7 +188,6 @@
             }
             const list = el('ul', {class: 'list-group', 'data-group': name, 'aria-label': name,
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
-            const members = group.members || [];
             (favorites ? favorites.order(members, 'proxies') : members).forEach(member => {
                 const memberName = decodeApiText(member.name);
                 const item = el('li', {class: 'list-group-item' + (member.selected ? ' active' : ''),

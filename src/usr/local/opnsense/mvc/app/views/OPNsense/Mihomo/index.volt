@@ -195,6 +195,7 @@
             const snapshot = JSON.stringify(groups);
             if (snapshot === renderedGroups) { return; }
             MihomoUI.renderProxyGroups($box[0], groups, {
+                memberCount: {{ lang._('Members: %s') | json_encode }},
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }},
                 resetGroup: {{ lang._('Resume automatic selection') | json_encode }},
