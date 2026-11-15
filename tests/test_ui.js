@@ -346,6 +346,8 @@ let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
 let favoriteNotice = '', testsDisabled = false, favoriteHandler;
+let selectionDisabled = false, selectionRefreshes = 0, selectionFailures = 0, clearedActions = 0;
+const selectionHandlers = {}, selectionRequests = [];
 const dashboardStorage = new Map();
 const dashboardFavorites = new UI.ProxyFavorites(() => ({
     getItem: key => dashboardStorage.get(key) || null,
@@ -353,21 +355,33 @@ const dashboardFavorites = new UI.ProxyFavorites(() => ({
 }));
 const groupContext = vm.createContext({
     $: selector => {
-        if (selector instanceof DomNode) { return {attr: key => selector.getAttribute(key)}; }
+        if (selector instanceof DomNode) { return {
+            attr: key => selector.getAttribute(key),
+            closest: () => ({attr: key => pollingBox.querySelectorAll('li[data-member]').find(node => node.contains(selector)).getAttribute(key)})
+        }; }
         if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
+        if (selector === '#dashboard-action-state') { return {empty: () => { clearedActions++; }}; }
+        if (selector === '#proxy-groups .cmd-select, #proxy-groups .cmd-reset-group') {
+            return {prop: (key, value) => { assert.equal(key, 'disabled'); selectionDisabled = value; }};
+        }
         if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
             return {prop: (key, value) => { assert.equal(key, 'disabled'); testsDisabled = value; }};
         }
         assert.equal(selector, '#proxy-groups');
         return {0: pollingBox, on: (event, target, handler) => {
-            assert.equal(event, 'click'); assert.equal(target, '.cmd-favorite'); favoriteHandler = handler;
+            assert.equal(event, 'click');
+            if (target === '.cmd-favorite') { favoriteHandler = handler; }
+            else { selectionHandlers[target] = handler; }
         }, html: text => {
             const placeholder = pollingDoc.createElement('placeholder');
             placeholder.textContent = text;
             pollingBox.replaceChildren(placeholder);
         }};
     },
-    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false,
+    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false, selecting: false,
+    ajaxCall: (url, params, done) => { selectionRequests.push({url, params, done}); },
+    groupsPoller: {refresh: () => { selectionRefreshes++; }},
+    actionFailed: () => { selectionFailures++; },
     delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
 vm.runInContext(renderGroupsScript, groupContext);
@@ -513,3 +527,62 @@ assert(favoriteNotice.includes('only for this page visit'));
 assert.equal(displayedGroups()[0], specialName);
 assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
 console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
+
+// An explicit reset clears a core override; sorting/favorites never supply a target member.
+const resetName = ' 中文 /?%#" <tag> &gt; ';
+const resetResponse = {ready: true, groups: [
+    {name: encode(resetName), type: 'URLTest', canReset: true, members: [{name: 'First'}, {name: 'Pinned', selected: true}]},
+    {name: 'Fallback', type: 'Fallback', canReset: true, members: [{name: 'Pinned', selected: true}]},
+    {name: 'Automatic', type: 'URLTest', canReset: false, members: [{name: 'First', selected: true}]},
+    {name: 'Selector', type: 'Selector', canReset: false, members: [{name: 'First', selected: true}]},
+    {name: 'Legacy', type: 'URLTest', members: [{name: 'First', selected: true}]}
+]};
+pollGroups(resetResponse);
+const resetButtons = () => pollingBox.querySelectorAll('button[data-group]').filter(node => node.attrs.class.includes('cmd-reset-group'));
+const selectButtons = () => pollingBox.querySelectorAll('button[data-focus-key]').filter(node => node.attrs.class.includes('cmd-select'));
+assert.deepEqual(resetButtons().map(node => node.attrs['data-group']), [resetName, 'Fallback']);
+assert.equal(resetButtons()[0].attrs['aria-label'], 'translated: ' + resetName);
+assert.equal(resetButtons()[0].attrs.type, 'button');
+assert.equal(resetButtons()[0].textContent, 'translated');
+assert(!Object.hasOwn(resetButtons()[0].attrs, 'data-unexpected'));
+const resetActionScript = indexView.match(/        function changeSelection\(action, params\) \{[\s\S]*?(?=\n        function loadGroups)/)[0];
+vm.runInContext(resetActionScript, groupContext);
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+assert.equal(selectionRequests.length, 1);
+assert.equal(selectionRequests[0].url, '/api/mihomo/dashboard/reset_proxy');
+assert.deepEqual(JSON.parse(JSON.stringify(selectionRequests[0].params)), {group: resetName});
+assert(selectionDisabled);
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+selectionHandlers['.cmd-select'].call(selectButtons()[0]);
+assert.equal(selectionRequests.length, 1, 'Pending reset blocks repeated resets and competing manual selection');
+resetResponse.groups[0].members[0].delay = 10;
+selectionDisabled = false;
+pollGroups(resetResponse);
+assert(selectionDisabled, 'A polling redraw keeps selection controls disabled while reset is pending');
+const beforeResetSelection = selectedNames();
+selectionRequests[0].done({status: 'failed', message: 'Core rejected reset'}, 'success');
+assert(!selectionDisabled);
+assert.equal(selectionFailures, 1);
+assert.equal(selectionRefreshes, 0);
+assert.deepEqual(selectedNames(), beforeResetSelection, 'Failed reset never fabricates a selection');
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+selectionRequests[1].done(null, 'error');
+assert.equal(selectionFailures, 2, 'Transport failure is visible and retryable');
+assert(!selectionDisabled);
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+selectionRequests[2].done({status: 'ok'}, 'success');
+assert.equal(selectionRefreshes, 1, 'Successful reset fetches the core-selected member');
+assert.equal(clearedActions, 1);
+assert(!selectionDisabled);
+assert.deepEqual(selectedNames(), beforeResetSelection, 'Reset does not guess the first or fastest member');
+resetResponse.groups[0].canReset = false;
+pollGroups(resetResponse);
+assert.deepEqual(resetButtons().map(node => node.attrs['data-group']), ['Fallback'], 'Cleared overrides disappear after refresh');
+selectionHandlers['.cmd-select'].call(selectButtons()[0]);
+assert.equal(selectionRequests[3].url, '/api/mihomo/dashboard/select_proxy');
+assert.deepEqual(JSON.parse(JSON.stringify(selectionRequests[3].params)), {group: resetName, member: 'First'});
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+assert.equal(selectionRequests.length, 4, 'Pending manual selection also blocks reset');
+selectionRequests[3].done({status: 'ok'}, 'success');
+assert.equal(selectionRefreshes, 2);
+console.log('Automatic selection reset: eligibility, safe names, pending redraws, failures, retry and refresh passed');

@@ -197,14 +197,17 @@
             MihomoUI.renderProxyGroups($box[0], groups, {
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }},
+                resetGroup: {{ lang._('Resume automatic selection') | json_encode }},
                 favoriteGroup: {{ lang._('Favorite group') | json_encode }},
                 favoriteProxy: {{ lang._('Favorite proxy') | json_encode }}
             }, delayText, delayClass, favorites);
             if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
+            if (selecting) { $('#proxy-groups .cmd-select, #proxy-groups .cmd-reset-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
 
         let testing = false;
+        let selecting = false;
         $('#proxy-groups').on('click', '.cmd-favorite', function () {
             const saved = favorites.toggle($(this).attr('data-kind'), $(this).attr('data-name'));
             $('#proxy-favorites-state').text(saved ? '' : {{ lang._('Favorites could not be saved in this browser. They will last only for this page visit.') | json_encode }});
@@ -236,14 +239,23 @@
             $(this).closest('.content-box').find('.cmd-test').each(function () { names.push($(this).attr('data-name')); });
             testNodes(Array.from(new Set(names)));
         });
-        $('#proxy-groups').on('click', '.cmd-select', function () {
-            const $button = $(this), $item = $button.closest('li');
-            $button.prop('disabled', true);
-            ajaxCall('/api/mihomo/dashboard/select_proxy', {group: $item.attr('data-group'), member: $item.attr('data-member')}, function (data, status) {
-                $button.prop('disabled', false);
+        function changeSelection(action, params) {
+            if (selecting) { return; }
+            selecting = true;
+            $('#proxy-groups .cmd-select, #proxy-groups .cmd-reset-group').prop('disabled', true);
+            ajaxCall('/api/mihomo/dashboard/' + action, params, function (data, status) {
+                selecting = false;
+                $('#proxy-groups .cmd-select, #proxy-groups .cmd-reset-group').prop('disabled', false);
                 if (status === 'success' && data && data.status === 'ok') { $('#dashboard-action-state').empty(); groupsPoller.refresh(); }
                 else { actionFailed(data); }
             });
+        }
+        $('#proxy-groups').on('click', '.cmd-select', function () {
+            const $item = $(this).closest('li');
+            changeSelection('select_proxy', {group: $item.attr('data-group'), member: $item.attr('data-member')});
+        });
+        $('#proxy-groups').on('click', '.cmd-reset-group', function () {
+            changeSelection('reset_proxy', {group: $(this).attr('data-group')});
         });
 
         function loadGroups(done) {
@@ -481,6 +493,7 @@
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
+            <p class="text-muted" style="padding:0 12px;">{{ lang._('Resume automatic selection clears a manual override in a URLTest or Fallback group and returns control to its configured policy.') }}</p>
             <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div style="padding: 12px;" id="proxy-groups">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>

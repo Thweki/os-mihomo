@@ -1401,3 +1401,23 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Controller.php
+msgid "Only URLTest and Fallback groups can resume automatic selection."
+msgstr "仅 URLTest 和 Fallback 分组可以恢复自动选择。"
+
+#: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/DashboardController.php
+msgid "A group name is required."
+msgstr "必须提供分组名称。"
+
+#: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/Api/DashboardController.php
+msgid "Automatic selection resumed for \"%s\"."
+msgstr "已为“%s”恢复自动选择。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Resume automatic selection"
+msgstr "恢复自动选择"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Resume automatic selection clears a manual override in a URLTest or Fallback group and returns control to its configured policy."
+msgstr "恢复自动选择会清除 URLTest 或 Fallback 分组的手动指定，并恢复该组配置的自动策略。"

@@ -112,6 +112,26 @@ class DashboardController extends ApiControllerBase
         ];
     }
 
+    /** Resume the core's automatic selection after a manual override. */
+    public function resetProxyAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['status' => 'failed', 'message' => gettext('POST required.')];
+        }
+        $this->throwReadOnly();
+        $group = $this->param('group');
+        if (!is_string($group) || $group === '') {
+            return ['status' => 'failed', 'message' => gettext('A group name is required.')];
+        }
+        $result = Controller::resetProxy($group);
+        return [
+            'status' => $result['ok'] ? 'ok' : 'failed',
+            'message' => $result['ok']
+                ? sprintf(gettext('Automatic selection resumed for "%s".'), $group)
+                : $result['error'],
+        ];
+    }
+
     /** 单节点延迟测速 */
     public function testDelayAction()
     {

@@ -173,6 +173,8 @@ class Controller
                 'name' => (string)$name,
                 'type' => (string)($node['type'] ?? ''),
                 'now' => (string)($node['now'] ?? ''),
+                'canReset' => in_array($node['type'] ?? '', ['URLTest', 'Fallback'], true)
+                    && is_string($node['fixed'] ?? null) && $node['fixed'] !== '',
                 'members' => $members,
             ];
         }
@@ -184,6 +186,22 @@ class Controller
     public static function selectProxy(string $group, string $member): array
     {
         return self::put('/proxies/' . rawurlencode($group), ['name' => $member]);
+    }
+
+    /** Clear a manual override and let the core resume its configured group policy. */
+    public static function resetProxy(string $group): array
+    {
+        $path = '/proxies/' . rawurlencode($group);
+        $result = self::get($path);
+        if (!$result['ok']) {
+            return $result;
+        }
+        // DELETE is not a reset-to-default operation for Selector groups.
+        if (!is_array($result['data'])
+            || !in_array($result['data']['type'] ?? '', ['URLTest', 'Fallback'], true)) {
+            return ['ok' => false, 'error' => gettext('Only URLTest and Fallback groups can resume automatic selection.')];
+        }
+        return self::delete($path);
     }
 
     /** 单节点延迟测速（毫秒；0/负数表示失败） */
