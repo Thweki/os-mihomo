@@ -149,6 +149,37 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
+    // A warning needs evidence: untested/missing results are possible exits, not failures.
+    // Propagate those exits backwards through the group graph, without recursion.
+    function emptyProxyGroups(groups) {
+        const byName = new Map(groups.map(group => [decodeApiText(group.name), group]));
+        const parents = new Map(), possible = new Set(), queue = [];
+        function mark(name) {
+            if (!possible.has(name)) { possible.add(name); queue.push(name); }
+        }
+        byName.forEach((group, name) => {
+            if (!Array.isArray(group.members)) { mark(name); return; }
+            group.members.forEach(member => {
+                const target = decodeApiText(member.name);
+                if (byName.has(target)) {
+                    if (!parents.has(target)) { parents.set(target, []); }
+                    parents.get(target).push(name);
+                    return;
+                }
+                const type = decodeApiText(member.type).toLowerCase();
+                if (type === 'reject' || type === 'rejectdrop') { return; }
+                if (!type || ['direct', 'pass', 'passrule', 'rematch', 'dns', 'compatible', 'unknown',
+                    'selector', 'urltest', 'fallback', 'loadbalance', 'relay'].includes(type)
+                    || typeof member.delay !== 'number' || !Number.isFinite(member.delay) || member.delay > 0) {
+                    mark(name);
+                }
+            });
+        });
+        for (let i = 0; i < queue.length; i++) {
+            (parents.get(queue[i]) || []).forEach(mark);
+        }
+        return new Set(Array.from(byName.keys()).filter(name => !possible.has(name)));
+    }
     function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, collapsedGroups) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         function favoriteButton(kind, name, group) {
@@ -165,6 +196,7 @@
         const active = doc.activeElement;
         const focusKey = active && container.contains(active) ? active.getAttribute('data-focus-key') : null;
         const row = el('div', {class: 'row'});
+        const emptyGroups = emptyProxyGroups(groups);
         (favorites ? favorites.order(groups, 'groups') : groups).forEach((group, index) => {
             const name = decodeApiText(group.name);
             const members = group.members || [];
@@ -178,6 +210,11 @@
             header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-info'}, decodeApiText(group.type)));
             header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-default',
                 style: 'margin-left:6px', 'data-member-count': members.length}, labels.memberCount.replace('%s', members.length)));
+            if (emptyGroups.has(name)) {
+                header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-warning',
+                    style: 'margin-left:6px;white-space:normal', 'data-empty-group': name,
+                    title: labels.emptyGroupHint}, labels.emptyGroup));
+            }
             if (collapsedGroups) {
                 const label = collapsed ? labels.expandGroup : labels.collapseGroup;
                 const toggle = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-collapse-group',
@@ -237,5 +274,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, emptyProxyGroups, ProxyFavorites};
 }));

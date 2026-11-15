@@ -73,6 +73,24 @@ namespace {
             \OPNsense\Mihomo\ControllerHttpFixture::$body = false;
             expect(\OPNsense\Mihomo\Controller::$method() === null, $method . ' handles transport failure');
         }
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['proxies' => [
+            'Empty' => ['type' => 'Selector', 'all' => []],
+            'Leaf' => ['type' => 'Shadowsocks'],
+            'Invalid' => ['type' => 'Selector', 'all' => null],
+            'Malformed' => ['type' => 'Selector', 'all' => 'Leaf'],
+            'Nested' => ['type' => 'Selector', 'all' => ['Empty'], 'now' => 'Empty'],
+        ]]);
+        $groups = \OPNsense\Mihomo\Controller::proxyGroups();
+        expect($groups['ready'] === true, 'empty groups do not mean an unavailable controller');
+        expect(array_column($groups['groups'], 'name') === ['Empty', 'Nested'],
+            'retain empty groups but exclude leaves and malformed member lists');
+        expect($groups['groups'][0]['members'] === [], 'empty group remains explicitly empty');
+        expect($groups['groups'][1]['members'][0]['name'] === 'Empty', 'preserve nested empty group references');
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+        $unavailable = \OPNsense\Mihomo\Controller::proxyGroups();
+        expect($unavailable['ready'] === false && $unavailable['groups'] === [],
+            'controller failures must not manufacture empty groups');
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
     } finally {
         \OPNsense\Mihomo\Config::setFileOverride(null);
     }

@@ -197,6 +197,8 @@
             if (snapshot === renderedGroups) { return; }
             MihomoUI.renderProxyGroups($box[0], groups, {
                 memberCount: {{ lang._('Members: %s') | json_encode }},
+                emptyGroup: {{ lang._('No usable proxies') | json_encode }},
+                emptyGroupHint: {{ lang._('No forwarding candidate in the reported members and latest latency results, including nested groups. Untested or missing results are unknown; DIRECT is usable. This is not a live connectivity check.') | json_encode }},
                 collapseGroup: {{ lang._('Collapse group') | json_encode }},
                 expandGroup: {{ lang._('Expand group') | json_encode }},
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},

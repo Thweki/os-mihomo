@@ -205,6 +205,67 @@ assert.equal(JSON.stringify(countGroups), originalCountGroups, 'Counting must no
 assert.equal(countBox.children[0].children[0].children[0].children[0].children[0].textContent, '<Group>& ');
 console.log('Group member counts: direct entries, empty/missing members, translated text and unchanged data passed');
 
+// Group warnings use all reported candidates, not selection, favorites or stale alive flags.
+const candidate = (name, type = 'Shadowsocks', delay = 0) => ({name: encode(name), type, delay});
+const emptyGroups = [
+    {name: 'Empty', members: []},
+    {name: 'Failed', members: [candidate('zero'), candidate('negative', 'Vmess', -1)]},
+    {name: 'Reject only', members: [candidate('block', 'Reject', 20), candidate('drop', 'RejectDrop')]},
+    {name: 'Healthy', members: [candidate('failed'), candidate('working', 'Trojan', 1)]},
+    {name: 'Direct', members: [candidate('custom direct', 'Direct')]},
+    {name: 'Unknown', members: [candidate('untested', 'Trojan', null)]},
+    {name: 'Missing'}, {name: 'Null', members: null},
+    {name: encode('<Nested>&'), members: [candidate('Empty', 'Selector', 10), candidate('Failed', 'URLTest', 10)]},
+    {name: 'Nested unknown', members: [candidate('Unknown', 'Selector', 0)]},
+    {name: 'Missing nested', members: [candidate('not reported', 'URLTest', 0)]},
+    {name: 'Missing node', members: [{name: 'absent', delay: 0, alive: false}]},
+    {name: 'Cycle A', members: [candidate('Cycle B', 'Selector')]},
+    {name: 'Cycle B', members: [candidate('Cycle A', 'Selector')]},
+    {name: 'Exit A', members: [candidate('Exit B', 'Selector')]},
+    {name: 'Exit B', members: [candidate('Exit A', 'Selector'), candidate('direct', 'Direct')]},
+    {name: 'Self', members: [candidate('Self', 'Selector')]},
+    {name: 'Shared', members: [candidate('Healthy', 'Selector'), candidate('Failed', 'Selector')]},
+    {name: 'Pass', members: [candidate('skip', 'Pass')]},
+    {name: 'Name is not type', members: [candidate('DIRECT', 'Trojan')]}
+];
+const warnedNames = ['Empty', 'Failed', 'Reject only', '<Nested>&', 'Cycle A', 'Cycle B', 'Self', 'Name is not type'];
+const originalEmptyGroups = JSON.stringify(emptyGroups);
+assert.deepEqual([...UI.emptyProxyGroups(emptyGroups)], warnedNames);
+assert.deepEqual([...UI.emptyProxyGroups([...emptyGroups].reverse())].sort(), [...warnedNames].sort(), 'Graph order cannot affect warnings');
+assert.equal(JSON.stringify(emptyGroups), originalEmptyGroups, 'Warnings must not mutate controller data');
+for (const delay of [undefined, null, '0', NaN, Infinity]) {
+    assert.equal(UI.emptyProxyGroups([{name: 'Unknown', members: [{name: 'node', type: 'Trojan', delay, alive: false}]}]).size, 0);
+}
+assert.equal(UI.emptyProxyGroups([{name: 'Failed', members: [{name: 'node', type: 'Trojan', delay: 0, alive: true}]}]).size, 1);
+for (const type of ['Direct', 'Pass', 'PassRule', 'Rematch', 'Dns', 'Compatible', 'Unknown', 'Selector', 'URLTest', 'Fallback', 'LoadBalance', 'Relay']) {
+    assert.equal(UI.emptyProxyGroups([{name: 'Context needed', members: [candidate('missing', type)]}]).size, 0,
+        type + ' cannot be classified as failed using latency alone');
+}
+// Long provider/group chains must not overflow the stack; cycles with exits propagate too.
+const deepGroups = Array.from({length: 12000}, (_, i) => ({name: String(i), members: [candidate(String(i + 1), 'Selector')]}));
+deepGroups.push({name: '12000', members: []});
+assert.equal(UI.emptyProxyGroups(deepGroups).size, 12001);
+deepGroups[12000].members.push(candidate('exit', 'Direct'));
+assert.equal(UI.emptyProxyGroups(deepGroups).size, 0);
+const warningBox = doc.createElement('div');
+const warningLabels = {memberCount: '成员数：%s', emptyGroup: '无可用代理', emptyGroupHint: '基于最近的延迟结果'};
+UI.renderProxyGroups(warningBox, emptyGroups, warningLabels, String, () => '', null, new Set(warnedNames));
+const warningBadges = box => box.querySelectorAll('span[data-empty-group]');
+assert.deepEqual(warningBadges(warningBox).map(node => node.attrs['data-empty-group']), warnedNames);
+warningBadges(warningBox).forEach(node => {
+    assert.equal(node.textContent, warningLabels.emptyGroup);
+    assert.equal(node.attrs.title, warningLabels.emptyGroupHint);
+    assert(node.attrs.class.includes('label-warning'), 'Warnings have both text and theme-aware emphasis');
+});
+warningBox.children[0].children.forEach(column => {
+    const card = column.children[0], name = card.children[1].attrs['data-group'];
+    if (warnedNames.includes(name)) {
+        assert.equal(card.children[1].attrs.hidden, '');
+        assert.equal(warningBadges(card.children[0]).length, 1, 'Warning remains in the visible header when collapsed');
+    }
+});
+console.log('Empty-group warnings: failures, unknowns, built-ins, nested groups, cycles, deep graphs and collapsed headers passed');
+
 // Fake timers prove non-overlap, hidden pause/resume, exponential retry and recovery.
 let hidden = false, callback, calls = 0, scheduled = null;
 const polling = new UI.Poller(done => { calls++; callback = done; }, 2000, {
@@ -450,6 +511,27 @@ for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
     assert.equal(pollingBox.children[0], recoveredRow);
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
+
+const failedResponse = {ready: true, groups: [{name: encode('<Failed>&'), members: [candidate('node')]}]};
+pollGroups(failedResponse);
+assert.equal(warningBadges(pollingBox)[0].textContent, 'No usable proxies');
+const warnedRow = pollingBox.children[0];
+pollGroups(failedResponse);
+assert.equal(pollingBox.children[0], warnedRow, 'Unchanged warnings do not redraw');
+failedResponse.groups[0].members[0].delay = 12;
+pollGroups(failedResponse);
+assert.equal(warningBadges(pollingBox).length, 0, 'Successful latest test removes the warning');
+failedResponse.groups[0].members[0].delay = 0;
+pollGroups(failedResponse);
+assert.equal(warningBadges(pollingBox).length, 1);
+pollGroups({ready: false});
+assert.equal(warningBadges(pollingBox).length, 0, 'Unavailable controller must not be reported as an empty group');
+pollGroups(failedResponse);
+assert.equal(warningBadges(pollingBox).length, 1, 'Recovery restores the current warning');
+pollGroups({ready: true, groups: []});
+assert.equal(warningBadges(pollingBox).length, 0);
+pollGroups();
+console.log('Empty-group dashboard warnings update on failure, successful tests and controller recovery');
 
 // Favorites store exact decoded names, independently for groups and proxies.
 let savedFavorites = null;
