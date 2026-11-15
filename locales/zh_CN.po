@@ -3,6 +3,9 @@ msgstr ""
 "Language: zh_CN\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Export comparison (JSON)"
+msgstr "导出配置对照（JSON）"
+
 msgid "Rule-based: Mihomo follows matching rules to route or block traffic."
 msgstr "规则模式：Mihomo 根据匹配的规则转发或阻止流量。"
 

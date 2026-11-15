@@ -100,6 +100,8 @@ Saved form settings, YAML on disk and the core's running configuration are manag
 
 The advanced YAML editor starts in read-only mode. Unlock it to edit and review changes before saving. The server validates the new configuration and backs up the old file before replacing it. DNS status and Configuration comparison are read-only views.
 
+In Configuration comparison, **Export comparison (JSON)** downloads all rows from the last successful read, including the collection time and runtime availability. The differences-only filter does not limit the export. Secret values are omitted; addresses and other displayed settings remain. The report captures saved form, file and observed runtime values, not unsaved edits, and is not a restorable configuration backup. Refresh to collect a new snapshot; export is unavailable while loading or after a failed read.
+
 ![Configuration comparison across form, file and runtime values](docs/assets/configuration-comparison.png)
 
 ### Write coordination and privileges

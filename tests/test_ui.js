@@ -358,6 +358,114 @@ now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
 
+// Comparison exports contain the complete observed snapshot, never arbitrary API fields.
+const comparisonTime = '2026-11-15T12:34:56.000Z';
+const comparisonData = {status: 'ok', runtime: false, content: 'excluded raw configuration', rows: [
+    {key: 'mode', label: '模式 &amp; &lt;mode&gt;', group: 'general', model: 'rule', file: 'global', runtime: '', state: 'differs', secret: false, runtime_only: false, extra: 'excluded row field'},
+    {key: 'tun.enable', model: 'true', file: 'true', runtime: '', state: 'match', managed: false},
+    {key: 'dns.enable', model: 'true', file: '(not set in the file)', runtime: '', state: 'missing'},
+    {key: 'mixed-port', model: '', file: '', runtime: '', state: 'na', runtime_only: true},
+    {key: 'secret', model: 'synthetic-model-value', file: 'synthetic-file-value', runtime: 'synthetic-runtime-value', state: 'differs'},
+    {key: 'future-sensitive-field', secret: true, model: 'synthetic-other-value'}
+]};
+const comparisonReport = UI.comparisonReport(comparisonData, comparisonTime);
+assert.equal(comparisonReport.schema_version, 1);
+assert.equal(comparisonReport.collected_at, comparisonTime);
+assert.equal(comparisonReport.runtime_available, false, 'Offline snapshots remain exportable');
+assert.equal(comparisonReport.rows.length, 6, 'Include matching, missing and runtime-only rows');
+assert.equal(comparisonReport.rows[0].label, '模式 & <mode>');
+assert.equal(comparisonReport.rows[0].file, 'global');
+assert.equal(comparisonReport.rows[1].managed, false);
+assert.equal(comparisonReport.rows[3].runtime_only, true);
+for (const row of comparisonReport.rows.slice(4)) {
+    assert.equal(row.secret, true);
+    assert.equal(row.model, null);
+    assert.equal(row.file, null);
+    assert.equal(row.runtime, null);
+}
+assert(!JSON.stringify(comparisonReport).includes('synthetic-'), 'Sensitive row values must be omitted');
+assert(!JSON.stringify(comparisonReport).includes('excluded'), 'Only explicit report fields are exported');
+assert.equal(comparisonData.rows[4].model, 'synthetic-model-value', 'Export must not mutate cached API data');
+comparisonData.rows[0].file = 'changed later';
+assert.equal(comparisonReport.rows[0].file, 'global', 'Export is a snapshot');
+assert.equal(UI.comparisonReport({...comparisonData, runtime: true}, comparisonTime).runtime_available, true);
+for (const invalid of [null, {}, {status: 'failed', rows: []}, {status: 'ok'}, {status: 'ok', rows: {}}]) {
+    assert.equal(UI.comparisonReport(invalid, comparisonTime), null, 'Failed/malformed responses cannot be exported');
+}
+assert.equal(UI.comparisonReport({status: 'ok', rows: [], runtime: false}, comparisonTime).rows.length, 0);
+
+// Run the real view's load/filter/download handlers with browser APIs at the boundary.
+const comparisonScript = settingsView.slice(settingsView.indexOf('        function loadCompare()'),
+    settingsView.indexOf("        if (window.location.hash === '#compare')"))
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+const exportControls = new Map(), exportRequests = [], downloads = [], exportBlobs = [], revoked = [], cleanup = [];
+function exportControl(selector) {
+    if (!exportControls.has(selector)) {
+        exportControls.set(selector, {
+            handlers: {}, disabled: false,
+            prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+            find() { return this; }, addClass() { return this; }, removeClass() { return this; }, html() { return this; },
+            click(fn) { this.handlers.click = fn; return this; }, change(fn) { this.handlers.change = fn; return this; },
+            on(event, fn) { this.handlers[event] = fn; return this; }
+        });
+    }
+    return exportControls.get(selector);
+}
+const exportContext = {
+    $: exportControl, MihomoUI: UI,
+    Date: class extends Date { constructor() { super(comparisonTime); } },
+    ajaxGet: (url, params, done) => exportRequests.push({url, done}),
+    Blob: class { constructor(parts, options) { this.parts = parts; this.type = options.type; } },
+    URL: {createObjectURL(blob) { exportBlobs.push(blob); return 'blob:comparison-' + exportBlobs.length; },
+        revokeObjectURL(url) { revoked.push(url); }},
+    document: {
+        body: {appendChild(link) { link.attached = true; }},
+        createElement(tag) { assert.equal(tag, 'a'); return {
+            click() { assert(this.attached); downloads.push(this); }, remove() { this.attached = false; }
+        }; }
+    },
+    setTimeout: fn => cleanup.push(fn)
+};
+vm.runInNewContext(`let compareExport = null, compareLoading = false, compareCache = null, compareCacheStatus = 'success';
+    function renderCompare(data, status) { compareCache = data; compareCacheStatus = status; }
+    ${comparisonScript}`, exportContext);
+const exportButton = exportControl('#compare-export');
+assert.match(settingsView, /id="compare-export"[^>]* disabled/, 'Download is disabled before the first read');
+exportButton.handlers.click();
+assert.equal(downloads.length, 0);
+exportControl('#compare-refresh').handlers.click();
+exportControl('#compareTab').handlers['shown.bs.tab']();
+assert.equal(exportRequests.length, 1, 'Overlapping reads do not replace a newer snapshot');
+assert.equal(exportRequests[0].url, '/api/mihomo/settings/inspect');
+assert.equal(exportButton.disabled, true);
+exportRequests[0].done(comparisonData, 'success');
+assert.equal(exportButton.disabled, false);
+exportControl('#compare-diff-only').checked = true;
+exportControl('#compare-diff-only').handlers.change();
+exportButton.handlers.click();
+assert.equal(exportRequests.length, 1, 'Export does not fetch raw YAML or refresh the snapshot');
+assert.equal(exportBlobs[0].type, 'application/json;charset=utf-8');
+const downloadedReport = JSON.parse(exportBlobs[0].parts.join(''));
+assert.equal(downloadedReport.rows.length, 6, 'Table filtering does not truncate the report');
+assert.equal(downloadedReport.collected_at, comparisonTime);
+assert.equal(downloads[0].download, 'mihomo-comparison-2026-11-15T12-34-56-000Z.json');
+assert.equal(downloads[0].attached, false);
+cleanup.forEach(fn => fn());
+assert.deepEqual(revoked, ['blob:comparison-1']);
+for (const [data, status] of [[comparisonData, 'error'], [{status: 'failed'}, 'success'], [null, 'success']]) {
+    exportControl('#compare-refresh').handlers.click();
+    assert.equal(exportButton.disabled, true);
+    exportButton.handlers.click();
+    exportRequests.at(-1).done(data, status);
+    assert.equal(exportButton.disabled, true);
+    exportButton.handlers.click();
+    assert.equal(downloads.length, 1, 'Pending/failed reads cannot export stale or error data');
+}
+exportControl('#compare-refresh').handlers.click();
+exportRequests.at(-1).done({...comparisonData, runtime: true}, 'success');
+assert.equal(exportButton.disabled, false, 'Successful refresh re-enables export');
+console.log('Comparison JSON schema, secret omission, snapshot download, filtering and read failures: all checks passed');
+
 // Exercise the actual mode hint, overview renderer and mode-change handler together.
 const translateModeScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
     (_, label) => JSON.stringify(label));

@@ -541,6 +541,8 @@
         };
         let compareCache = null;
         let compareCacheStatus = 'success';
+        let compareExport = null;
+        let compareLoading = false;
 
         function compareState(row) {
             if (row['runtime_only']) {
@@ -656,6 +658,10 @@
         }
 
         function loadCompare() {
+            if (compareLoading) { return; }
+            compareLoading = true;
+            compareExport = null;
+            $('#compare-export').prop('disabled', true);
             const $btn = $('#compare-refresh');
             $btn.prop('disabled', true).find('i').addClass('fa-spin');
             $('#compare-body').html(
@@ -664,12 +670,27 @@
                 + '</td></tr>'
             );
             ajaxGet('/api/mihomo/settings/inspect', {}, function (data, status) {
+                compareLoading = false;
+                compareExport = status === 'success' ? MihomoUI.comparisonReport(data, new Date().toISOString()) : null;
+                $('#compare-export').prop('disabled', compareExport === null);
                 $btn.prop('disabled', false).find('i').removeClass('fa-spin');
                 renderCompare(data, status);
             });
         }
 
+        $('#compare-export').click(function () {
+            if (compareExport === null) { return; }
+            const blob = new Blob([JSON.stringify(compareExport, null, 2) + '\n'], {type: 'application/json;charset=utf-8'});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'mihomo-comparison-' + compareExport.collected_at.replace(/[:.]/g, '-') + '.json';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(function () { URL.revokeObjectURL(link.href); }, 0);
+        });
         $('#compare-diff-only').change(function () {
+            if (compareLoading) { return; }
             if (compareCache !== null) {
                 renderCompare(compareCache, compareCacheStatus);
             } else {
@@ -1072,6 +1093,9 @@
                     </label>
                     <button class="btn btn-default btn-sm" id="compare-refresh" type="button">
                         <i class="fa fa-refresh fa-fw"></i> {{ lang._('Refresh') }}
+                    </button>
+                    <button class="btn btn-default btn-sm" id="compare-export" type="button" disabled>
+                        <i class="fa fa-download fa-fw" aria-hidden="true"></i> {{ lang._('Export comparison (JSON)') }}
                     </button>
                 </div>
             </div>
