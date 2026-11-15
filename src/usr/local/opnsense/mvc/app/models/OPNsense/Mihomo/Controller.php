@@ -148,7 +148,7 @@ class Controller
         $proxies = $result['data']['proxies'];
         $groups = [];
         foreach ($proxies as $name => $node) {
-            if (empty($node['all'])) {
+            if (!is_array($node['all'] ?? null)) {
                 continue;   /* 非分组节点 */
             }
             $members = [];

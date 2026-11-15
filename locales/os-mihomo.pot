@@ -1833,3 +1833,11 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged."
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "No usable proxies"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "No forwarding candidate in the reported members and latest latency results, including nested groups. Untested or missing results are unknown; DIRECT is usable. This is not a live connectivity check."
+msgstr ""

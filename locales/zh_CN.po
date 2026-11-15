@@ -1419,3 +1419,11 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "No usable proxies"
+msgstr "无可用代理"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "No forwarding candidate in the reported members and latest latency results, including nested groups. Untested or missing results are unknown; DIRECT is usable. This is not a live connectivity check."
+msgstr "根据已报告的成员和最近的延迟结果（包括嵌套分组），未找到可转发的候选项。未测试或缺失的结果视为未知；DIRECT 视为可用。这不是实时连通性检查。"
