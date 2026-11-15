@@ -1353,6 +1353,12 @@ msgstr "操作失败，请重试。"
 msgid "Test all nodes in this group"
 msgstr "测试此分组中的所有节点"
 
+msgid "Test all groups"
+msgstr "测试所有分组"
+
+msgid "Test all nodes in every displayed group, including collapsed groups"
+msgstr "测试所有已显示分组中的全部节点，包括已折叠的分组"
+
 msgid "Test node latency"
 msgstr "测试节点延迟"
 

@@ -360,12 +360,13 @@ console.log('Settings stale-write/version handoff, partial-result feedback and o
 
 // Run the dashboard render path with fresh API objects and the real DOM renderer.
 // Unchanged polling must retain nodes, focus and scroll without allocating DOM.
-const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null;\n)?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
+const renderGroupsScript = indexView.match(/        let renderedGroups = null;[\s\S]*?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
 const pollingBox = pollingDoc.createElement('div');
 let favoriteNotice = '', testsDisabled = false, favoriteHandler, collapseHandler, testGroupHandler;
+let testAllDisabled = true, testAllHandler, testProgress = '';
 const dashboardStorage = new Map();
 const dashboardFavorites = new UI.ProxyFavorites(() => ({
     getItem: key => dashboardStorage.get(key) || null,
@@ -385,6 +386,15 @@ const groupContext = vm.createContext({
             }};
         }
         if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
+        if (selector === '#test-all-groups') {
+            return {prop: (key, value) => { assert.equal(key, 'disabled'); testAllDisabled = value; },
+                on: (event, handler) => { assert.equal(event, 'click'); testAllHandler = handler; }};
+        }
+        if (selector === '#proxy-test-state') { return {text: value => { testProgress = value; }}; }
+        if (selector === '#proxy-groups .cmd-test') {
+            return {each: fn => pollingBox.querySelectorAll('button[data-name]')
+                .filter(node => node.attrs.class.includes(' cmd-test')).forEach(node => fn.call(node))};
+        }
         if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
             return {prop: (key, value) => { assert.equal(key, 'disabled'); testsDisabled = value; }};
         }
@@ -625,3 +635,82 @@ assert.equal(groupList(foldNames[1]).getAttribute('hidden'), '', 'Groups expand 
 // A new page runs the actual initializer again; no browser persistence is used.
 assert.equal(vm.runInNewContext(collapseStateScript + '\ncollapsedGroups.size;'), 0);
 console.log('Group collapse: defaults, exact names, accessibility, focus, independent toggles, polling/recovery, favorites and full-group tests passed');
+
+// Run the actual manual batch action and existing bounded queue against the
+// rendered cards. No selection/mode endpoint is allowed by this fixture.
+const translateScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
+    (_, label) => JSON.stringify(label));
+const allClickScript = indexView.match(/        \$\('#test-all-groups'\)\.on\('click',[\s\S]*?\n        \}\);/)[0];
+const testNodesScript = indexView.match(/        function testNodes\(names\) \{[\s\S]*?\n        \}/)[0];
+const loadGroupsScript = indexView.match(/        function loadGroups\(done\) \{[\s\S]*?\n        \}/)[0];
+const probes = [], groupReads = [];
+let batchRefreshes = 0;
+groupContext.ajaxCall = (url, params, done) => {
+    assert.equal(url, '/api/mihomo/dashboard/test_delay');
+    probes.push({name: params.name, done});
+};
+groupContext.ajaxGet = (url, params, done) => {
+    assert.equal(url, '/api/mihomo/dashboard/proxies');
+    groupReads.push(done);
+};
+groupContext.groupsPoller = {refresh: () => { batchRefreshes++; }};
+vm.runInContext(translateScript(testNodesScript + allClickScript + loadGroupsScript), groupContext);
+assert.match(indexView, /<button[^>]*type="button"[^>]*id="test-all-groups"[^>]*disabled/,
+    'Native keyboard-accessible control starts disabled before groups load');
+for (const response of [{ready: false}, {ready: true, groups: []},
+    {ready: true, groups: [{name: 'Empty', members: []}, {name: 'Missing members'}]}]) {
+    pollGroups(response);
+    assert.equal(testAllDisabled, true);
+    testAllHandler();
+    assert.equal(probes.length, 0);
+}
+const batchNames = [...names, '__proto__', 'literal &gt;'];
+const batchResponse = {ready: true, groups: [
+    {name: foldNames[1], members: batchNames.map(name => ({name: encode(name), selected: true}))},
+    {name: 'Shared', members: [{name: encode(batchNames[0])}, {name: encode(batchNames[1])}]}
+]};
+const originalBatch = JSON.stringify(batchResponse);
+pollGroups(batchResponse);
+assert.equal(testAllDisabled, false);
+assert.equal(probes.length, 0, 'Loading groups never starts a batch automatically');
+assert.equal(groupList(foldNames[1]).getAttribute('hidden'), '', 'Collapsed groups participate');
+testAllHandler();
+assert.equal(probes.length, 3, 'At most three probes start concurrently');
+assert.equal(testProgress, 'Latency tests: 0/7 · Failed: 0');
+assert.equal(testAllDisabled, true);
+assert.equal(testsDisabled, true);
+testAllHandler();
+vm.runInContext("testNodes(['overlapping single/group test']);", groupContext);
+assert.equal(probes.length, 3, 'Repeat clicks and per-group tests cannot overlap the batch');
+vm.runInContext('loadGroups(function () {});', groupContext);
+assert.equal(groupReads.length, 0, 'Polling does not interrupt a running batch');
+fold(foldNames[1]);
+assert.equal(testAllDisabled, true, 'Redraws retain the disabled batch control');
+assert.equal(testsDisabled, true);
+probes[1].done(null, 'error');
+assert.equal(probes.length, 4, 'A failure releases a queue slot');
+probes[1].done({status: 'ok'}, 'success');
+assert.equal(probes.length, 4, 'Repeated callbacks do not advance the queue');
+probes[0].done({status: 'error'}, 'success');
+probes[2].done({status: 'ok'}, 'success');
+for (let i = 3; i < batchNames.length; i++) { probes[i].done({status: 'ok'}, 'success'); }
+assert.deepEqual(probes.map(probe => probe.name), batchNames, 'Exact decoded names are deduplicated across cards');
+assert.equal(testProgress, 'Latency tests: 7/7 · Failed: 2');
+assert.equal(batchRefreshes, 1, 'Refresh results once after all probes settle');
+assert.equal(testAllDisabled, false);
+assert.equal(testsDisabled, false);
+assert.equal(JSON.stringify(batchResponse), originalBatch, 'Selections and API data remain unchanged');
+vm.runInContext('loadGroups(function () {});', groupContext);
+groupReads.pop()(null, 'error');
+assert.equal(testAllDisabled, true, 'Failed reads disable batch probes of stale cards');
+testAllHandler();
+assert.equal(probes.length, 7);
+vm.runInContext('loadGroups(function () {});', groupContext);
+groupReads.pop()(batchResponse, 'success');
+assert.equal(testAllDisabled, false, 'An unchanged successful recovery re-enables the action');
+testAllHandler();
+assert.equal(probes.length, 10, 'Completed batches can be retried');
+for (let i = 7; i < 14; i++) { probes[i].done({status: 'ok'}, 'success'); }
+assert.equal(testProgress, 'Latency tests: 7/7 · Failed: 0', 'Retry resets aggregate progress');
+assert.equal(batchRefreshes, 2);
+console.log('Test all groups: manual-only, empty/unavailable states, collapsed/shared nodes, exact names, bounded concurrency, overlap prevention, progress, failures and recovery passed');
