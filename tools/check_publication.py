@@ -14,7 +14,7 @@ FILES = {'.gitattributes', '.gitignore', '.github/workflows/ci.yml', '.github/de
          'tools/extract_strings.py', 'tools/mo_editor.py', 'tools/validate.py',
          'tools/check_publication.py', 'tools/reproducible_archive.py',
          'tools/build_provenance.py', 'tests/test_writes.php', 'tests/test_build.py',
-         'tests/test_repository.sh', 'tests/test_api.php',
+         'tests/test_repository.sh', 'tests/test_api.php', 'tests/test_validate.py',
          'tests/test_network_apply.php', 'tests/test_network_api.php'}
 ROOTS = ('src/', 'locales/', 'packaging/freebsd/')
 
