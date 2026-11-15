@@ -3,7 +3,7 @@
 Every push, pull request and manual run executes `.github/workflows/ci.yml`:
 
 1. Install explicit validation runtimes (Python 3.12, Node.js 24 and PHP 8.3 with SimpleXML) and pinned correctness linters. Check the publication allowlist and fixed third-party asset hashes, sample credentials, PHP syntax, XML, translation catalogs, JavaScript and maintained shell scripts. Run UI, runtime, configuration patch, transaction/failure/concurrency, API permission/result and deterministic archive fixture tests. Tests never use an appliance configuration.
-2. In an isolated FreeBSD 15.1 amd64 VM, run PHP fixtures and build the package twice with separate staging directories. `cmp` must find identical package bytes. Run the bundled core with `-t` against synthetic valid and invalid YAML (TUN/DNS disabled, no subscription or service start). Inspect package metadata and ensure the package owns samples, not live configuration. Package hooks are not executed.
+2. In an isolated FreeBSD 15.1 amd64 VM, run PHP fixtures and build the package twice with separate staging directories. `cmp` must find identical package bytes. Run the bundled core with `-t` against synthetic valid and invalid YAML and representative subscription-generated block, flow and mixed layouts (audit B6). Downloads and installation are stubbed; TUN/DNS are disabled, with no service start. Inspect package metadata and ensure the package owns samples, not live configuration. Package hooks are not executed.
 3. Exercise optional RSA repository signing with disposable keys and an isolated pkg database: the valid key must work, a different key must fail, and `REQUIRE_SIGNED=yes` must reject missing keys. Nothing is installed and CI keys are discarded.
 4. Upload `os-mihomo.pkg`, `os-mihomo-repository.tar.gz`, `SHA256SUMS`, `package-files.txt` and `build-info.json`. Artifacts are retained for 14 days.
 
@@ -22,6 +22,16 @@ PATH="$PWD/work/ci-venv/bin:$PATH" work/ci-venv/bin/python tools/validate.py --l
 sh scripts/ci_build.sh
 ```
 
+`python3 tests/test_subscription.py` exercises the actual subscription shell offline,
+without PHP or a core binary. It checks block and single-line flow mappings, field
+order, nested fields, quoted commas, Unicode, indentationless lists, duplicate-name
+filtering, template isolation, converter/fallback generation and rejected inputs.
+It covers name selection, not general YAML scalar fidelity. The PHP installer is
+stubbed only in this generator suite; `tests/test_writes.php` covers the real
+installer. Use `--output-dir <directory>` to retain representative generated configs
+for core validation. These fixtures also run in the portable validator, including
+with `--frontend-only`.
+
 Shell syntax checks use `sh -n` for maintained `.sh` files, POSIX shell shebangs (including extensionless service and CLI entrypoints and package hooks), and the shipped rc.conf/env snippets. ShellCheck runs the same files with error-level diagnostics only; Ruff checks `tools/` and `tests/` with `E9,F63,F7,F82` (syntax, invalid comparisons/control flow and undefined names). Neither linter applies fixes. Temporary fixtures verify discovery, parse-only behavior, rejection of broken extensionless scripts and shell/Python correctness errors, and acceptance of valid input.
 
 Without PHP CLI, use `python3 tools/validate.py --frontend-only`; this skips PHP syntax and PHP fixtures. Without ShellCheck/Ruff, omit `--lint`: shell syntax and the other portable checks still run, and linter-dependent fixtures report explicit skips. CI always uses `--lint` with all runtimes installed, so missing linters fail validation. FreeBSD package, core and repository-signing checks require the VM and do not run in the portable harness.
@@ -29,6 +39,8 @@ Without PHP CLI, use `python3 tools/validate.py --frontend-only`; this skips PHP
 ## Reproduce and verify
 
 `build.sh` sets `SOURCE_DATE_EPOCH` to the checked-out commit time unless explicitly supplied. The archive writer sorts paths and fixes uid/gid, owner names, file times and the gzip header. Staged file modes are normalized, including 0600 for configuration samples. Source checkout timestamps and staging locations are not archive inputs.
+
+Each tree copy finishes a temporary tar archive before extraction, so a source read failure aborts packaging even if tar produced a readable partial archive. This requires temporary disk space for one uncompressed tree under `WORKDIR`. Portable `tests/test_packaging.py` fixtures run the build with a synthetic core and stubbed FreeBSD commands, checking failures in both copy stages and successful payload/sample preservation without downloads or package installation. They run through `tools/validate.py`; real pkg validation remains in the FreeBSD job.
 
 The byte-for-byte reproducibility claim applies to `os-mihomo.pkg` built from identical source, pinned assets, build variables, Python/zlib toolchain and ABI. `build-info.json` records the commit/tree, dirty state, epoch, pinned input metadata, OS, Python/zlib/pkg versions and output hashes. It is an inventory, not a signature. The repository archive has deterministic outer packaging, but internal `pkg repo` catalogues/signatures may vary with pkg version or signing setup; CI does not claim byte-for-byte repository catalogue reproducibility. Toolchain changes can also change compressed package bytes; use the recorded versions when reproducing.
 

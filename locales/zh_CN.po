@@ -3,6 +3,36 @@ msgstr ""
 "Language: zh_CN\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Rule-based: Mihomo follows matching rules to route or block traffic."
+msgstr "规则模式：Mihomo 根据匹配的规则转发或阻止流量。"
+
+msgid "Global: traffic handled by Mihomo uses the GLOBAL group selection."
+msgstr "全局模式：由 Mihomo 处理的流量使用 GLOBAL 分组中选定的出口。"
+
+msgid "Direct: traffic handled by Mihomo connects without a proxy."
+msgstr "直连模式：由 Mihomo 处理的流量不经过代理，直接连接。"
+
+msgid "Collapse group"
+msgstr "折叠分组"
+
+msgid "Expand group"
+msgstr "展开分组"
+
+msgid "Members: %s"
+msgstr "成员数：%s"
+
+msgid "Favorite group"
+msgstr "收藏分组"
+
+msgid "Favorite proxy"
+msgstr "收藏代理"
+
+msgid "Favorites could not be saved in this browser. They will last only for this page visit."
+msgstr "无法在此浏览器中保存收藏，仅在本次页面访问中有效。"
+
+msgid "Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged."
+msgstr "点击星标可将分组置顶，或将代理在各分组中置顶。收藏保存在此浏览器中，不改变路由。"
+
 msgid "%s (answering)"
 msgstr "%s（有应答）"
 
@@ -1364,3 +1394,43 @@ msgstr "未测试"
 
 msgid "Latest recorded tests, not live availability. Each proxy is counted once; nested groups and direct/reject/pass entries are excluded."
 msgstr "显示最近记录的测试结果，不代表实时可用性。每个代理仅统计一次，不包含嵌套分组及 direct/reject/pass 条目。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Saving settings"
+msgstr "正在保存设置"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Applying settings"
+msgstr "正在应用设置"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "No file changes needed"
+msgstr "无需更改文件"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Restart accepted; readiness unconfirmed"
+msgstr "重启请求已接受；服务就绪状态未确认"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Outcome unconfirmed; check current settings before retrying"
+msgstr "结果未确认；重试前请检查当前设置"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "No settings applies on this page yet."
+msgstr "此页面尚无设置应用记录。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Recent settings applies"
+msgstr "最近的设置应用记录"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Latest 10 attempts on this page, newest first. Reloading clears this list. Field names describe submitted edits, not confirmed file changes. Values are not retained. YAML edits and other operators are not included."
+msgstr "显示此页面最近 10 次尝试，最新的在前。重新加载页面会清空列表。字段名称表示提交的编辑，不代表已确认的文件更改。不保留字段值。不包含 YAML 编辑或其他操作员的操作。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Started"
+msgstr "开始时间"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Outcome"
+msgstr "结果"
