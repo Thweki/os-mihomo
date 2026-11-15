@@ -210,6 +210,15 @@
         }
 
         let testing = false;
+        let autoTestEnabled = false, autoTestAttempted = false, autoTestCancelled = false;
+        try { autoTestEnabled = sessionStorage.getItem('mihomo.autoTest.v1') === '1'; } catch (error) { /* Default off. */ }
+        $('#auto-test-latency').prop('checked', autoTestEnabled).on('change', function () {
+            autoTestEnabled = this.checked;
+            if (!autoTestEnabled && autoTestAttempted) { autoTestCancelled = true; }
+            try { sessionStorage.setItem('mihomo.autoTest.v1', autoTestEnabled ? '1' : '0'); } catch (error) { /* This page only. */ }
+            if (autoTestEnabled && !autoTestAttempted) { groupsPoller.refresh(); }
+        });
+
         $('#proxy-groups').on('click', '.cmd-collapse-group', function () {
             const name = $(this).attr('data-group');
             if (collapsedGroups.has(name)) { collapsedGroups.delete(name); }
@@ -223,7 +232,7 @@
             renderedGroups = null;
             if (latestGroups) { renderGroups(latestGroups); }
         });
-        function testNodes(names) {
+        function testNodes(names, automatic) {
             if (testing || !names.length) { return; }
             testing = true;
             $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
@@ -236,11 +245,14 @@
                 ajaxCall('/api/mihomo/dashboard/test_delay', {name: name}, function (data, status) {
                     done(status === 'success' && data && data.status === 'ok');
                 });
-            }, progress, function () {
+            }, progress, function (state) {
                 testing = false;
+                if (automatic && state.completed < names.length) {
+                    $('#proxy-test-state').append(document.createTextNode(' · ' + {{ lang._('Automatic tests stopped; reload to run again.') | json_encode }}));
+                }
                 $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', false);
                 groupsPoller.refresh();
-            });
+            }, automatic ? () => autoTestEnabled && !autoTestCancelled && !document.hidden : undefined);
         }
         $('#proxy-groups').on('click', '.cmd-test', function () { testNodes([$(this).attr('data-name')]); });
         $('#proxy-groups').on('click', '.cmd-test-group', function () {
@@ -265,6 +277,13 @@
                 if (data && status === 'success') { renderGroups(data); }
                 if (!ok) { $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }}); }
                 done(!!ok);
+                if (ok && autoTestEnabled && !autoTestAttempted && !testing && !document.hidden && !autoTestCancelled) {
+                    const names = MihomoUI.automaticTestNames(data.groups || []);
+                    if (names.length) {
+                        autoTestAttempted = true;
+                        testNodes(names, true);
+                    }
+                }
             });
         }
 
@@ -428,11 +447,15 @@
         const pollers = [overviewPoller, groupsPoller, servicePoller];
         pollers.forEach(poller => poller.refresh());
         document.addEventListener('visibilitychange', function () {
+            if (document.hidden && autoTestAttempted) { autoTestCancelled = true; }
             if (document.hidden) { trafficHistory.add(Date.now(), null, null, false); }
             else { lastMetadata = 0; }
             pollers.forEach(poller => poller.visibilityChanged());
         });
-        window.addEventListener('pagehide', () => pollers.forEach(poller => poller.stop()));
+        window.addEventListener('pagehide', function () {
+            autoTestCancelled = true;
+            pollers.forEach(poller => poller.stop());
+        });
     });
 </script>
 
@@ -508,6 +531,10 @@
         <div class="content-box">
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
+            </div>
+            <div class="checkbox" style="padding:0 12px;">
+                <label><input type="checkbox" id="auto-test-latency" aria-describedby="auto-test-help"> {{ lang._('Automatically test latency on overview load (experimental)') }}</label>
+                <p id="auto-test-help" class="help-block">{{ lang._('Off by default. Remembered for this tab. Tests each proxy once per visit, up to three at a time. Sends probe traffic; disabling or hiding the page stops queued tests. In-flight tests finish.') }}</p>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>

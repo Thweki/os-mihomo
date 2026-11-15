@@ -94,11 +94,15 @@
         visibilityChanged() { this.refresh(); }
         stop() { this.stopped = true; this.cancel(this.timer); }
     }
-    function runLimited(items, limit, worker, progress, done) {
-        let next = 0, active = 0, completed = 0, failed = 0;
+    function runLimited(items, limit, worker, progress, done, shouldContinue) {
+        let next = 0, active = 0, completed = 0, failed = 0, stopped = false, finished = false;
         function pump() {
-            if (completed === items.length) { done({completed, failed}); return; }
-            while (active < limit && next < items.length) {
+            if (finished) { return; }
+            stopped = stopped || (shouldContinue && !shouldContinue());
+            if (completed === items.length || (stopped && active === 0)) {
+                finished = true; done({completed, failed}); return;
+            }
+            while (!stopped && active < limit && next < items.length) {
                 const item = items[next++]; active++;
                 let settled = false;
                 worker(item, ok => {
@@ -110,6 +114,20 @@
             }
         }
         pump();
+    }
+    // Probe concrete members once, excluding nested groups and built-in actions.
+    function automaticTestNames(groups) {
+        const groupNames = new Set(groups.map(group => decodeApiText(group.name)));
+        const names = new Set();
+        groups.forEach(group => (group.members || []).forEach(member => {
+            const name = decodeApiText(member.name);
+            const type = String(member.type || '').toLowerCase().replace(/[-_ ]/g, '');
+            if (name && type && !groupNames.has(name)
+                && !/^(direct|reject|rejectdrop|pass|compatible|dns|selector|urltest|fallback|loadbalance|relay)$/.test(type)) {
+                names.add(name);
+            }
+        }));
+        return Array.from(names);
     }
     // Browser-local display preferences; names are decoded once at the API boundary.
     class ProxyFavorites {
@@ -237,5 +255,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, automaticTestNames, element, renderProxyGroups, ProxyFavorites};
 }));
