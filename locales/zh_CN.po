@@ -3,6 +3,24 @@ msgstr ""
 "Language: zh_CN\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Reset displayed totals"
+msgstr "重置显示的流量统计"
+
+msgid "Show core totals"
+msgstr "显示内核累计流量"
+
+msgid "Core totals"
+msgstr "内核累计流量"
+
+msgid "Since reset (this page)"
+msgstr "自重置以来（本页面）"
+
+msgid "Core counters decreased; showing core totals."
+msgstr "内核计数器已减小，现显示内核累计流量。"
+
+msgid "Reset displayed totals from the latest sample. Reloading restores core totals."
+msgstr "以最新样本为起点重置显示的流量统计。重新加载页面会恢复显示内核累计流量。"
+
 msgid "Collapse group"
 msgstr "折叠分组"
 

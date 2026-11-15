@@ -101,6 +101,28 @@
         let trafficRange = 60;
         let lastMetadata = 0;
         let lastHistorySave = 0;
+        const trafficTotals = new MihomoUI.TrafficTotals();
+
+        function drawTrafficTotals() {
+            const totals = trafficTotals.values();
+            $('#stat-download').text(totals ? fmtBytes(totals.download) : '—');
+            $('#stat-upload').text(totals ? fmtBytes(totals.upload) : '—');
+            $('#reset-traffic-totals').prop('disabled', !totals);
+            $('#restore-traffic-totals').prop('disabled', !trafficTotals.baseline);
+            $('#traffic-totals-note').text(trafficTotals.baseline
+                ? {{ lang._('Since reset (this page)') | json_encode }}
+                : trafficTotals.restarted
+                    ? {{ lang._('Core counters decreased; showing core totals.') | json_encode }}
+                    : {{ lang._('Core totals') | json_encode }});
+        }
+        $('#reset-traffic-totals').on('click', function () {
+            trafficTotals.reset();
+            drawTrafficTotals();
+        });
+        $('#restore-traffic-totals').on('click', function () {
+            trafficTotals.restore();
+            drawTrafficTotals();
+        });
 
         function drawTraffic() {
             if (!gTrafficChart) { return; }
@@ -127,8 +149,8 @@
             const config = data['config'] || {};
 
             $('#stat-connections').text(fmtCount(runtime['connections']));
-            $('#stat-download').text(fmtBytes(runtime['downloadTotal']));
-            $('#stat-upload').text(fmtBytes(runtime['uploadTotal']));
+            trafficTotals.update(runtime['downloadTotal'], runtime['uploadTotal'], runtime['ready'] && controller['alive']);
+            drawTrafficTotals();
             $('#stat-memory').text(processMemory !== null ? fmtBytes(processMemory) : {{ lang._('Unavailable') | json_encode }});
 
             if (controller['alive']) {
@@ -160,6 +182,8 @@
                     if (metadata) { lastMetadata = Date.now(); }
                     renderOverview(data);
                 } else {
+                    trafficTotals.update(null, null, false);
+                    drawTrafficTotals();
                     trafficHistory.add(Date.now(), null, null, false);
                     $('#stat-rate-down, #stat-rate-up').text('—');
                     drawTraffic();
@@ -447,6 +471,9 @@
 <div class="row"><section class="col-xs-12"><div class="content-box" style="padding:10px 14px; display:flex; flex-wrap:wrap; gap:12px 24px; margin-bottom:15px;">
     <span>{{ lang._('Downloaded') }}: <span id="stat-download">—</span></span>
     <span>{{ lang._('Uploaded') }}: <span id="stat-upload">—</span></span>
+    <span id="traffic-totals-note" class="text-muted" role="status">{{ lang._('Core totals') }}</span>
+    <button type="button" id="reset-traffic-totals" class="btn btn-xs btn-default" disabled title="{{ lang._('Reset displayed totals from the latest sample. Reloading restores core totals.') }}">{{ lang._('Reset displayed totals') }}</button>
+    <button type="button" id="restore-traffic-totals" class="btn btn-xs btn-default" disabled>{{ lang._('Show core totals') }}</button>
     <span>{{ lang._('Core version') }}: <span id="mihomo-version">—</span></span>
 </div></section></div>
 
