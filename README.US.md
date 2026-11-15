@@ -15,11 +15,13 @@ Open **VPN → Proxy Suite** after installation.
 
 | Page | Capabilities |
 | --- | --- |
-| Mihomo overview | Live rates, traffic totals, active connections, process memory, current forwarding, proxy groups, latency tests, runtime mode and service status |
+| Mihomo overview | Live rates, traffic totals, active connections, loaded routing rule count, process memory, current forwarding, proxy groups, latency tests, runtime mode and service status |
 | Settings | Native forms, write locks, change previews and discard, reapply, advanced options, YAML editing and validation, configuration comparison and DNS status |
 | Policy Routing | Current forwarding and rule details; interface policies, change previews, network bindings, configuration history and restore |
 | Subscription | Submit updates; view task state, last success, exit code and execution logs |
 | Log File | Filter loaded lines, pause refresh, switch sources and line counts, download or clear logs |
+
+**Loaded routing rules** in the overview summary counts top-level entries returned by the running Mihomo controller, including rule-provider references counted once each; it does not expand provider contents or count PF firewall rules. The count refreshes every 30 seconds while the page is visible. An empty list shows **0**; failed or malformed reads show **Unavailable**. The count describes loaded rules even in Global or Direct mode, not rule matches or traffic activity.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 

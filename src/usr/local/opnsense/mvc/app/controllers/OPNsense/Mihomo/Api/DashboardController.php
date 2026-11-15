@@ -58,6 +58,7 @@ class DashboardController extends ApiControllerBase
                 'meta' => (bool)($version['meta'] ?? false),
             ],
             'runtime' => [
+                'ruleCount' => Controller::ruleCount(),
                 'mode' => (string)($running['mode'] ?? ($configured['mode'] ?? '')),
                 'logLevel' => (string)($running['log-level'] ?? ($configured['log-level'] ?? '')),
                 'downloadTotal' => (int)($snapshot['downloadTotal'] ?? 0),

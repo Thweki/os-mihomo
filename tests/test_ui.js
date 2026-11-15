@@ -341,7 +341,8 @@ console.log('Recent settings applies: bounded history, captured labels, outcomes
 // Exercise the real overview request function, including its metadata cadence.
 const indexView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt'), 'utf8');
-const overviewFunction = indexView.match(/        function loadOverview\(done\) \{[\s\S]*?\n        \}/)[0];
+const overviewFunction = indexView.match(/        function loadOverview\(done\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 const overviewRequests = [];
 let now = 100000;
 const overviewContext = {
@@ -357,6 +358,52 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// Execute the real overview renderer and request callback for rule-count lifecycle.
+const ruleLabels = new Map();
+const ruleRequests = [];
+const ruleContext = {
+    Date: {now: () => now}, processMemory: null, lastHistorySave: now, lastMetadata: 0,
+    fmtCount: value => Number(value).toLocaleString('en-US'), fmtBytes: String,
+    trafficHistory: {add: () => ({down: null, up: null})}, drawTraffic: () => {},
+    ajaxGet: (url, data, done) => ruleRequests.push({data, done}),
+    $: selector => ({
+        text: value => ruleLabels.set(selector, value), data: () => false, val: () => {}
+    })
+};
+const overviewRenderer = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInNewContext(overviewRenderer + '\n' + overviewFunction, ruleContext);
+const renderRuleCount = (runtime, alive = true) => {
+    ruleContext.data = {runtime: {ready: true, ...runtime}, controller: {alive}};
+    vm.runInNewContext('renderOverview(data);', ruleContext);
+    return ruleLabels.get('#stat-rules');
+};
+assert(indexView.includes('id="stat-rules"'), 'Overview has a visible rule count');
+assert.equal(renderRuleCount({ruleCount: 1234}), '1,234');
+assert.equal(renderRuleCount({}), '1,234', 'Fast polls retain the metadata count');
+assert.equal(renderRuleCount({ruleCount: 0}), '0', 'An empty rules list is a valid zero');
+for (const ruleCount of [null, -1, 1.5, '12', {}, NaN]) {
+    assert.equal(renderRuleCount({ruleCount}), 'Unavailable', 'Unknown or malformed counts must not appear as zero');
+}
+assert.equal(renderRuleCount({ruleCount: 2}), '2', 'A config reload updates the count');
+assert.equal(renderRuleCount({ready: false}), 'Unavailable', 'Lost runtime clears the cached count');
+assert.equal(renderRuleCount({ruleCount: 2}, false), 'Unavailable', 'Stopped controller clears the count');
+assert.equal(renderRuleCount({ruleCount: 4}), '4', 'Controller recovery restores the count');
+vm.runInNewContext('loadOverview();', ruleContext);
+ruleRequests.at(-1).done(null, 'error');
+assert.equal(ruleLabels.get('#stat-rules'), 'Unavailable', 'Transport failure clears the cached count');
+now += 2000;
+vm.runInNewContext('loadOverview();', ruleContext);
+assert.equal(ruleRequests.at(-1).data.metadata, 1, 'Recovery requests fresh metadata');
+ruleRequests.at(-1).done({runtime: {ready: true, ruleCount: 7}, controller: {alive: true}}, 'success');
+assert.equal(ruleLabels.get('#stat-rules'), '7');
+now += 2000;
+vm.runInNewContext('loadOverview();', ruleContext);
+assert.equal(ruleRequests.at(-1).data.metadata, 0);
+ruleRequests.at(-1).done({runtime: {ready: true}, controller: {alive: true}}, 'success');
+assert.equal(ruleLabels.get('#stat-rules'), '7');
+console.log('Overview rule counts: formatting, zero, unavailable, reload, fast polling and recovery passed');
 
 // Run the dashboard render path with fresh API objects and the real DOM renderer.
 // Unchanged polling must retain nodes, focus and scroll without allocating DOM.

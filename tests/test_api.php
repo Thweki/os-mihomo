@@ -22,8 +22,9 @@ namespace OPNsense\Mihomo {
         public static string|false $body = '';
         public static int $status = 200;
         public static string $url = '';
+        public static array $urls = [];
     }
-    function curl_init($url) { ControllerHttpFixture::$url = $url; return $url; }
+    function curl_init($url) { ControllerHttpFixture::$url = $url; ControllerHttpFixture::$urls[] = $url; return $url; }
     function curl_setopt_array($handle, $options) { return true; }
     function curl_exec($handle) { return ControllerHttpFixture::$body; }
     function curl_getinfo($handle, $option) { return ControllerHttpFixture::$status; }
@@ -83,6 +84,48 @@ namespace {
         public function getQuery($name, $filter = null, $default = null) { return $default; }
         public function getJsonRawBody() { return []; }
     }
+    // Runtime counts come from the controller, never the on-disk YAML rules.
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        $dashboard = new \OPNsense\Mihomo\Api\DashboardController();
+        $dashboard->request = new Request();
+        $ruleFixtures = [
+            ['{"rules":[{"type":"Domain","payload":"example.invalid"},{"type":"RuleSet","payload":"provider"},{"type":"Match"}]}', 3],
+            ['{"rules":[]}', 0],
+            ['{"rules":[{"type":"Match"}]}', 1],
+            ['{}', null], ['{"rules":null}', null], ['{"rules":{}}', null],
+            ['{"rules":{"0":{"type":"Match"}}}', null],
+            ['{"rules":"unexpected"}', null], ['{"rules":false}', null],
+            ['null', null], ['42', null], ['"unexpected"', null],
+            ['[]', null], ['', null], ['{invalid', null], [false, null],
+        ];
+        foreach ($ruleFixtures as [$body, $expected]) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = $body;
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+            expect(\OPNsense\Mihomo\Controller::ruleCount() === $expected, 'Count rules, preserving zero versus unavailable');
+            expect(\OPNsense\Mihomo\ControllerHttpFixture::$url === 'http://127.0.0.1:9090/rules', 'Count reads runtime /rules');
+            $overview = $dashboard->overviewAction();
+            expect(array_key_exists('ruleCount', $overview['runtime']) && $overview['runtime']['ruleCount'] === $expected,
+                'Overview exposes only the runtime rule count, including unavailable');
+            expect(!array_key_exists('rules', $overview['runtime']), 'Rule payloads stay server-side');
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = '{"rules":[]}';
+        foreach ([401, 404, 503] as $status) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = $status;
+            expect($dashboard->overviewAction()['runtime']['ruleCount'] === null, 'Failed HTTP requests never report zero rules');
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+        \OPNsense\Mihomo\ControllerHttpFixture::$urls = [];
+        $dashboard->request = new class extends Request {
+            public function getQuery($name, $filter = null, $default = null) { return $name === 'metadata' ? '0' : $default; }
+        };
+        expect(!array_key_exists('ruleCount', $dashboard->overviewAction()['runtime']), 'Fast polls omit rule metadata');
+        expect(\OPNsense\Mihomo\ControllerHttpFixture::$urls === ['http://127.0.0.1:9090/connections'],
+            'Fast polls do not fetch the potentially large rule list');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Runtime rule counts, unavailable responses and metadata-only reads: passed\n";
     $guarded = [
         'Dashboard' => ['selectProxy', 'setMode', 'closeConnection', 'testDelay'],
         'Settings' => ['set', 'apply', 'import', 'configSet'],
