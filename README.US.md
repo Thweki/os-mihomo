@@ -23,6 +23,8 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+Each proxy row also shows up to **10 recent latency measurements** supplied by the controller, oldest to newest. Dots show successful tests; crosses mark timeouts and unknown measurements leave gaps. Each sparkline scales independently, so use the hover values (also available to screen readers) to compare proxies. The horizontal axis is test order, not elapsed time. Existing node/group latency-test buttons refresh the results; displaying history sends no additional probes and stores nothing in the browser. Untested proxies show a dash. History may reset when the core restarts or configuration reloads.
+
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)

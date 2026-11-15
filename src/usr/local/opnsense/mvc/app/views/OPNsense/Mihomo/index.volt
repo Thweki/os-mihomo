@@ -193,7 +193,8 @@
             if (snapshot === renderedGroups) { return; }
             MihomoUI.renderProxyGroups($box[0], groups, {
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
-                testNode: {{ lang._('Test node latency') | json_encode }}
+                testNode: {{ lang._('Test node latency') | json_encode }},
+                latencyHistory: {{ lang._('Recent latency, oldest first') | json_encode }}
             }, delayText, delayClass);
             renderedGroups = snapshot;
         }
@@ -468,6 +469,7 @@
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <p class="text-muted" style="padding:0 12px;">{{ lang._('Recent latency: up to 10 controller tests, oldest first. Each chart has its own scale; crosses mark timeouts. Hover for values. No extra tests are run.') }}</p>
             <div style="padding: 12px;" id="proxy-groups">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>
             </div>

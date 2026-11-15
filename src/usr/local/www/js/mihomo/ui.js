@@ -118,6 +118,42 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
+    function latencySparkline(doc, history, label, delayText) {
+        const samples = Array.isArray(history) ? history.slice(-10).map(value =>
+            typeof value === 'number' && Number.isFinite(value) ? value : null) : [];
+        const description = label + ': ' + (samples.length ? samples.map(delayText).join(' → ') : delayText(null));
+        const wrapper = element(doc, 'span', {title: description, style: 'display:inline-flex;flex:0 0 80px'});
+        const svg = (tag, attrs) => {
+            const node = doc.createElementNS('http://www.w3.org/2000/svg', tag);
+            Object.keys(attrs).forEach(key => node.setAttribute(key, String(attrs[key])));
+            return node;
+        };
+        const chart = svg('svg', {width: 80, height: 24, viewBox: '0 0 80 24', role: 'img', 'aria-label': description});
+        const maximum = Math.max(1, ...samples.filter(value => value > 0));
+        let points = [];
+        const flush = () => {
+            if (points.length > 1) { chart.appendChild(svg('polyline', {points: points.join(' '), fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5})); }
+            points = [];
+        };
+        samples.forEach((value, index) => {
+            const x = 4 + index * 8;
+            if (value === null || value <= 0) {
+                flush();
+                // Crosses distinguish failed tests from fast responses; unknown samples are gaps.
+                if (value !== null) { chart.appendChild(svg('path', {d: 'M' + (x - 2) + ' 18l4 4m0 -4l-4 4', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5})); }
+                return;
+            }
+            const y = 20 - value / maximum * 16;
+            points.push(x + ',' + y);
+            chart.appendChild(svg('circle', {cx: x, cy: y, r: 1.5, fill: 'currentColor'}));
+        });
+        flush();
+        if (!samples.length || samples.every(value => value === null)) {
+            chart.appendChild(svg('path', {d: 'M36 12h8', stroke: 'currentColor'}));
+        }
+        wrapper.appendChild(chart);
+        return wrapper;
+    }
     function renderProxyGroups(container, groups, labels, delayText, delayClass) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         const scroll = new Map();
@@ -150,6 +186,7 @@
                 select.appendChild(el('span', {}, ' ' + memberName + ' '));
                 select.appendChild(el('small', {class: 'text-muted'}, decodeApiText(member.type)));
                 item.appendChild(select);
+                item.appendChild(latencySparkline(doc, member.delay_history, labels.latencyHistory, delayText));
                 item.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm ' + delayClass(member.delay)}, delayText(member.delay)));
                 const testMember = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-test', 'data-name': memberName,
                     'data-focus-key': JSON.stringify(['test', name, memberName]), 'aria-label': labels.testNode + ': ' + memberName, title: labels.testNode});

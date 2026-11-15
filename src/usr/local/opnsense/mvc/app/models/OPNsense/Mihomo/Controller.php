@@ -154,8 +154,9 @@ class Controller
             $members = [];
             foreach ($node['all'] as $member) {
                 $memberNode = $proxies[$member] ?? [];
+                $history = is_array($memberNode['history'] ?? null) ? $memberNode['history'] : [];
                 $delay = null;
-                foreach (array_reverse($memberNode['history'] ?? []) as $hist) {
+                foreach (array_reverse($history) as $hist) {
                     if (isset($hist['delay'])) {
                         $delay = (int)$hist['delay'];
                         break;
@@ -165,6 +166,11 @@ class Controller
                     'name' => $member,
                     'type' => (string)($memberNode['type'] ?? ''),
                     'delay' => $delay,
+                    // Controller measurements, oldest first; never synthesize samples from polls.
+                    'delay_history' => array_map(static function ($sample) {
+                        $value = is_array($sample) ? ($sample['delay'] ?? null) : null;
+                        return (is_int($value) || is_float($value)) && is_finite((float)$value) ? $value : null;
+                    }, array_slice($history, -10)),
                     'selected' => ($member === ($node['now'] ?? null)),
                     'alive' => $delay !== null && $delay > 0,
                 ];

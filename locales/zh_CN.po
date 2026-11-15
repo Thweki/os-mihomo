@@ -1389,3 +1389,11 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Recent latency, oldest first"
+msgstr "最近延迟（从旧到新）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Recent latency: up to 10 controller tests, oldest first. Each chart has its own scale; crosses mark timeouts. Hover for values. No extra tests are run."
+msgstr "最近延迟：最多显示 10 次内核测试，从旧到新排列。各图独立缩放，叉号表示超时。悬停可查看数值，不会额外发起测试。"
