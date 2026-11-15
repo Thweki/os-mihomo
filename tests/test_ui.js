@@ -280,3 +280,86 @@ overviewRequests[1].done({runtime: {ready: true}}, 'success');
 now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
+
+// Run the actual opt-in initializer: storage and DOM are boundaries, not copied logic.
+const compactInitializer = indexView.match(/        function initCompactOverview\(\) \{[\s\S]*?\n        \}/)[0];
+function compactPage(saved, failure) {
+    const values = new Map(saved === undefined ? [] : [['mihomo.overview.compact.v1', saved]]);
+    const writes = [], classes = new Set();
+    let change, resizes = 0;
+    const toggle = {checked: false, addEventListener(event, handler) {
+        assert.equal(event, 'change'); change = handler;
+    }};
+    const root = {classList: {toggle(name, enabled) {
+        assert.equal(name, 'mihomo-compact');
+        if (enabled) { classes.add(name); } else { classes.delete(name); }
+    }}};
+    const storage = {
+        getItem(key) { assert.equal(key, 'mihomo.overview.compact.v1'); return values.get(key) ?? null; },
+        setItem(key, value) { writes.push(['set', key, value]); values.set(key, value); },
+        removeItem(key) { writes.push(['remove', key]); values.delete(key); }
+    };
+    if (failure && failure !== 'access') {
+        storage[failure] = () => { throw new Error('Storage unavailable'); };
+    }
+    const context = {
+        window: {get localStorage() {
+            if (failure === 'access') { throw new Error('Storage blocked'); }
+            return storage;
+        }},
+        document: {getElementById(id) {
+            assert(['compact-overview', 'mihomo-overview'].includes(id));
+            return id === 'compact-overview' ? toggle : root;
+        }},
+        gTrafficChart: null
+    };
+    vm.runInNewContext(compactInitializer + '\ninitCompactOverview();', context);
+    assert.equal(writes.length, 0, 'Opening the page must not write a preference');
+    context.gTrafficChart = {resize() { resizes++; }};
+    return {toggle, values, writes, classes, resizes: () => resizes,
+        change(enabled) { toggle.checked = enabled; change(); }};
+}
+for (const saved of [undefined, '', '0', 'false', 'true', 'yes', '{}']) {
+    const page = compactPage(saved);
+    assert.equal(page.toggle.checked, false, 'Only an explicit opt-in enables the experiment');
+    assert.equal(page.classes.size, 0);
+}
+const compact = compactPage();
+compact.change(true);
+assert.equal(compact.toggle.checked, true);
+assert(compact.classes.has('mihomo-compact'));
+assert.deepEqual(compact.writes, [['set', 'mihomo.overview.compact.v1', '1']]);
+const restoredCompact = compactPage(compact.values.get('mihomo.overview.compact.v1'));
+assert.equal(restoredCompact.toggle.checked, true);
+assert(restoredCompact.classes.has('mihomo-compact'));
+compact.change(false);
+assert.equal(compact.classes.size, 0);
+assert.equal(compact.values.size, 0, 'Disabling removes the preference instead of storing false');
+assert.deepEqual(compact.writes.at(-1), ['remove', 'mihomo.overview.compact.v1']);
+assert.equal(compact.resizes(), 2, 'Both directions resize the existing chart');
+assert.equal(compactPage(compact.values.get('mihomo.overview.compact.v1')).toggle.checked, false);
+for (const failure of ['access', 'getItem', 'setItem', 'removeItem']) {
+    const page = compactPage(undefined, failure);
+    page.change(true);
+    assert(page.classes.has('mihomo-compact'), failure + ' must not prevent enabling');
+    page.change(false);
+    assert.equal(page.classes.size, 0, failure + ' must not prevent disabling');
+    assert.equal(page.resizes(), 2);
+}
+// The native checkbox is unchecked, labeled and wired; every CSS rule is opt-in.
+assert(indexView.includes('        initCompactOverview();'));
+assert.match(indexView, /<div id="mihomo-overview">/);
+assert.match(indexView, /<label for="compact-overview"/);
+const compactInput = indexView.match(/<input[^>]*id="compact-overview"[^>]*>/)[0];
+assert(compactInput.includes('type="checkbox"') && !compactInput.includes('checked'));
+assert(compactInput.includes('aria-controls="mihomo-overview"'));
+const compactCSS = indexView.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\/\*[\s\S]*?\*\//g, '');
+const selectors = Array.from(compactCSS.matchAll(/([^{}]+)\{/g), match => match[1].trim())
+    .filter(selector => !selector.startsWith('@media'));
+assert(selectors.length > 0);
+assert(selectors.every(selector => selector.startsWith('#mihomo-overview.mihomo-compact ')));
+assert.match(compactCSS, /#traffic-chart-container\s*\{ height: 140px !important;/);
+assert.match(indexView, /id="traffic-chart-container" style="height: 200px;"/);
+assert.match(compactCSS, /@media \(min-width: 1200px\)[\s\S]*width: 33\.333333%;/);
+assert(!/display:\s*none|visibility:\s*hidden/.test(compactCSS), 'Compact mode must not hide controls or status');
+console.log('Experimental compact overview: opt-in, persistence/removal, storage failures, chart resize and scoped styles passed');

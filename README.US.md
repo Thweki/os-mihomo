@@ -23,6 +23,8 @@ Open **VPN → Proxy Suite** after installation.
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+**Experimental compact overview (default off):** Enable **Compact overview (experimental)** at the top of the overview to fit more metrics and proxy groups on screen. It reduces card spacing and chart height, with three proxy-group columns on wide screens and one on phones. All status information and controls remain available. This browser stores only the enabled layout preference; disabling removes it. If browser storage is unavailable, the toggle still works for the current page. It does not change appliance settings or polling.
+
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)

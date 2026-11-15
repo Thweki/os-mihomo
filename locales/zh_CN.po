@@ -1389,3 +1389,11 @@ msgstr "开始时间"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr "结果"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Browser-only layout preference. Turn off to forget it."
+msgstr "仅在此浏览器保存布局偏好，关闭后不再记住。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Compact overview (experimental)"
+msgstr "紧凑概览（实验性）"

@@ -1805,3 +1805,11 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
 msgid "Outcome"
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Browser-only layout preference. Turn off to forget it."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Compact overview (experimental)"
+msgstr ""
