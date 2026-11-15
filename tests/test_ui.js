@@ -166,7 +166,9 @@ const names = ['name" data-unexpected="value', "single' quote", '<tag>&value', '
 const encode = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 const groups = names.map(name => ({name: encode(name), type: 'Selector', members: [{name: encode(name), type: 'test', selected: true, delay: 20}]}));
 const latencyText = value => value === null ? 'Not tested' : value <= 0 ? 'Timeout' : value + ' ms';
-const render = () => UI.renderProxyGroups(groupBox, groups, {testGroup: 'Test group', testNode: 'Test node', latencyHistory: 'Recent latency, oldest first'}, latencyText, () => 'label-success');
+const render = () => UI.renderProxyGroups(groupBox, groups, {
+    testGroup: 'Test group', testNode: 'Test node', memberCount: 'Members: %s', latencyHistory: 'Recent latency, oldest first'
+}, latencyText, () => 'label-success');
 render();
 const lists = groupBox.querySelectorAll('ul[data-group]');
 assert.deepEqual(lists.map(node => node.getAttribute('data-group')), names);
@@ -207,6 +209,26 @@ assert(!charts[3].attrs['aria-label'].includes('<script>'));
 assert.equal(groupBox.querySelectorAll('span[title]')[0].attrs.title, charts[0].attrs['aria-label']);
 assert.equal(groups[0].members[0].delay_history.length, 12, 'Rendering does not mutate API data');
 console.log('Latency sparklines: bounded samples, gaps, timeouts, scale and accessible values passed');
+
+// Counts describe direct entries, not recursively expanded or healthy proxies.
+const countBox = doc.createElement('div');
+const countGroups = [
+    {name: encode('<Group>&'), type: 'Selector', members: [
+        {name: 'Nested', type: 'URLTest'}, {name: 'DIRECT', type: 'Direct'},
+        {name: 'REJECT', type: 'Reject'}, {name: 'Offline', delay: 0}
+    ]},
+    {name: 'Nested', type: 'URLTest', members: [{name: 'Shared'}]},
+    {name: 'Empty', members: []}, {name: 'Missing'}, {name: 'Null', members: null}
+];
+const originalCountGroups = JSON.stringify(countGroups);
+UI.renderProxyGroups(countBox, countGroups, {memberCount: '成员数：%s'}, String, () => '');
+const countBadges = box => box.querySelectorAll('span[data-member-count]');
+assert.deepEqual(countBadges(countBox).map(node => node.textContent),
+    ['成员数：4', '成员数：1', '成员数：0', '成员数：0', '成员数：0']);
+assert.deepEqual(countBadges(countBox).map(node => node.attrs['data-member-count']), ['4', '1', '0', '0', '0']);
+assert.equal(JSON.stringify(countGroups), originalCountGroups, 'Counting must not mutate API data');
+assert.equal(countBox.children[0].children[0].children[0].children[0].children[0].textContent, '<Group>& ');
+console.log('Group member counts: direct entries, empty/missing members, translated text and unchanged data passed');
 
 // Fake timers prove non-overlap, hidden pause/resume, exponential retry and recovery.
 let hidden = false, callback, calls = 0, scheduled = null;
@@ -361,25 +383,124 @@ now += 30000; vm.runInNewContext('loadOverview();', overviewContext);
 assert.equal(overviewRequests[2].data.metadata, 1);
 console.log('Settings stale-write/version handoff, partial-result feedback and overview metadata cadence: all checks passed');
 
+// Exercise the actual mode hint, overview renderer and mode-change handler together.
+const translateModeScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
+    (_, label) => JSON.stringify(label));
+const modeControls = new Map(), modeWrites = [], modeTimeouts = [];
+let modeRefreshes = 0, modeFailures = 0;
+function modeControl(selector) {
+    if (typeof selector !== 'string') { return selector; }
+    if (!modeControls.has(selector)) {
+        modeControls.set(selector, {
+            value: '', label: '', state: {}, textWrites: 0,
+            val(value) { if (arguments.length === 0) { return this.value; } this.value = value; return this; },
+            text(value) { if (arguments.length === 0) { return this.label; } this.textWrites++; this.label = value; return this; },
+            data(key, value) { if (arguments.length === 1) { return this.state[key]; } this.state[key] = value; return this; },
+            change(handler) { this.handler = handler; }, empty() { this.label = ''; }
+        });
+    }
+    return modeControls.get(selector);
+}
+const modeContext = {
+    $: modeControl, Date: {now: () => 1000}, processMemory: null,
+    fmtCount: String, fmtBytes: String, fmtRate: String,
+    trafficHistory: {add: () => ({down: null, up: null})}, drawTraffic: () => {},
+    overviewPoller: {refresh: () => { modeRefreshes++; }},
+    ajaxCall: (url, data, done) => modeWrites.push({url, data, done}),
+    setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; }
+};
+const modeScript = indexView.match(/        function renderModeHint\(\) \{[\s\S]*?\n        \}\);/)[0];
+const modeOverviewScript = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0];
+vm.runInNewContext('let lastHistorySave = 1000, lastMetadata = 0;\n'
+    + translateModeScript(modeScript + '\n' + modeOverviewScript), modeContext);
+const modeSelect = modeControl('#mode-select'), modeHint = modeControl('#mode-hint');
+const modeLabels = {
+    rule: 'Rule-based: Mihomo follows matching rules to route or block traffic.',
+    global: 'Global: traffic handled by Mihomo uses the GLOBAL group selection.',
+    direct: 'Direct: traffic handled by Mihomo connects without a proxy.'
+};
+function pollMode(runtime) { modeContext.payload = {runtime, controller: {alive: true}}; vm.runInNewContext('renderOverview(payload)', modeContext); }
+for (const [mode, label] of Object.entries(modeLabels)) {
+    pollMode({mode});
+    assert.equal(modeHint.label, label);
+    const hintWrites = modeHint.textWrites;
+    pollMode({ready: true});
+    assert.equal(modeHint.label, label, 'Lightweight polls retain the displayed mode explanation');
+    pollMode({mode});
+    assert.equal(modeHint.textWrites, hintWrites, 'Unchanged polls do not repeat live-region announcements');
+}
+for (const mode of ['', null, 'unknown', '__proto__', '<script>']) {
+    pollMode({mode});
+    assert.equal(modeHint.label, '', 'Unknown modes clear old hints without rendering API text');
+}
+pollMode({mode: 'rule'});
+modeSelect.val('global'); modeSelect.handler.call(modeSelect);
+assert.equal(modeHint.label, modeLabels.global, 'A selection immediately explains the requested mode');
+assert.equal(modeWrites[0].url, '/api/mihomo/dashboard/set_mode');
+assert.equal(modeWrites[0].data.mode, 'global');
+pollMode({mode: 'rule'});
+assert.equal(modeHint.label, modeLabels.global, 'Pending changes keep selector and hint aligned');
+modeWrites[0].done({status: 'failed'}, 'success');
+assert.equal(modeFailures, 1, 'Hints must not suppress switch failures');
+modeTimeouts.shift()(); pollMode({mode: 'rule'});
+assert.equal(modeHint.label, modeLabels.rule, 'The hint follows the refreshed mode after a failed switch');
+modeSelect.val('direct'); modeSelect.handler.call(modeSelect);
+modeWrites[1].done({status: 'ok'}, 'success');
+modeTimeouts.shift()(); pollMode({mode: 'direct'});
+assert.equal(modeHint.label, modeLabels.direct);
+assert.equal(modeRefreshes, 4);
+assert.equal(modeWrites.length, 2, 'Rendering hints introduces no mode writes');
+assert.match(indexView, /id="mode-select"[^>]*aria-describedby="mode-hint"/);
+assert.match(indexView, /id="mode-hint"[^>]*role="status"/);
+console.log('Mode hints: all modes, metadata gaps, unknown values, selection, failure/recovery and accessibility passed');
+
 // Run the dashboard render path with fresh API objects and the real DOM renderer.
 // Unchanged polling must retain nodes, focus and scroll without allocating DOM.
 const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null;\n)?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
-    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }, createElementNS: doc.createElementNS};
 const pollingBox = pollingDoc.createElement('div');
+let favoriteNotice = '', testsDisabled = false, favoriteHandler, collapseHandler, testGroupHandler;
+const dashboardStorage = new Map();
+const dashboardFavorites = new UI.ProxyFavorites(() => ({
+    getItem: key => dashboardStorage.get(key) || null,
+    setItem: (key, value) => dashboardStorage.set(key, value)
+}));
 const groupContext = vm.createContext({
     $: selector => {
+        if (selector instanceof DomNode) {
+            return {attr: key => selector.getAttribute(key), closest: target => {
+                assert.equal(target, '.content-box');
+                const card = pollingBox.children[0].children.map(column => column.children[0]).find(node => node.contains(selector));
+                return {find: target => {
+                    assert.equal(target, '.cmd-test');
+                    return {each: fn => card.querySelectorAll('button[data-name]')
+                        .filter(node => node.attrs.class.includes(' cmd-test')).forEach(node => fn.call(node))};
+                }};
+            }};
+        }
+        if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
+        if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
+            return {prop: (key, value) => { assert.equal(key, 'disabled'); testsDisabled = value; }};
+        }
         assert.equal(selector, '#proxy-groups');
-        return {0: pollingBox, html: text => {
+        return {0: pollingBox, on: (event, target, handler) => {
+            assert.equal(event, 'click');
+            if (target === '.cmd-collapse-group') { collapseHandler = handler; }
+            else if (target === '.cmd-test-group') { testGroupHandler = handler; }
+            else { assert.equal(target, '.cmd-favorite'); favoriteHandler = handler; }
+        }, html: text => {
             const placeholder = pollingDoc.createElement('placeholder');
             placeholder.textContent = text;
             pollingBox.replaceChildren(placeholder);
         }};
     },
-    MihomoUI: UI, delayText: value => value + ' ms', delayClass: () => 'label-success'
+    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false,
+    delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
-vm.runInContext(renderGroupsScript, groupContext);
+const collapseStateScript = indexView.match(/        const collapsedGroups = new Set\(\);[^\n]*/)[0];
+vm.runInContext(collapseStateScript + '\n' + renderGroupsScript, groupContext);
 const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
     {name: 'First', type: 'test', selected: true, delay: 20},
     {name: 'Second', type: 'test', selected: false, delay: 30}
@@ -389,6 +510,7 @@ function pollGroups(response = groupResponse) {
     vm.runInContext('renderGroups(response);', groupContext);
 }
 pollGroups();
+assert.deepEqual(countBadges(pollingBox).map(node => node.textContent), ['Members: 2']);
 const firstRow = pollingBox.children[0];
 const focusedButton = pollingBox.querySelectorAll('button[data-focus-key]')[1];
 pollingDoc.activeElement = focusedButton;
@@ -410,16 +532,194 @@ for (const change of [
     const previousRow = pollingBox.children[0];
     change(); pollGroups();
     assert.notEqual(pollingBox.children[0], previousRow, 'Changed proxy data must render');
+    assert.equal(countBadges(pollingBox)[0].textContent, 'Members: ' + groupResponse.groups[0].members.length);
 }
 // Both placeholder states invalidate the snapshot, even when recovery returns
 // exactly the same groups that were displayed before the interruption.
 for (const placeholder of [{ready: false}, {ready: true, groups: []}]) {
     pollGroups(placeholder);
     assert.equal(pollingBox.children[0].tagName, 'placeholder');
+    assert.equal(countBadges(pollingBox).length, 0, 'Unavailable/absent groups must not retain stale counts');
     pollGroups();
     assert.equal(pollingBox.children[0].tagName, 'div', 'Recovery must replace the placeholder');
+    assert.equal(countBadges(pollingBox)[0].textContent, 'Members: 1');
     const recoveredRow = pollingBox.children[0];
     pollGroups();
     assert.equal(pollingBox.children[0], recoveredRow);
 }
 console.log('Proxy polling skips unchanged DOM, preserves focus/scroll and renders changes/recovery: all checks passed');
+
+// Favorites store exact decoded names, independently for groups and proxies.
+let savedFavorites = null;
+const favoriteStorage = {
+    getItem(key) { assert.equal(key, 'mihomo.favorites.v1'); return savedFavorites; },
+    setItem(key, value) { assert.equal(key, 'mihomo.favorites.v1'); savedFavorites = value; }
+};
+const favorites = new UI.ProxyFavorites(() => favoriteStorage);
+assert.equal(favorites.has('groups', 'Group'), false);
+for (const name of [...names, '__proto__', 'literal &gt;', 'same']) {
+    assert.equal(favorites.toggle('proxies', name), true);
+    assert(favorites.has('proxies', name));
+    assert(!favorites.has('groups', name));
+}
+favorites.toggle('groups', 'same');
+const reloadedFavorites = new UI.ProxyFavorites(() => favoriteStorage);
+assert(reloadedFavorites.has('groups', 'same'));
+assert(reloadedFavorites.has('proxies', 'literal &gt;'));
+reloadedFavorites.toggle('proxies', 'same');
+assert(!new UI.ProxyFavorites(() => favoriteStorage).has('proxies', 'same'));
+assert(reloadedFavorites.has('groups', 'same'));
+for (const corrupt of ['{', 'null', '42', '[]', '{"groups":{},"proxies":[null,3,{},"valid"]}']) {
+    savedFavorites = corrupt;
+    const recovered = new UI.ProxyFavorites(() => favoriteStorage);
+    assert.equal(recovered.has('groups', 'Group'), false);
+    assert.equal(recovered.toggle('groups', 'Group'), true);
+}
+for (const unavailable of [
+    () => { throw new Error('Storage blocked'); },
+    () => ({getItem() { return null; }, setItem() { throw new Error('Quota exceeded'); }})
+]) {
+    const temporary = new UI.ProxyFavorites(unavailable);
+    assert.equal(temporary.toggle('proxies', 'temporary'), false);
+    assert(temporary.has('proxies', 'temporary'), 'Storage failure still supports this page visit');
+}
+console.log('Favorites persistence, exact names, independent kinds and unavailable storage: all checks passed');
+
+// Real star controls and real dashboard click handler: no controller writes or reads.
+// ajaxCall/ajaxGet are deliberately absent, so accidental requests fail this test.
+const favoriteClickScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-favorite',[\s\S]*?\n        \}\);/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInContext(favoriteClickScript, groupContext);
+const specialName = names[0] + ' &gt; 中文';
+const favoriteResponse = {ready: true, groups: [
+    {name: 'First group', members: [{name: 'First proxy', selected: true}, {name: encode(specialName)}, {name: 'Last proxy'}]},
+    {name: encode(specialName), members: [{name: 'First proxy'}, {name: encode(specialName), selected: true}]},
+    {name: 'Last group', members: []}
+]};
+const untouchedResponse = JSON.stringify(favoriteResponse);
+const starButtons = () => pollingBox.querySelectorAll('button[data-kind]');
+function star(kind, name, occurrence = 0) {
+    const button = starButtons().filter(node => node.attrs['data-kind'] === kind && node.attrs['data-name'] === name)[occurrence];
+    assert(button);
+    assert.equal(button.attrs.type, 'button', 'Stars support native keyboard activation');
+    pollingDoc.activeElement = button;
+    favoriteHandler.call(button);
+    assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], button.attrs['data-focus-key']);
+    assert(pollingBox.contains(pollingDoc.activeElement), 'Focus follows the reordered control');
+}
+const displayedGroups = () => pollingBox.querySelectorAll('ul[data-group]').map(node => node.attrs['data-group']);
+const displayedMembers = () => pollingBox.querySelectorAll('ul[data-group]').map(node =>
+    node.querySelectorAll('li[data-member]').map(member => member.attrs['data-member']));
+pollGroups(favoriteResponse);
+assert(starButtons().every(button => button.attrs['aria-pressed'] === 'false'));
+star('proxies', specialName);
+assert.equal(favoriteNotice, '');
+assert.deepEqual(displayedMembers(), [[specialName, 'First proxy', 'Last proxy'], [specialName, 'First proxy'], []]);
+assert.deepEqual(displayedGroups(), ['First group', specialName, 'Last group'], 'Proxy favorites do not star groups');
+assert.equal(starButtons().filter(button => button.attrs['aria-pressed'] === 'true').length, 2, 'Shared proxies are starred everywhere');
+star('groups', specialName);
+assert.deepEqual(displayedGroups(), [specialName, 'First group', 'Last group']);
+assert.deepEqual(countBadges(pollingBox).map(node => node.textContent), ['Members: 2', 'Members: 3', 'Members: 0'],
+    'Counts stay with their groups when favorites reorder cards and members');
+pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop = 88;
+const starredRow = pollingBox.children[0];
+pollGroups(favoriteResponse);
+assert.equal(pollingBox.children[0], starredRow, 'Identical polls retain favorite ordering without rendering');
+groupContext.testing = true;
+star('proxies', 'Last proxy');
+assert.equal(testsDisabled, true, 'Starring during latency tests must retain disabled probe controls');
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 88);
+groupContext.testing = false;
+const selectedNames = () => pollingBox.querySelectorAll('li[data-member]').filter(node => node.attrs.class.includes(' active'))
+    .map(node => node.attrs['data-member']).sort();
+assert.deepEqual(selectedNames(), ['First proxy', specialName].sort(), 'Starring leaves current selection unchanged');
+assert.equal(JSON.stringify(favoriteResponse), untouchedResponse, 'Display ordering must not mutate controller data');
+pollGroups({ready: true, groups: [{name: 'Temporary', members: []}]});
+pollGroups({ready: false});
+pollGroups(favoriteResponse);
+assert.deepEqual(displayedGroups(), [specialName, 'First group', 'Last group'], 'Missing groups retain preferences on recovery');
+assert.deepEqual(displayedMembers(), [[specialName, 'First proxy'], [specialName, 'Last proxy', 'First proxy'], []]);
+star('groups', specialName);
+star('proxies', specialName, 1);
+star('proxies', 'Last proxy');
+assert.deepEqual(displayedGroups(), ['First group', specialName, 'Last group']);
+assert.deepEqual(displayedMembers(), [['First proxy', specialName, 'Last proxy'], ['First proxy', specialName], []], 'Unstarring restores controller order');
+assert(starButtons().every(button => button.attrs['aria-pressed'] === 'false'));
+dashboardFavorites.storage = () => { throw new Error('Storage denied'); };
+star('groups', specialName);
+assert(favoriteNotice.includes('only for this page visit'));
+assert.equal(displayedGroups()[0], specialName);
+assert(new UI.ProxyFavorites(() => favoriteStorage).has('groups', 'Group'), 'Other storage remains independent');
+console.log('Favorites dashboard clicks, stable ordering, shared proxies, polling/recovery, focus, scroll and unchanged selection: all checks passed');
+
+// Exercise the real collapse handler and renderer. No API or storage is available
+// to this handler: folding cards must be a purely local display operation.
+const collapseClickScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-collapse-group',[\s\S]*?\n        \}\);/)[0];
+vm.runInContext(collapseClickScript, groupContext);
+const foldNames = [...names, '__proto__', 'literal &gt;', 'Empty'];
+const foldResponse = {ready: true, groups: foldNames.map(name => ({name: encode(name), type: 'Selector',
+    members: name === 'Empty' ? [] : [{name: 'Selected', selected: true, delay: 20}, {name: 'Other', delay: 40}]}))};
+const originalFoldResponse = JSON.stringify(foldResponse);
+const collapseButtons = () => pollingBox.querySelectorAll('button[aria-expanded]');
+const groupList = name => pollingBox.querySelectorAll('ul[data-group]').find(node => node.attrs['data-group'] === name);
+function fold(name) {
+    const button = collapseButtons().find(node => node.attrs['data-group'] === name);
+    assert.equal(button.attrs.type, 'button', 'Collapse supports native Enter/Space activation');
+    pollingDoc.activeElement = button;
+    collapseHandler.call(button);
+    assert(pollingBox.contains(pollingDoc.activeElement));
+    assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], button.attrs['data-focus-key']);
+}
+pollGroups(foldResponse);
+assert(collapseButtons().every(button => button.attrs['aria-expanded'] === 'true'), 'All groups start expanded');
+for (const name of foldNames) {
+    fold(name);
+    const list = groupList(name), button = pollingDoc.activeElement;
+    assert.equal(list.getAttribute('hidden'), '', 'Collapsed member controls are hidden from display and keyboard navigation');
+    assert.equal(button.attrs['aria-expanded'], 'false');
+    assert.equal(button.attrs['aria-controls'], list.attrs.id);
+    assert.equal(button.attrs['aria-label'], 'Expand group: ' + name);
+    const card = pollingBox.children[0].children.map(column => column.children[0]).find(node => node.contains(list));
+    assert(card.attrs.style.includes('height:auto;'), 'Collapsed cards release their fixed height');
+    assert.equal(card.querySelectorAll('span[data-member-count]')[0].textContent, name === 'Empty' ? 'Members: 0' : 'Members: 2');
+}
+const collapsedRow = pollingBox.children[0];
+pollGroups(foldResponse);
+assert.equal(pollingBox.children[0], collapsedRow, 'Unchanged polls retain collapsed DOM');
+assert.equal(JSON.stringify(foldResponse), originalFoldResponse);
+foldResponse.groups[0].members[0].delay = 90;
+foldResponse.groups[0].members[0].selected = false;
+foldResponse.groups[0].members[1].selected = true;
+pollGroups(foldResponse);
+star('groups', foldNames[0]);
+assert.equal(displayedGroups()[0], foldNames[0]);
+assert(collapseButtons().every(button => button.attrs['aria-expanded'] === 'false'), 'Changed polls and favorites preserve folds by exact name');
+for (const placeholder of [{ready: false}, {ready: true, groups: []}, {ready: true, groups: [{name: 'New group'}]}]) {
+    pollGroups(placeholder);
+    if (placeholder.groups && placeholder.groups.length) {
+        assert.equal(collapseButtons()[0].attrs['aria-expanded'], 'true', 'New groups start expanded');
+    }
+    pollGroups(foldResponse);
+    assert(collapseButtons().every(button => button.attrs['aria-expanded'] === 'false'), 'Missing groups keep their choice on recovery');
+}
+// The existing group-test click path must include hidden members, not just visible rows.
+let foldedTestNames;
+groupContext.testNodes = values => { foldedTestNames = Array.from(values); };
+const testGroupScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-test-group',[\s\S]*?\n        \}\);/)[0];
+vm.runInContext(testGroupScript, groupContext);
+const groupTest = pollingBox.querySelectorAll('button[data-group]').find(button =>
+    button.attrs.class.includes('cmd-test-group') && button.attrs['data-group'] === foldNames[0]);
+testGroupHandler.call(groupTest);
+assert.deepEqual(foldedTestNames, ['Selected', 'Other']);
+groupContext.testing = true;
+fold(foldNames[0]);
+assert.equal(testsDisabled, true, 'Expanding during tests keeps probe controls disabled');
+groupContext.testing = false;
+assert.equal(groupList(foldNames[0]).getAttribute('hidden'), null);
+assert.equal(pollingDoc.activeElement.attrs['aria-label'], 'Collapse group: ' + foldNames[0]);
+assert.equal(groupList(foldNames[0]).querySelectorAll('li[data-member]')[1].attrs.class, 'list-group-item active',
+    'Expanding shows the latest controller selection');
+assert.equal(groupList(foldNames[1]).getAttribute('hidden'), '', 'Groups expand independently');
+// A new page runs the actual initializer again; no browser persistence is used.
+assert.equal(vm.runInNewContext(collapseStateScript + '\ncollapsedGroups.size;'), 0);
+console.log('Group collapse: defaults, exact names, accessibility, focus, independent toggles, polling/recovery, favorites and full-group tests passed');
