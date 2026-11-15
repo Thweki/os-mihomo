@@ -172,6 +172,7 @@
          * 代理分组
          * ------------------------------------------------------------------ */
         const favorites = new MihomoUI.ProxyFavorites();
+        const collapsedGroups = new Set(); // Page visit only; reload starts expanded.
         let latestGroups = null;
         let renderedGroups = null;
         function renderGroups(data) {
@@ -196,16 +197,25 @@
             if (snapshot === renderedGroups) { return; }
             MihomoUI.renderProxyGroups($box[0], groups, {
                 memberCount: {{ lang._('Members: %s') | json_encode }},
+                collapseGroup: {{ lang._('Collapse group') | json_encode }},
+                expandGroup: {{ lang._('Expand group') | json_encode }},
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }},
                 favoriteGroup: {{ lang._('Favorite group') | json_encode }},
                 favoriteProxy: {{ lang._('Favorite proxy') | json_encode }}
-            }, delayText, delayClass, favorites);
+            }, delayText, delayClass, favorites, collapsedGroups);
             if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
 
         let testing = false;
+        $('#proxy-groups').on('click', '.cmd-collapse-group', function () {
+            const name = $(this).attr('data-group');
+            if (collapsedGroups.has(name)) { collapsedGroups.delete(name); }
+            else { collapsedGroups.add(name); }
+            renderedGroups = null;
+            if (latestGroups) { renderGroups(latestGroups); }
+        });
         $('#proxy-groups').on('click', '.cmd-favorite', function () {
             const saved = favorites.toggle($(this).attr('data-kind'), $(this).attr('data-name'));
             $('#proxy-favorites-state').text(saved ? '' : {{ lang._('Favorites could not be saved in this browser. They will last only for this page visit.') | json_encode }});
