@@ -29,15 +29,17 @@ console.log('UI history, formatting and API text decoding: all checks passed');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const controls = new Map(), requests = [], fakeDocument = {hidden: false};
+let logTimer, logDecodes = 0;
 function control(selector) {
     if (!controls.has(selector)) {
         const item = {value: '', checked: false, label: '', handlers: {}, top: 100,
-            0: {scrollHeight: 100}, val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
-            text(value) { this.label = value; return this; },
+            writes: 0, textWrites: 0, layoutReads: 0, scrollWrites: 0,
+            0: {scrollHeight: 100}, val(value) { if (value === undefined) { return this.value; } this.writes++; this.value = value; return this; },
+            text(value) { this.textWrites++; this.label = value; return this; },
             prop(key) { return this[key]; }, on(event, fn) { this.handlers[event] = fn; return this; },
             change(fn) { return this.on('change', fn); }, click(fn) { return this.on('click', fn); },
-            scrollTop(value) { if (value === undefined) { return this.top; } this.top = value; return this; },
-            outerHeight() { return 50; }};
+            scrollTop(value) { if (value === undefined) { this.layoutReads++; return this.top; } this.scrollWrites++; this.top = value; return this; },
+            outerHeight() { this.layoutReads++; return 50; }};
         controls.set(selector, item);
     }
     return controls.get(selector);
@@ -52,7 +54,7 @@ vm.runInNewContext(logScript, {
     document: fakeDocument,
     $: selector => selector === fakeDocument ? {ready: fn => fn()} : control(selector),
     ajaxGet: (url, params, done) => requests.push({params, done}),
-    setInterval: () => {}, MihomoUI: {decodeApiText: decode}
+    setInterval: fn => { logTimer = fn; }, MihomoUI: {decodeApiText: value => { logDecodes++; return decode(value); }}
 });
 assert.equal(requests.length, 1);
 control('#log-source').value = 'subscription';
@@ -78,6 +80,61 @@ assert.equal(requests.length, 5);
 requests[4].done(null, 'error');
 assert.equal(control('#log-viewer').value, 'current log', 'Read failures retain the last valid content');
 console.log('Log source/line switching, paused refresh, filtering and slow responses: all checks passed');
+
+// Unchanged polls should leave the decoded lines and textarea alone, including
+// after filtering or a failed read. Exercise the real timer and request callback.
+control('#log-auto-refresh').checked = true;
+const viewer = control('#log-viewer'), logState = control('#log-state');
+const logWork = () => [logDecodes, viewer.writes, viewer.layoutReads, viewer.scrollWrites,
+    control('#log-match-state').textWrites];
+const respondLog = content => requests.at(-1).done({status: 'ok', content}, 'success');
+const beforeRecovery = logWork(), stateWrites = logState.textWrites;
+logTimer(); respondLog('current log');
+assert.deepEqual(logWork(), beforeRecovery, 'Identical recovery skips decoding, filtering, DOM writes and layout');
+assert.equal(logState.textWrites, stateWrites + 1, 'Successful unchanged reads still update freshness/error status');
+const content = 'first &amp; line\nFind Me\n';
+logTimer(); respondLog(content);
+assert.equal(viewer.value, 'first & line\nFind Me');
+control('#log-filter').value = 'find me';
+control('#log-filter').handlers.input();
+assert.equal(viewer.value, 'Find Me');
+viewer.top = 0;
+const filteredWork = logWork();
+for (let i = 0; i < 3; i++) { logTimer(); respondLog(content); }
+assert.deepEqual(logWork(), filteredWork, 'Repeated payloads retain the current filter and scroll position');
+assert.equal(viewer.value, 'Find Me');
+// A queued manual refresh must still run and scroll on an unchanged response.
+logTimer();
+control('#refreshAct').handlers.click();
+const beforeQueued = requests.length;
+respondLog(content);
+assert.equal(requests.length, beforeQueued + 1);
+respondLog(content);
+assert.equal(viewer.top, viewer[0].scrollHeight);
+assert.equal(viewer.writes, filteredWork[1], 'Manual refresh does not rewrite unchanged text');
+control('#log-filter').value = '';
+control('#log-filter').handlers.input();
+assert.equal(viewer.value, 'first & line\nFind Me', 'Filtering still uses the retained full log');
+viewer.top = 0;
+logTimer(); respondLog('changed\n');
+assert.equal(viewer.value, 'changed');
+assert.equal(viewer.top, 0, 'Changed polls preserve scrolling when reading older lines');
+viewer.top = 100;
+logTimer(); respondLog('newest\n');
+assert.equal(viewer.top, viewer[0].scrollHeight, 'Changed polls still follow the log at the bottom');
+control('#log-source').value = 'mihomo';
+control('#log-source').handlers.change();
+assert.equal(viewer.value, '');
+respondLog('newest\n');
+assert.equal(viewer.value, 'newest', 'Changing source invalidates the cache even for identical content');
+control('#log-lines').value = '100';
+control('#log-lines').handlers.change();
+respondLog('');
+assert.equal(viewer.value, '', 'An empty log clears previously rendered lines');
+const emptyWork = logWork();
+logTimer(); respondLog('');
+assert.deepEqual(logWork(), emptyWork, 'Empty logs also skip unchanged poll work');
+console.log('Unchanged log polling, recovery, filtering, queued scrolling and cache invalidation: all checks passed');
 
 // The same renderer used by the dashboard runs against a strict DOM fixture.
 // HTML parsing is deliberately unavailable: dynamic names must be text/attributes.
