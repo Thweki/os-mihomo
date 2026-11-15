@@ -20,6 +20,8 @@ FILES = {'.gitattributes', '.gitignore', '.github/workflows/ci.yml', '.github/de
          'docs/audit-b7.md', 'tests/fixtures/routing/fresh.xml',
          'tests/fixtures/routing/native.xml', 'tests/fixtures/routing/legacy.xml',
          'tests/fixtures/routing/native.pf', 'tests/fixtures/routing/legacy.pf'}
+         'tests/test_repository.sh', 'tests/test_api.php', 'tests/test_subscription.py',
+         'tests/test_packaging.py', 'tests/test_validate.py'}
 ROOTS = ('src/', 'locales/', 'packaging/freebsd/')
 
 # These exact images were visually reviewed after local privacy blurring.

@@ -35,6 +35,12 @@ EOF
 # Syntax checks only: never start the core, listen on ports or apply network state.
 core="$PWD/work/freebsd-pkg/stage/usr/local/bin/mihomo"
 "$core" -t -d "$core_fixture" -f "$core_fixture/valid.yaml"
+# Audit B6: validate actual subscription generator output, with offline download
+# and install stubs. The fixtures disable TUN/DNS and contain no remote providers.
+python3 tests/test_subscription.py --output-dir "$core_fixture/subscriptions"
+for layout in block flow mixed; do
+    "$core" -t -d "$core_fixture" -f "$core_fixture/subscriptions/$layout.yaml"
+done
 printf 'mixed-port: [invalid\n' > "$core_fixture/invalid.yaml"
 if "$core" -t -d "$core_fixture" -f "$core_fixture/invalid.yaml"; then
     echo 'Core accepted invalid YAML' >&2; exit 1
