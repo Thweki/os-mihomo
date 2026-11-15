@@ -5,6 +5,21 @@ namespace OPNsense\Mihomo;
 /** Read-only facts. Rule observations do not imply packet reachability. */
 class RuntimeStatus
 {
+    /** Capture stdout and exit status; diagnostics are not part of runtime facts. */
+    public static function readCommand(array $command): array
+    {
+        $pipes = [];
+        // An unread stderr pipe can fill while we wait for stdout EOF, deadlocking
+        // both the child and the polling worker. Discard it without buffering.
+        $proc = proc_open($command, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
+        if (!is_resource($proc)) {
+            return [1, ''];
+        }
+        $output = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        return [proc_close($proc), (string)$output];
+    }
+
     public static function parseRules(string $output, string $tun): array
     {
         $rows = [];
