@@ -425,8 +425,7 @@ class RoutingController extends ApiMutableModelControllerBase
         try {
             $r3 = $this->callNetScript($payload + ['verify_only' => true]);
         } catch (\Throwable $e) {
-            $result['message'] = $e->getMessage();
-            return $result;
+            $r3 = ['status' => 'failed', 'message' => $e->getMessage()];
         }
         $messages = array_merge($messages, $r3['messages'] ?? []);
 
@@ -442,14 +441,19 @@ class RoutingController extends ApiMutableModelControllerBase
         /* 自检没过：把刚写的规则撤掉，宁可"没绑定"也不要留下"看着绑了其实没生效" */
         try {
             $messages = array_merge($messages, $this->syncFloatingRules([]));
+            $cleanup = $this->callNetScript(['interfaces' => [], 'verify_only' => true]);
+            $messages = array_merge($messages, $cleanup['messages'] ?? []);
         } catch (\Throwable $e) {
-            /* 撤销失败也只能如实报告 */
+            $cleanup = ['status' => 'failed', 'message' => $e->getMessage()];
         }
         return [
             'status' => 'failed',
             'messages' => $messages,
+            'rollback' => $cleanup,
             'message' => trim((string)($r3['message'] ?? '')) . "\n"
-                . gettext('The firewall rules written by this attempt have been removed, so nothing is bound.'),
+                . (($cleanup['status'] ?? '') === 'ok'
+                    ? gettext('Firewall rules were removed and loaded PF bindings were verified as empty.')
+                    : gettext('Firewall cleanup was not confirmed: ') . ($cleanup['message'] ?? gettext('(no output)'))),
         ];
     }
 

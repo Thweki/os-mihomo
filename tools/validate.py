@@ -96,6 +96,8 @@ def main():
         subprocess.run(['php', str(ROOT / 'tests/test_patch.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_writes.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_api.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_network_apply.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_network_api.php')], check=True)
     for path in (ROOT / 'packaging/freebsd').glob('+*INSTALL'):
         text = path.read_text(encoding='utf-8')
         assert not re.search(r'configctl|pfctl|pkill|config.xml|service mihomo|setup_unbound|rm -rf', text), path
