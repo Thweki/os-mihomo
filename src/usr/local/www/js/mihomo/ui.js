@@ -21,6 +21,27 @@
             return {'&amp;': '&', '&lt;': '<', '&gt;': '>'}[entity];
         });
     }
+    function comparisonReport(data, collectedAt) {
+        if (!data || data.status !== 'ok' || !Array.isArray(data.rows)) { return null; }
+        return {
+            schema_version: 1,
+            collected_at: collectedAt,
+            runtime_available: data.runtime === true,
+            rows: data.rows.map(row => {
+                const secret = row.secret === true || row.key === 'secret';
+                // Select fields explicitly; never serialize the whole API response.
+                return {
+                    key: decodeApiText(row.key), label: decodeApiText(row.label),
+                    group: decodeApiText(row.group), state: row.state,
+                    managed: typeof row.managed === 'boolean' ? row.managed : null,
+                    runtime_only: row.runtime_only === true, secret,
+                    model: secret ? null : decodeApiText(row.model),
+                    file: secret ? null : decodeApiText(row.file),
+                    runtime: secret ? null : decodeApiText(row.runtime)
+                };
+            })
+        };
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -179,5 +200,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups};
+    return {formatBytes, TrafficHistory, theme, decodeApiText, comparisonReport, Poller, runLimited, element, renderProxyGroups};
 }));

@@ -2,6 +2,10 @@ msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/settings.volt
+msgid "Export comparison (JSON)"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Inspector.php
 msgid "%s (answering)"
 msgstr ""

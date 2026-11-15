@@ -3,6 +3,9 @@ msgstr ""
 "Language: zh_CN\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Export comparison (JSON)"
+msgstr "导出配置对照（JSON）"
+
 msgid "%s (answering)"
 msgstr "%s（有应答）"
 
