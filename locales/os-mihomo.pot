@@ -210,6 +210,10 @@ msgstr ""
 msgid "Connection closed."
 msgstr ""
 
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Connection details"
+msgstr ""
+
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/settings.xml
 msgid "Controller API secret."
 msgstr ""
@@ -324,6 +328,14 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
 msgid "Destination and conditions"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Destination"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Details"
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
@@ -1055,6 +1067,10 @@ msgid "Route traffic into mihomo through a virtual device."
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Rule value"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Rule"
 msgstr ""
 
@@ -1184,6 +1200,10 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt
 msgid "Size"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Snapshot from the connection list. Refresh the list to inspect newer data."
 msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/controllers/OPNsense/Mihomo/forms/policy_rule.xml src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt

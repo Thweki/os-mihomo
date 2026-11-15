@@ -196,6 +196,66 @@ assert.equal(versionValue, 'after-model-save');
 // Exercise the real overview request function, including its metadata cadence.
 const indexView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt'), 'utf8');
+
+// Run the real connection formatter, click binding and dialog with a strict DOM.
+// No request helpers are provided: inspecting a row must remain read-only/offline.
+const connectionScript = indexView.slice(indexView.indexOf('        function showConnectionDetails(row)'),
+    indexView.indexOf('        function closeConnections(id)'))
+    .replace(/\{\{\s*lang\._\('([^']*)'\)[\s\S]*?\}\}/g, (_, label) => JSON.stringify(label));
+assert(connectionScript.includes('function showConnectionDetails'), 'Connection details must be implemented in the view');
+assert.match(indexView, /data-column-id="details"[^>]*data-formatter="detailsformatter"[^>]*data-sortable="false"/);
+let connectionGrid, gridLoaded, detailClick, detailsButton;
+const dialogs = [];
+const connectionContext = {
+    document: doc,
+    MihomoUI: {...UI, element(...args) {
+        const node = UI.element(...args);
+        if (node.attrs.class && node.attrs.class.includes('cmd-connection-details')) { detailsButton = node; }
+        return node;
+    }},
+    BootstrapDialog: {show: options => dialogs.push(options)},
+    $: selector => {
+        if (selector instanceof DomNode) { return {attr: key => selector.getAttribute(key), node: selector}; }
+        if (selector === '#grid-connections') {
+            return {UIBootgrid(options) { connectionGrid = options; return this; },
+                on(event, callback) { assert.equal(event, 'loaded.rs.jquery.bootgrid'); gridLoaded = callback; }};
+        }
+        return {tooltip() {}, off() { return this; }, on(event, callback) {
+            if (selector === '.cmd-connection-details') { assert.equal(event, 'click'); detailClick = callback; }
+        }};
+    }
+};
+vm.runInNewContext(connectionScript, connectionContext);
+const connection = {id: 'fixture-id', host: encode('<img src=x onerror="bad()">'), source: '192.0.2.10:1234',
+    destination: '198.51.100.20:443', network: 'TCP', type: 'TUN', rule: 'DomainSuffix',
+    rulePayload: encode('example.invalid & literal &gt;'), chain: encode('中文 "group" → node')};
+connectionGrid.options.formatters.detailsformatter({}, connection);
+const firstDetailsButton = detailsButton;
+assert.equal(detailsButton.attrs.type, 'button');
+assert.equal(detailsButton.attrs['aria-label'], 'Connection details');
+assert.equal(JSON.parse(detailsButton.attrs['data-details']).rulePayload, connection.rulePayload);
+assert(!Object.hasOwn(JSON.parse(detailsButton.attrs['data-details']), 'id'), 'Only displayed fields are copied');
+gridLoaded();
+detailClick.call(detailsButton);
+assert.equal(dialogs[0].title, 'Connection details');
+const detailFields = dialog => dialog.message.node.children[1].children;
+assert.deepEqual(detailFields(dialogs[0]).filter(node => node.tagName === 'dt').map(node => node.textContent),
+    ['Host', 'Source', 'Destination', 'Network', 'Type', 'Rule', 'Rule value', 'Chain']);
+assert.deepEqual(detailFields(dialogs[0]).filter(node => node.tagName === 'dd').map(node => node.textContent),
+    ['<img src=x onerror="bad()">', connection.source, connection.destination, 'TCP', 'TUN', 'DomainSuffix',
+        'example.invalid & literal &gt;', '中文 "group" → node']);
+assert(dialogs[0].message.node.children[0].textContent.includes('Snapshot'));
+connection.rulePayload = 'newer value';
+connectionGrid.options.formatters.detailsformatter({}, {rule: 'Match', rulePayload: '', destination: null});
+gridLoaded();
+detailClick.call(detailsButton);
+assert.deepEqual(detailFields(dialogs[1]).filter(node => node.tagName === 'dd').map(node => node.textContent),
+    ['—', '—', '—', '—', '—', 'Match', '—', '—'], 'Missing optional metadata has an explicit fallback');
+detailClick.call(firstDetailsButton);
+assert.equal(detailFields(dialogs[2])[13].textContent, 'example.invalid & literal &gt;',
+    'Each button keeps its own snapshot, independent of later rows or refreshes');
+console.log('Connection details: matched rule, destination, safe text, missing fields and per-row snapshots passed');
+
 const overviewFunction = indexView.match(/        function loadOverview\(done\) \{[\s\S]*?\n        \}/)[0];
 const overviewRequests = [];
 let now = 100000;

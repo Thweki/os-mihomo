@@ -25,6 +25,8 @@ Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, wit
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
+In **Active Connections**, use the **Details** button on a row to inspect its destination IP/port, matched rule and rule value, and proxy chain. The dialog shows a snapshot from that row; refresh the connection list and reopen details for newer data. Missing fields appear as `—`.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.

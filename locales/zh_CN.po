@@ -159,6 +159,9 @@ msgstr "DNS 配置路径"
 msgid "Connection closed."
 msgstr "连接已断开。"
 
+msgid "Connection details"
+msgstr "连接详情"
+
 msgid "Controller API secret."
 msgstr "控制器 API 密钥。"
 
@@ -245,6 +248,12 @@ msgstr ""
 
 msgid "Destination and conditions"
 msgstr "目标与条件"
+
+msgid "Destination"
+msgstr "目标地址"
+
+msgid "Details"
+msgstr "详情"
 
 msgid "Device"
 msgstr "设备"
@@ -792,6 +801,9 @@ msgstr "请核对以下更改。保存前会先备份并校验配置。"
 msgid "Route traffic into mihomo through a virtual device."
 msgstr "用虚拟网卡把流量导入 mihomo。"
 
+msgid "Rule value"
+msgstr "规则匹配值"
+
 msgid "Rule"
 msgstr "命中规则"
 
@@ -890,6 +902,9 @@ msgstr "只看差异"
 
 msgid "Size"
 msgstr "大小"
+
+msgid "Snapshot from the connection list. Refresh the list to inspect newer data."
+msgstr "此为连接列表中的快照。刷新列表以查看更新的数据。"
 
 msgid "Source"
 msgstr "来源"
