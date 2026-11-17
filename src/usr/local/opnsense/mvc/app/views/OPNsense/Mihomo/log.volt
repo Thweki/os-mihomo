@@ -21,13 +21,16 @@
         }
         function renderLog() {
             const query = $('#log-filter').val().toLocaleLowerCase();
-            const lines = allLines.filter(line => !query || line.toLocaleLowerCase().includes(query));
+            const level = $('#log-level').val();
+            const lines = allLines.filter(line => (level === 'all' || MihomoUI.logLevel(line) === level)
+                && (!query || line.toLocaleLowerCase().includes(query)));
             const visible = $('#log-hide-timestamps').prop('checked') ? lines.map(withoutTimestamp) : lines;
             $('#log-viewer').val(visible.join('\n'));
             $('#log-match-state').text(!allLines.length ? {{ lang._('No log entries yet.') | json_encode }}
                 : !lines.length ? {{ lang._('No matching log entries.') | json_encode }} : String(lines.length) + ' / ' + String(allLines.length));
         }
         $('#log-filter').on('input', renderLog);
+        $('#log-level').change(renderLog);
         $('#log-wrap').prop('checked', true).on('change', function () {
             const $viewer = $('#log-viewer');
             const atBottom = $viewer[0].scrollHeight - $viewer.scrollTop() - $viewer.outerHeight() < 40;
@@ -149,11 +152,23 @@
                 <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:12px;">
                     <label for="log-filter" style="flex:0 0 auto; white-space:nowrap;">{{ lang._('Filter log') }}</label>
                     <input id="log-filter" type="search" class="form-control" style="flex:1 1 200px; width:auto; max-width:100%;" placeholder="{{ lang._('Filter the loaded lines') }}">
+                    <label for="log-level">{{ lang._('Log severity') }}</label>
+                    <select id="log-level" class="form-control" style="width:auto;" aria-describedby="log-level-help">
+                        <option value="all" selected="selected">{{ lang._('All levels') }}</option>
+                        <option value="debug">{{ lang._('Debug') }}</option>
+                        <option value="info">{{ lang._('Info') }}</option>
+                        <option value="warning">{{ lang._('Warning') }}</option>
+                        <option value="error">{{ lang._('Error') }}</option>
+                        <option value="fatal">{{ lang._('Fatal') }}</option>
+                        <option value="panic">{{ lang._('Panic') }}</option>
+                        <option value="unknown">{{ lang._('Unknown level') }}</option>
+                    </select>
                     <label style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-auto-refresh" type="checkbox" checked> {{ lang._('Auto refresh') }}</label>
                     <label for="log-wrap" style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-wrap" type="checkbox" aria-controls="log-viewer" checked> {{ lang._('Wrap lines') }}</label>
                     <label style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-hide-timestamps" type="checkbox"> {{ lang._('Hide timestamps') }}</label>
                     <span id="log-match-state" class="text-muted" role="status"></span>
                 </div>
+                <p id="log-level-help" class="text-muted">{{ lang._('Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Downloads include all levels.') }}</p>
                 <p id="log-state" class="text-muted" role="status"></p>
                 <textarea aria-label="{{ lang._('Log contents') }}" id="log-viewer" class="form-control" rows="30" wrap="soft" readonly
                           style="width: 100%; max-width: 100%; font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere;"></textarea>

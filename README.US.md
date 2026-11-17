@@ -19,7 +19,9 @@ Open **VPN → Proxy Suite** after installation.
 | Settings | Native forms, write locks, change previews and discard, reapply, advanced options, YAML editing and validation, configuration comparison and DNS status |
 | Policy Routing | Current forwarding and rule details; interface policies, change previews, network bindings, configuration history and restore |
 | Subscription | Submit updates; view task state, last success, exit code and execution logs |
-| Log File | Filter loaded lines, toggle line wrapping, hide timestamps, pause refresh, switch sources and line counts, download or clear logs |
+| Log File | Filter loaded lines by text and severity, toggle line wrapping, hide timestamps, pause refresh, switch sources and line counts, download or clear logs |
+
+In **Log File**, choose **Log severity** to show one exact level (Debug, Info, Warning, Error, Fatal or Panic), combined with the text filter. **All levels** is the default on each page visit. The filter recognizes Mihomo's `time=… level=…` file headers and logrus console headers, including colored output; words inside messages do not determine severity. **Unknown level** shows unrecognized lines, including unstructured subscription output and continuation lines. Choices survive refreshes and source/line-count changes during the visit. Only loaded lines are filtered, counts show visible/loaded lines, and downloads still include all levels. This does not change the core's logging configuration.
 
 In **Log File**, clear **Wrap lines** to keep each log entry on one line and scroll horizontally; enable it to fit long lines to the panel, including long URLs. Wrapping starts enabled on each page visit. The choice survives filtering, refreshes and source changes during that visit. It only changes the display: line counts, selected text and downloads retain the original logical lines. If you are at the bottom, toggling keeps the newest entries in view.
 

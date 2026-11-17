@@ -39,6 +39,25 @@ const decode = require('../src/usr/local/www/js/mihomo/ui.js').decodeApiText;
 assert.strictEqual(decode('x --&gt; y &amp; z &lt;tag&gt;'), 'x --> y & z <tag>');
 assert.strictEqual(decode('literal &amp;gt; &amp;amp; &#039;'), 'literal &gt; &amp; &#039;');
 
+const logLevel = require('../src/usr/local/www/js/mihomo/ui.js').logLevel;
+for (const level of ['debug', 'info', 'warning', 'error', 'fatal', 'panic']) {
+    assert.equal(logLevel(`time="2026-11-15T12:34:56Z" level=${level} msg="中文 <tag>"`), level);
+    assert.equal(logLevel(`level=${level} msg="without timestamp"`), level);
+}
+for (const [prefix, level] of [['DEBU', 'debug'], ['INFO', 'info'], ['WARN', 'warning'],
+    ['ERRO', 'error'], ['FATA', 'fatal'], ['PANI', 'panic']]) {
+    assert.equal(logLevel(`\x1b[33m${prefix}\x1b[0m[2026-11-15T12:34:56Z] message`), level);
+}
+assert.equal(logLevel('time=2026-11-15T12:34:56Z level=warn msg="alias"'), 'warning');
+for (const line of ['', 'subscription error', '[2026-11-15 12:34:56] task finished (exit=1)',
+    'msg="level=error"', 'message level=error', 'time="level=error" msg="no level"',
+    'time="unterminated level=error', 'level=errorish msg="unknown"', 'level=trace msg="unknown"',
+    '    at example.js:1', 'INFO is only a word', 'warning: plain text']) {
+    assert.equal(logLevel(line), 'unknown', line);
+}
+assert.equal(logLevel('time="2026-11-15T12:34:56Z" level=info msg="level=error WARN[123]"'), 'info');
+console.log('Log severity parsing: structured headers, console colors, aliases and unclassified text passed');
+
 console.log('UI history, formatting and API text decoding: all checks passed');
 
 // Exercise the actual log view script with delayed API responses, without a browser
@@ -69,6 +88,7 @@ function control(selector) {
 }
 control('#log-source').value = 'mihomo';
 control('#log-lines').value = '300';
+control('#log-level').value = 'all';
 const logView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt'), 'utf8');
 const logScript = logView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
@@ -80,7 +100,7 @@ vm.runInNewContext(logScript, {
     URL: {createObjectURL: () => 'blob:log-test', revokeObjectURL() {}},
     $: selector => selector === fakeDocument ? {ready: fn => fn()} : control(selector),
     ajaxGet: (url, params, done) => requests.push({params, done}),
-    setInterval: fn => { logTimer = fn; }, MihomoUI: {decodeApiText: value => { logDecodes++; return decode(value); }}
+    setInterval: fn => { logTimer = fn; }, MihomoUI: {logLevel, decodeApiText: value => { logDecodes++; return decode(value); }}
 });
 assert.equal(requests.length, 1);
 control('#log-source').value = 'subscription';
@@ -279,6 +299,81 @@ control('#refreshAct').handlers.click(); requests.at(-1).done(null, 'error');
 hideTime.checked = false; hideTime.handlers.change();
 assert.equal(viewer.value, '[2026-11-15 13:01:00] Finished', 'Failed reads retain restorable timestamps');
 console.log('Log timestamp toggle: defaults, formats, paused rendering, search, downloads and refreshes passed');
+
+control('#log-auto-refresh').checked = true;
+assert.match(logView, /<label for="log-level"/);
+assert.match(logView, /<option value="all" selected="selected">/);
+const levelControl = control('#log-level');
+const severityLines = [
+    'time="2026-11-15T12:34:56Z" level=info msg="DNS level=error"',
+    'time="2026-11-15T12:34:57Z" level=warning msg="DNS &amp; retry"',
+    'time="2026-11-15T12:34:58Z" level=error msg="DNS &lt;failed&gt;"',
+    'time="2026-11-15T12:34:59Z" level=error msg="TCP failed"',
+    '订阅完成', '    continuation without level'
+];
+logTimer(); respondLog(severityLines.join('\n') + '\n');
+assert.equal(viewer.value, decode(severityLines.join('\n')), 'All levels is lossless by default');
+control('#log-auto-refresh').checked = false;
+const requestsBeforeLevel = requests.length;
+levelControl.value = 'error'; levelControl.handlers.change();
+assert.equal(viewer.value, decode(severityLines.slice(2, 4).join('\n')));
+assert.equal(control('#log-match-state').label, '2 / 6');
+control('#log-filter').value = 'dns'; control('#log-filter').handlers.input();
+assert.equal(viewer.value, decode(severityLines[2]), 'Text and severity filters intersect');
+assert.equal(control('#log-match-state').label, '1 / 6');
+levelControl.value = 'warning'; levelControl.handlers.change();
+assert.equal(viewer.value, decode(severityLines[1]));
+levelControl.value = 'debug'; levelControl.handlers.change();
+assert.equal(viewer.value, '', 'A level with no matches clears the display');
+assert.equal(control('#log-match-state').label, 'translated');
+control('#log-filter').value = ''; control('#log-filter').handlers.input();
+levelControl.value = 'unknown'; levelControl.handlers.change();
+assert.equal(viewer.value, severityLines.slice(4).join('\n'), 'Unstructured lines remain accessible');
+logTimer();
+assert.equal(requests.length, requestsBeforeLevel, 'Changing filters while paused makes no requests');
+control('#refreshAct').handlers.click();
+levelControl.value = 'error'; levelControl.handlers.change();
+respondLog('level=info msg="new"\nlevel=error msg="new"\n');
+assert.equal(viewer.value, 'level=error msg="new"', 'In-flight responses use the current severity');
+control('#log-auto-refresh').checked = true;
+const levelWork = logWork();
+logTimer(); respondLog('level=info msg="new"\nlevel=error msg="new"\n');
+assert.deepEqual(logWork(), levelWork, 'Unchanged polls preserve severity filtering without DOM work');
+control('#log-lines').value = '300'; control('#log-lines').handlers.change();
+respondLog('level=info msg="older"\nlevel=error msg="older"\n');
+assert.equal(viewer.value, 'level=error msg="older"', 'Line-count changes retain severity');
+control('#log-source').value = 'subscription'; control('#log-source').handlers.change();
+assert.equal(viewer.value, '');
+respondLog('订阅完成\n');
+assert.equal(viewer.value, '', 'Source changes retain severity without showing stale entries');
+levelControl.value = 'all'; levelControl.handlers.change();
+assert.equal(viewer.value, '订阅完成', 'All restores unclassified subscription output');
+console.log('Log severity controls: defaults, counts, search intersection, pause, polling and source/line changes passed');
+
+// Severity is decided on the source text before presentation changes.
+control('#log-source').value = 'mihomo'; control('#log-source').handlers.change();
+respondLog(severityLines.join('\n') + '\n');
+control('#log-auto-refresh').checked = false;
+levelControl.value = 'error'; levelControl.handlers.change();
+control('#log-filter').value = '12:34:58Z'; control('#log-filter').handlers.input();
+hideTime.checked = true; hideTime.handlers.change();
+toggleWrap(false);
+assert.equal(viewer.value, 'level=error msg="DNS <failed>"',
+    'Severity and full-source text search still intersect while timestamp is hidden and wrapping is off');
+assert.equal(viewer.wrap, 'off');
+assert.equal(control('#log-match-state').label, '1 / 6');
+control('#downloadAct').handlers.click();
+assert.equal(requests.at(-1).params.lines, 5000);
+respondLog(severityLines.join('\n') + '\n');
+assert.equal(logDownloads.at(-1), decode(severityLines.join('\n')) + '\n',
+    'Downloads retain all severities, original timestamps and trailing newlines');
+control('#log-filter').value = ''; control('#log-filter').handlers.input();
+levelControl.value = 'all'; levelControl.handlers.change();
+hideTime.checked = false; hideTime.handlers.change();
+toggleWrap(true);
+control('#log-auto-refresh').checked = true;
+console.log('Severity with timestamp hiding, full-source search, wrapping and downloads passed');
+
 
 // The same renderer used by the dashboard runs against a strict DOM fixture.
 // HTML parsing is deliberately unavailable: dynamic names must be text/attributes.

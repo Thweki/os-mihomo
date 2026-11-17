@@ -41,6 +41,19 @@
             return true;
         } catch (error) { return false; }
     }
+    // Mihomo's logrus text headers: file output and (optionally colored) console
+    // output. Anchor at the header so severity words inside messages never match.
+    // Strip ANSI styling only for classification; keep the displayed line intact.
+    function logLevel(line) {
+        const plain = line.replace(/\x1b\[[0-9;]*m/g, '');
+        const field = plain.match(/^(?:time=(?:"[^"\r\n]*"|[^\s"]+)\s+)?level=(debug|info|warn|warning|error|fatal|panic)(?=\s|$)/i);
+        if (field) { return field[1].toLowerCase().replace(/^warn$/, 'warning'); }
+        const consoleLevel = plain.match(/^(DEBU|INFO|WARN|ERRO|FATA|PANI)\[[^\]\r\n]*\](?=\s|$)/i);
+        if (consoleLevel) {
+            return {DEBU: 'debug', INFO: 'info', WARN: 'warning', ERRO: 'error', FATA: 'fatal', PANI: 'panic'}[consoleLevel[1].toUpperCase()];
+        }
+        return 'unknown';
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -278,5 +291,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, ruleMatchText, copyText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, logLevel, ruleMatchText, copyText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
 }));
