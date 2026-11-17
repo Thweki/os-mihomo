@@ -1454,3 +1454,15 @@ msgstr "名称（Z–A）"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Favorites stay first. Name order uses natural numbers and ignores case. Resets on page reload."
 msgstr "收藏仍置顶。名称排序按自然数字顺序比较，忽略大小写。重新加载页面后重置。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Copy match"
+msgstr "复制匹配条件"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Rule match copied."
+msgstr "已复制规则匹配条件。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Clipboard unavailable. Copy the rule match manually."
+msgstr "剪贴板不可用，请手动复制规则匹配条件。"

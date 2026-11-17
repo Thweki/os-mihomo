@@ -43,6 +43,8 @@ Use **Proxy Groups → Node order** to sort proxies by **Name (A–Z)** or **Nam
 
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
+In **Current forwarding → Rule details** on Overview or Policy Routing, click **Copy match** beside a destination to copy that row's observed `from <source> to <destination and conditions>` text. Exclusions, port sets and IPv6 text are preserved. This is a match fragment, not a complete PF rule: interface, protocol, direction and next hop remain in the table. A success message confirms the clipboard write; if the browser blocks it (including on HTTP), a prompt offers the same text for manual copying. Copying makes no configuration changes or extra API requests.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.

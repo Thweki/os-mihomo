@@ -43,8 +43,29 @@ $(document).ready(function () {
         const $details = $root.find('.network-details-body').empty();
         allRules.forEach(function (rule) {
             const $row = $('<tr>');
+            const match = MihomoUI.ruleMatchText(rule);
             [rule.device || '—', rule.family + ' / ' + directions[rule.direction] + ' / ' + rule.protocols.join(', '), rule.source,
-                rule.destination, rule.next_hop].forEach(value => $row.append($('<td>').text(text(value))));
+                rule.destination, rule.next_hop].forEach(function (value, index) {
+                const $cell = $('<td>').text(text(value));
+                if (index === 3 && match && snapshot.rules_available) {
+                    const label = {{ lang._('Copy match') | json_encode }};
+                    $cell.append($('<button type="button" class="btn btn-default btn-xs network-copy-match">')
+                        .css('margin-left', '8px').text(label).attr('aria-label', label + ': ' + match)
+                        .click(async function () {
+                            const $button = $(this).prop('disabled', true);
+                            const $state = $root.find('.network-copy-state').text('');
+                            try {
+                                await navigator.clipboard.writeText(match);
+                                $state.text({{ lang._('Rule match copied.') | json_encode }});
+                            } catch (error) {
+                                const message = {{ lang._('Clipboard unavailable. Copy the rule match manually.') | json_encode }};
+                                $state.text(message);
+                                window.prompt(message, match);
+                            } finally { $button.prop('disabled', false); }
+                        }));
+                }
+                $row.append($cell);
+            });
             $details.append($row);
         });
         if (!allRules.length) { $details.append($('<tr>').append($('<td colspan="5">').text(snapshot.rules_available
@@ -102,6 +123,7 @@ $(document).ready(function () {
     <p class="text-muted">{{ lang._('Loaded PF rules are shown here. Rule order, exceptions and core policies still affect traffic. DNS paths describe the configuration, not a client query test.') }}</p>
     <p class="text-muted">{{ lang._('Rules without an interface limit are listed separately and may also match these interfaces. Check their source and destination conditions in Rule details.') }}</p>
     <div class="network-details hidden table-responsive">
+        <p class="network-copy-state text-muted" role="status" aria-live="polite"></p>
         <table class="table table-condensed table-hover"><thead><tr>
             <th>{{ lang._('Device') }}</th><th>{{ lang._('Protocol') }}</th><th>{{ lang._('Source') }}</th>
             <th>{{ lang._('Destination and conditions') }}</th><th>{{ lang._('Next hop') }}</th>
