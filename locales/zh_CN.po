@@ -1524,3 +1524,24 @@ msgstr "未知级别"
 
 msgid "Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Downloads include all levels."
 msgstr "级别筛选仅作用于已载入的行。无法识别级别的行显示在“未知级别”中。下载包含所有级别。"
+
+msgid "Matching lines"
+msgstr "匹配行数"
+
+msgid "Shown lines"
+msgstr "展示行数"
+
+msgid "Surrounding lines"
+msgstr "上下文行数"
+
+msgid "Matches only"
+msgstr "仅匹配行"
+
+msgid "2 before and after"
+msgstr "前后各 2 行"
+
+msgid "5 before and after"
+msgstr "前后各 5 行"
+
+msgid "Search is literal and case-insensitive. Context uses nearby loaded lines, respects severity, and shows overlapping lines only once."
+msgstr "按字面搜索，不区分大小写。上下文来自附近已载入且符合所选级别的行；重叠行仅展示一次。"

@@ -20,16 +20,22 @@
             return line.replace(/^(?:time="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})"|\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\])[ \t]+/, '');
         }
         function renderLog() {
-            const query = $('#log-filter').val().toLocaleLowerCase();
+            const query = $('#log-filter').val();
+            const context = Number($('#log-context').val());
             const level = $('#log-level').val();
-            const lines = allLines.filter(line => (level === 'all' || MihomoUI.logLevel(line) === level)
-                && (!query || line.toLocaleLowerCase().includes(query)));
+            const result = MihomoUI.filterLogLines(allLines, query, context,
+                line => level === 'all' || MihomoUI.logLevel(line) === level);
+            const lines = result.lines;
             const visible = $('#log-hide-timestamps').prop('checked') ? lines.map(withoutTimestamp) : lines;
             $('#log-viewer').val(visible.join('\n'));
             $('#log-match-state').text(!allLines.length ? {{ lang._('No log entries yet.') | json_encode }}
-                : !lines.length ? {{ lang._('No matching log entries.') | json_encode }} : String(lines.length) + ' / ' + String(allLines.length));
+                : !lines.length ? {{ lang._('No matching log entries.') | json_encode }} : query && (context === 2 || context === 5)
+                    ? {{ lang._('Matching lines') | json_encode }} + ': ' + result.matches + ' / ' + allLines.length
+                        + ' · ' + {{ lang._('Shown lines') | json_encode }} + ': ' + lines.length
+                    : String(lines.length) + ' / ' + String(allLines.length));
         }
         $('#log-filter').on('input', renderLog);
+        $('#log-context').change(renderLog);
         $('#log-level').change(renderLog);
         $('#log-wrap').prop('checked', true).on('change', function () {
             const $viewer = $('#log-viewer');
@@ -151,7 +157,13 @@
             <div style="padding: 14px;">
                 <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:12px;">
                     <label for="log-filter" style="flex:0 0 auto; white-space:nowrap;">{{ lang._('Filter log') }}</label>
-                    <input id="log-filter" type="search" class="form-control" style="flex:1 1 200px; width:auto; max-width:100%;" placeholder="{{ lang._('Filter the loaded lines') }}">
+                    <input id="log-filter" type="search" class="form-control" style="flex:1 1 200px; width:auto; max-width:100%;" placeholder="{{ lang._('Filter the loaded lines') }}" aria-describedby="log-search-help">
+                    <label for="log-context" style="margin:0;">{{ lang._('Surrounding lines') }}</label>
+                    <select id="log-context" class="form-control" style="width:auto;" aria-describedby="log-search-help">
+                        <option value="0" selected="selected">{{ lang._('Matches only') }}</option>
+                        <option value="2">{{ lang._('2 before and after') }}</option>
+                        <option value="5">{{ lang._('5 before and after') }}</option>
+                    </select>
                     <label for="log-level">{{ lang._('Log severity') }}</label>
                     <select id="log-level" class="form-control" style="width:auto;" aria-describedby="log-level-help">
                         <option value="all" selected="selected">{{ lang._('All levels') }}</option>
@@ -168,6 +180,7 @@
                     <label style="flex:0 0 auto; white-space:nowrap; font-weight:normal; margin:0;"><input id="log-hide-timestamps" type="checkbox"> {{ lang._('Hide timestamps') }}</label>
                     <span id="log-match-state" class="text-muted" role="status"></span>
                 </div>
+                <p id="log-search-help" class="text-muted">{{ lang._('Search is literal and case-insensitive. Context uses nearby loaded lines, respects severity, and shows overlapping lines only once.') }}</p>
                 <p id="log-level-help" class="text-muted">{{ lang._('Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Downloads include all levels.') }}</p>
                 <p id="log-state" class="text-muted" role="status"></p>
                 <textarea aria-label="{{ lang._('Log contents') }}" id="log-viewer" class="form-control" rows="30" wrap="soft" readonly
