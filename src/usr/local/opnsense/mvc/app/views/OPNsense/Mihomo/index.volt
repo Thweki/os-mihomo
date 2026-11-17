@@ -191,11 +191,13 @@
         const collapsedGroups = new Set(); // Page visit only; reload starts expanded.
         let latestGroups = null;
         let renderedGroups = null;
+        let proxyQuery = '';
         function renderGroups(data) {
             latestGroups = data;
             const $box = $('#proxy-groups');
             if (!data['ready']) {
                 renderedGroups = null;
+                $('#proxy-filter-state').empty();
                 $box.html('<div class="text-muted" style="padding: 12px;">'
                     + ('<i class="fa fa-plug fa-fw"></i> ' + {{ lang._('The controller is not reachable. Start the service to see proxy groups.') | json_encode }})
                     + '</div>');
@@ -204,14 +206,25 @@
             const groups = data['groups'] || [];
             if (groups.length === 0) {
                 renderedGroups = null;
+                $('#proxy-filter-state').empty();
                 $box.html(('<div class="text-muted" style="padding: 12px;">' + {{ lang._('No proxy groups are defined in the configuration.') | json_encode }} + '</div>'));
                 return;
             }
 
             // Polls return fresh objects; retain the DOM while their data is unchanged.
-            const snapshot = JSON.stringify(groups);
+            const snapshot = JSON.stringify([groups, proxyQuery]);
             if (snapshot === renderedGroups) { return; }
-            MihomoUI.renderProxyGroups($box[0], groups, {
+            const visible = MihomoUI.filterProxyGroups(groups, proxyQuery);
+            $('#proxy-filter-state').text(proxyQuery
+                ? {{ lang._('Visible proxy entries') | json_encode }} + ': ' + visible.matched + '/' + visible.total : '');
+            if (!visible.groups.length) {
+                const message = MihomoUI.element($box[0].ownerDocument, 'div', {class: 'text-muted', style: 'padding:12px;'},
+                    {{ lang._('No proxy names match the filter.') | json_encode }});
+                $box[0].replaceChildren(message);
+                renderedGroups = snapshot;
+                return;
+            }
+            MihomoUI.renderProxyGroups($box[0], visible.groups, {
                 memberCount: {{ lang._('Members: %s') | json_encode }},
                 collapseGroup: {{ lang._('Collapse group') | json_encode }},
                 expandGroup: {{ lang._('Expand group') | json_encode }},
@@ -225,6 +238,14 @@
             if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
+
+        $('#proxy-filter').on('input', function () {
+            proxyQuery = MihomoUI.normalizeProxyQuery(this.value);
+            if (latestGroups) { renderGroups(latestGroups); }
+        });
+        $('#proxy-filter-clear').on('click', function () {
+            $('#proxy-filter').val('').trigger('input').trigger('focus');
+        });
 
         let copying = false;
         $('#proxy-groups').on('click', '.cmd-copy', async function () {
@@ -293,9 +314,9 @@
         }
         $('#proxy-groups').on('click', '.cmd-test', function () { testNodes([$(this).attr('data-name')]); });
         $('#proxy-groups').on('click', '.cmd-test-group', function () {
-            const names = [];
-            $(this).closest('.content-box').find('.cmd-test').each(function () { names.push($(this).attr('data-name')); });
-            testNodes(Array.from(new Set(names)));
+            // Filtering and collapsing only change the view, never the group probe scope.
+            const groups = latestGroups && latestGroups.ready ? latestGroups.groups || [] : [];
+            testNodes(MihomoUI.fullProxyGroupTestNames(groups, $(this).attr('data-group'), favorites, nodeOrder));
         });
         $('#proxy-groups').on('click', '.cmd-select', function () {
             const $button = $(this), $item = $button.closest('li');
@@ -656,6 +677,13 @@
             </div>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
             <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div class="form-inline" style="padding:0 12px;">
+                <label for="proxy-filter">{{ lang._('Filter proxy names') }}</label>
+                <input type="search" id="proxy-filter" class="form-control" aria-controls="proxy-groups" aria-describedby="proxy-filter-help" autocomplete="off" />
+                <button type="button" id="proxy-filter-clear" class="btn btn-default">{{ lang._('Clear filter') }}</button>
+                <span id="proxy-filter-state" class="text-muted" role="status"></span>
+                <p id="proxy-filter-help" class="help-block">{{ lang._('Case-insensitive name substring. Group latency tests still cover all nodes in the group.') }}</p>
+            </div>
             <div style="padding: 12px;" id="proxy-groups">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>
             </div>

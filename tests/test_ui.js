@@ -1035,7 +1035,7 @@ console.log('Mode hints: all modes, metadata gaps, unknown values, selection, fa
 
 // Run the dashboard render path with fresh API objects and the real DOM renderer.
 // Unchanged polling must retain nodes, focus and scroll without allocating DOM.
-const renderGroupsScript = indexView.match(/(?:        let renderedGroups = null;\n)?        function renderGroups\(data\) \{[\s\S]*?\n        \}/)[0]
+const renderGroupsScript = indexView.match(/        let renderedGroups = null;[\s\S]*?(?=        let copying = false;)/)[0]
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 let groupAllocations = 0;
 const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
@@ -1046,8 +1046,24 @@ const dashboardFavorites = new UI.ProxyFavorites(() => ({
     getItem: key => dashboardStorage.get(key) || null,
     setItem: (key, value) => dashboardStorage.set(key, value)
 }));
+const proxyFilterControl = {
+    value: '', focused: false, handlers: {},
+    on(event, handler) { this.handlers[event] = handler; return this; },
+    val(value) { this.value = value; return this; },
+    trigger(event) {
+        if (event === 'focus') { this.focused = true; }
+        else { this.handlers[event].call(this); }
+        return this;
+    }
+};
+let proxyFilterStatus = '', proxyFilterClear;
 const groupContext = vm.createContext({
     $: selector => {
+        if (selector === '#proxy-filter') { return proxyFilterControl; }
+        if (selector === '#proxy-filter-clear') { return {on: (event, handler) => { assert.equal(event, 'click'); proxyFilterClear = handler; }}; }
+        if (selector === '#proxy-filter-state') {
+            return {text: value => { proxyFilterStatus = value; }, empty: () => { proxyFilterStatus = ''; }};
+        }
         if (selector === '#proxy-node-order') {
             return {on: (event, handler) => { assert.equal(event, 'change'); nodeOrderHandler = handler; }};
         }
@@ -1375,6 +1391,63 @@ assert.equal(groupList(foldNames[1]).getAttribute('hidden'), '', 'Groups expand 
 // A new page runs the actual initializer again; no browser persistence is used.
 assert.equal(vm.runInNewContext(collapseStateScript + '\ncollapsedGroups.size;'), 0);
 console.log('Group collapse: defaults, exact names, accessibility, focus, independent toggles, polling/recovery, favorites and full-group tests passed');
+
+// Search is local and does not change selected proxies or group probe scope.
+const filterSource = {ready: true, groups: [{name: 'Search group', now: 'Other', members: [
+    {name: 'ZA &amp; Zurich', selected: false}, {name: 'Other', selected: true},
+    {name: 'ZA [a.*]', selected: false}, {name: '中文节点', selected: false}, {name: 'literal &amp;gt;', selected: false}
+]}, {name: 'Second group', members: [{name: 'ZA &amp; Zurich'}]}, {name: 'Empty group', members: []}]};
+const beforeFilter = JSON.stringify(filterSource);
+const filter = value => proxyFilterControl.val(value).trigger('input');
+const shownNames = () => pollingBox.querySelectorAll('li[data-member]').map(node => node.attrs['data-member']);
+let filterRequests = 0;
+groupContext.ajaxCall = groupContext.ajaxGet = () => { filterRequests++; };
+pollGroups(filterSource);
+filter(' ZA ');
+assert.equal(proxyFilterStatus, 'Visible proxy entries: 3/6');
+assert.equal(shownNames().length, 3);
+assert(!displayedGroups().includes('Empty group'));
+assert(!pollingBox.querySelectorAll('li[data-member]').some(node => node.attrs.class.includes(' active')));
+const beforeUnchanged = pollingBox.children[0];
+pollGroups(filterSource);
+filter('za');
+assert.equal(pollingBox.children[0], beforeUnchanged, 'Equivalent filters and unchanged polls preserve DOM');
+const wholeGroup = pollingBox.querySelectorAll('button[data-group]').find(button =>
+    button.attrs.class.includes('cmd-test-group') && button.attrs['data-group'] === 'Search group');
+nodeOrderHandler.call({value: 'name-asc'});
+dashboardFavorites.toggle('proxies', 'Other');
+testGroupHandler.call(wholeGroup);
+assert.deepEqual(foldedTestNames, ['Other', 'literal &gt;', 'ZA [a.*]', 'ZA & Zurich', '中文节点'],
+    'Filtered groups still probe every exact name in prior natural/favorite order');
+filter('[a.*]');
+assert.deepEqual(shownNames(), ['ZA [a.*]']);
+filter('&gt;');
+assert.deepEqual(shownNames(), ['literal &gt;']);
+filter('中文节');
+assert.deepEqual(shownNames(), ['中文节点']);
+filter('Search group');
+assert.deepEqual(shownNames(), []);
+assert.equal(proxyFilterStatus, 'Visible proxy entries: 0/6');
+assert.equal(pollingBox.children[0].textContent, 'No proxy names match the filter.');
+filter('ZA');
+groupContext.testing = true;
+filter('Zurich');
+assert.equal(testsDisabled, true, 'New controls remain disabled during in-flight latency tests');
+groupContext.testing = false;
+pollGroups({ready: false});
+filter('ZA');
+assert.deepEqual(shownNames(), [], 'Filtering never revives a stale group snapshot');
+assert.equal(proxyFilterStatus, '');
+pollGroups(filterSource);
+assert.equal(shownNames().length, 3);
+proxyFilterClear();
+assert.equal(shownNames().length, 6);
+assert(proxyFilterControl.focused);
+assert.equal(proxyFilterStatus, '');
+assert.equal(JSON.stringify(filterSource), beforeFilter);
+assert.equal(filterRequests, 0);
+assert(wholeGroup.attrs['aria-label'].startsWith('Test all nodes'));
+console.log('Proxy name filter: Unicode/literal text, counts, polling and unchanged full-group probes passed');
 
 // Run the real connections grid setup, not a copy of the count calculation.
 // No AJAX/storage APIs are supplied: counting must reuse the grid's existing data.
