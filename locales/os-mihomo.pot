@@ -1906,3 +1906,43 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
 msgid "Clipboard unavailable. Copy the rule match manually."
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Log severity"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "All levels"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Debug"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Info"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Warning"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Error"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Fatal"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Panic"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Unknown level"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Downloads include all levels."
+msgstr ""
