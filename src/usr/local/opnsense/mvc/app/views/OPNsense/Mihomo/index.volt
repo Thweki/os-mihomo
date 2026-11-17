@@ -99,14 +99,18 @@
         try { storedHistory = JSON.parse(sessionStorage.getItem('mihomo.traffic.v1') || '[]'); } catch (error) { /* Optional cache. */ }
         const trafficHistory = new MihomoUI.TrafficHistory(storedHistory);
         let trafficRange = 60;
+        // Reuse locale formatters across every label and polling redraw.
+        const trafficTimeWithSeconds = new Intl.DateTimeFormat([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+        const trafficTimeWithoutSeconds = new Intl.DateTimeFormat([], {hour: '2-digit', minute: '2-digit'});
         let lastMetadata = 0;
         let lastHistorySave = 0;
 
         function drawTraffic() {
             if (!gTrafficChart) { return; }
             const samples = trafficHistory.window(trafficRange, Date.now());
+            const timeFormat = trafficRange <= 300 ? trafficTimeWithSeconds : trafficTimeWithoutSeconds;
             gTrafficChart.data.labels = samples.map(function (point) {
-                return new Date(point.time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: trafficRange <= 300 ? '2-digit' : undefined});
+                return timeFormat.format(point.time);
             });
             gTrafficChart.data.datasets[0].data = samples.map(function (point) { return point.down; });
             gTrafficChart.data.datasets[1].data = samples.map(function (point) { return point.up; });
@@ -306,11 +310,19 @@
         /* ------------------------------------------------------------------ *
          * 活动连接表格
          * ------------------------------------------------------------------ */
-        $("#grid-connections").UIBootgrid({
+        let connectionsReady = false;
+        $("#grid-connections").on('load.rs.jquery.bootgrid', function () {
+            connectionsReady = false;
+            $('#connection-visible-count').text('—');
+        }).UIBootgrid({
             'search': '/api/mihomo/dashboard/connections',
             'options': {
                 'rowSelect': false,
                 'multiSelect': false,
+                'responseHandler': function (response) {
+                    connectionsReady = !!(response && response.ready === true && Array.isArray(response.rows));
+                    return response;
+                },
                 'formatters': {
                     'bytesformatter': function (column, row) {
                         return fmtBytes(row[column.id]);
@@ -338,6 +350,9 @@
                 }
             }
         }).on('loaded.rs.jquery.bootgrid', function () {
+            $('#connection-visible-count').text(connectionsReady
+                ? fmtCount($('#grid-connections').bootgrid('getCurrentRows').length)
+                : {{ lang._('Unavailable') | json_encode }});
             $('[data-toggle="tooltip"]').tooltip({ 'container': 'body' });
             $('.cmd-close-connection').off('click').on('click', function () {
                 closeConnections($(this).attr('data-id'));
@@ -524,6 +539,7 @@
         <div class="content-box">
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-exchange text-muted"></i> <b>{{ lang._('Active Connections') }}</b>
+                <span class="text-muted" role="status">{{ lang._('Visible connections') }}: <span id="connection-visible-count">—</span></span>
                 <span class="pull-right">
                     <button type="button" id="close-all-connections" class="btn btn-xs btn-default">
                         <i class="fa fa-times-circle fa-fw"></i> {{ lang._('Close all') }}
