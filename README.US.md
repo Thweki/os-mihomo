@@ -39,6 +39,8 @@ Use the chevron beside a group's member count to **Collapse group** or **Expand 
 
 In **Proxy Groups**, click the star beside a group to pin its card first, or beside a proxy to pin it first in every group containing it. Click again to restore its normal order. Stars do not change the selected proxy or routing. Favorites are remembered by exact name in this browser for this WebGUI address (shared by users of the same browser profile); clearing site data removes them. Missing nodes retain their stars if the same names return after a subscription update. If browser storage is unavailable, stars work for the current page visit and a notice explains that they could not be saved.
 
+Use **Proxy Groups → Node order** to sort proxies by **Name (A–Z)** or **Name (Z–A)** within each group. Names follow browser locale collation, ignore case, and compare numbers naturally (Node 2 before Node 10); equal names keep configuration order. Favorites stay first, with each section sorted separately. **Configuration order** restores the original order within those sections. Sorting applies to subsequent polls, sends no requests, and does not change selections or group order. Reloading resets it to configuration order.
+
 Current forwarding is a read-only view of loaded PF rules, preserving address families, directions, port limits and exceptions. Rule order and core policies still affect traffic; DNS paths describe configuration and require a client query to confirm reachability. Process memory reports the core's RSS.
 
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)

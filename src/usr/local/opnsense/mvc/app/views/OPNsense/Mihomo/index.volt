@@ -187,6 +187,7 @@
          * 代理分组
          * ------------------------------------------------------------------ */
         const favorites = new MihomoUI.ProxyFavorites();
+        let nodeOrder = 'config';
         const collapsedGroups = new Set(); // Page visit only; reload starts expanded.
         let latestGroups = null;
         let renderedGroups = null;
@@ -218,12 +219,17 @@
                 testNode: {{ lang._('Test node latency') | json_encode }},
                 favoriteGroup: {{ lang._('Favorite group') | json_encode }},
                 favoriteProxy: {{ lang._('Favorite proxy') | json_encode }}
-            }, delayText, delayClass, favorites, collapsedGroups);
+            }, delayText, delayClass, favorites, nodeOrder, collapsedGroups);
             if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
 
         let testing = false;
+        $('#proxy-node-order').on('change', function () {
+            nodeOrder = this.value;
+            renderedGroups = null;
+            if (latestGroups) { renderGroups(latestGroups); }
+        });
         $('#proxy-groups').on('click', '.cmd-collapse-group', function () {
             const name = $(this).attr('data-group');
             if (collapsedGroups.has(name)) { collapsedGroups.delete(name); }
@@ -536,6 +542,15 @@
         <div class="content-box">
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
+            </div>
+            <div style="padding:0 12px 12px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                <label for="proxy-node-order" style="font-weight:normal; margin:0;">{{ lang._('Node order') }}</label>
+                <select id="proxy-node-order" class="form-control" style="width:auto;" aria-describedby="proxy-node-order-note">
+                    <option value="config">{{ lang._('Configuration order') }}</option>
+                    <option value="name-asc">{{ lang._('Name (A–Z)') }}</option>
+                    <option value="name-desc">{{ lang._('Name (Z–A)') }}</option>
+                </select>
+                <span id="proxy-node-order-note" class="text-muted">{{ lang._('Favorites stay first. Name order uses natural numbers and ignores case. Resets on page reload.') }}</span>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
