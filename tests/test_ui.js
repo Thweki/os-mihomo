@@ -856,6 +856,111 @@ async function testProxyCopy() {
 }
 testProxyCopy().catch(error => { console.error(error); process.exitCode = 1; });
 
+// Run the dashboard polling wiring and real overview renderer with controlled time.
+// Pausing affects automatic statistics reads, not other panels or explicit actions.
+const dashboardPollingScript = indexView.match(/        const overviewPoller =[\s\S]*?        window.addEventListener\('pagehide'[^\n]+/)[0];
+const overviewRenderScript = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0];
+const translate = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
+    (_, label) => JSON.stringify(label));
+function dashboardFixture() {
+    const timers = new Map(), reads = [], instances = [], elements = new Map();
+    const events = {}, pageEvents = {}, document = {hidden: false,
+        addEventListener: (event, handler) => { events[event] = handler; }};
+    let time = 100000, timerId = 0;
+    function element(selector) {
+        if (typeof selector !== 'string') { return selector; }
+        if (!elements.has(selector)) {
+            elements.set(selector, {label: '', value: '', click(handler) { this.handler = handler; },
+                text(value) { this.label = value; return this; }, data() { return false; },
+                val(value) { this.value = value; return this; }});
+        }
+        return elements.get(selector);
+    }
+    class DashboardPoller extends UI.Poller {
+        constructor(request, interval) {
+            super(request, interval, {hidden: () => document.hidden,
+                schedule: (fn, delay) => { const id = ++timerId; timers.set(id, {fn, delay}); return id; },
+                cancel: id => timers.delete(id)});
+            instances.push(this);
+        }
+    }
+    const traffic = new UI.TrafficHistory();
+    const context = vm.createContext({
+        MihomoUI: {...UI, Poller: DashboardPoller}, document, $: element,
+        window: {addEventListener: (event, handler) => { pageEvents[event] = handler; }},
+        Date: {now: () => time}, trafficHistory: traffic, processMemory: null, lastHistorySave: time, latestTotals: null, renderTrafficTotals: () => {},
+        fmtCount: String, fmtBytes: String, fmtRate: String, drawTraffic: () => {},
+        sessionStorage: {setItem() {}},
+        ajaxGet: (url, data, done) => reads.push({url, data, done}),
+        loadGroups: done => done(true), loadServiceState: done => done(true)
+    });
+    vm.runInContext('let lastMetadata = 0;\nfunction renderModeHint() {}\n' + translate(overviewRenderScript) + overviewFunction
+        + translate(dashboardPollingScript), context);
+    return {timers, reads, instances, traffic, element,
+        click: () => element('#overview-pause').handler.call(element('#overview-pause')),
+        advance: ms => { time += ms; },
+        reply: (ready = true) => reads.at(-1).done({runtime: {ready, connections: 7,
+            downloadTotal: time, uploadTotal: time}, controller: {alive: true}}, 'success'),
+        fire: poller => { const timer = timers.get(poller.timer); assert(timer); timers.delete(poller.timer); timer.fn(); },
+        hide: hidden => { document.hidden = hidden; events.visibilitychange(); },
+        leave: () => pageEvents.pagehide()
+    };
+}
+const dashboard = dashboardFixture();
+const [statistics, proxyPolling, servicePolling] = dashboard.instances;
+assert.equal(statistics.paused, false, 'New visits retain automatic polling');
+assert.equal(dashboard.reads.length, 1);
+dashboard.reply();
+dashboard.advance(2000); dashboard.fire(statistics); dashboard.reply();
+assert.notEqual(dashboard.traffic.samples.at(-1).down, null);
+dashboard.click();
+assert(statistics.paused);
+assert(!dashboard.timers.has(statistics.timer), 'Pause cancels the next automatic read');
+assert.equal(dashboard.element('#overview-pause').label, 'Resume statistics');
+assert(dashboard.element('#overview-polling-state').label.includes('paused'));
+assert(dashboard.timers.has(proxyPolling.timer) && dashboard.timers.has(servicePolling.timer));
+dashboard.fire(proxyPolling); dashboard.fire(servicePolling);
+const pausedReads = dashboard.reads.length;
+dashboard.hide(true); dashboard.hide(false);
+assert.equal(dashboard.reads.length, pausedReads, 'Returning to a visible tab must respect manual pause');
+statistics.refresh(); dashboard.reply();
+assert.equal(dashboard.reads.length, pausedReads + 1, 'Explicit action refreshes still work');
+assert(!dashboard.timers.has(statistics.timer), 'An explicit read must not restart automatic polling');
+dashboard.advance(1000); dashboard.click();
+assert.equal(dashboard.reads.length, pausedReads + 2, 'Resume refreshes immediately');
+assert.equal(dashboard.reads.at(-1).data.metadata, 1, 'Resume reloads runtime mode and version');
+assert.equal(dashboard.traffic.previous, null, 'Resume resets even a short pause or manual-read baseline');
+dashboard.reply();
+assert.equal(dashboard.traffic.samples.at(-1).down, null, 'Traffic must not average across a pause');
+assert.equal(dashboard.element('#overview-pause').label, 'Pause statistics');
+assert.equal(dashboard.element('#overview-polling-state').label, '');
+assert.equal(dashboard.timers.get(statistics.timer).delay, 2000);
+dashboard.advance(2000); dashboard.fire(statistics);
+dashboard.click(); dashboard.reply(false);
+assert.equal(statistics.pending, false);
+assert(!dashboard.timers.has(statistics.timer), 'An in-flight failure cannot rearm a paused poller');
+dashboard.click(); dashboard.reply();
+assert.equal(dashboard.timers.get(statistics.timer).delay, 2000);
+dashboard.advance(2000); dashboard.fire(statistics);
+const beforeRapidToggle = dashboard.reads.length;
+dashboard.click(); dashboard.click();
+assert.equal(dashboard.reads.length, beforeRapidToggle, 'Rapid pause/resume must not overlap requests');
+dashboard.reply();
+assert.equal(dashboard.timers.size, 3, 'Resume leaves exactly one timer per poller');
+dashboard.click(); dashboard.hide(true); dashboard.click();
+assert.equal(dashboard.reads.length, beforeRapidToggle, 'Resuming in a hidden tab defers the read');
+dashboard.hide(false); dashboard.reply();
+assert.equal(dashboard.reads.length, beforeRapidToggle + 1);
+dashboard.fire(statistics); dashboard.click(); dashboard.leave(); dashboard.reply();
+statistics.setPaused(false); statistics.refresh();
+assert.equal(dashboard.timers.size, 0, 'Late responses and resume cannot revive a closed page');
+const reopenedDashboard = dashboardFixture();
+assert.equal(reopenedDashboard.instances[0].paused, false, 'Pause is not persisted across visits');
+reopenedDashboard.leave();
+assert(indexView.includes('id="overview-pause" aria-describedby="overview-polling-state"'));
+assert(indexView.includes('id="overview-polling-state" class="text-muted" role="status" aria-live="polite"'));
+console.log('Dashboard pause/resume: timers, visibility, actions, in-flight reads, traffic gaps and teardown passed');
+
 // Exercise the actual mode hint, overview renderer and mode-change handler together.
 const translateModeScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
     (_, label) => JSON.stringify(label));

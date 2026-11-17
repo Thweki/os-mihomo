@@ -1545,3 +1545,15 @@ msgstr "前后各 5 行"
 
 msgid "Search is literal and case-insensitive. Context uses nearby loaded lines, respects severity, and shows overlapping lines only once."
 msgstr "按字面搜索，不区分大小写。上下文来自附近已载入且符合所选级别的行；重叠行仅展示一次。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Pause statistics"
+msgstr "暂停统计刷新"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Resume statistics"
+msgstr "恢复统计刷新"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Statistics auto refresh is paused. In-flight reads may finish; actions can still refresh results. Other panels remain live."
+msgstr "统计自动刷新已暂停。正在进行的读取可能完成；操作仍可刷新结果。其他面板继续实时更新。"
