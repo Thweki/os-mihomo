@@ -195,6 +195,74 @@ toggleWrap(true);
 assert.equal(viewer.value, 'second source', 'Toggling back does not replace the current log');
 console.log('Log wrapping: defaults, long Unicode lines, selection, tail following, filtering, polling, source changes and downloads passed');
 
+// Timestamp visibility runs through the real view, retaining original lines for
+// search/download and leaving unrecognized prefixes and message dates intact.
+const hideTime = control('#log-hide-timestamps');
+assert.match(logView, /<label[^>]*><input id="log-hide-timestamps" type="checkbox">/,
+    'Timestamp hiding is labelled and off on each page visit');
+const timestampLines = [
+    'time="2026-11-15T12:34:56.123456789+08:00" level=info msg="connected &amp; ready"',
+    'time="2026-11-15T04:34:56Z" level=warning msg="retry at 2026-11-16"',
+    'time="2026-11-15T04:34:56.001-05:00" level=debug msg="trace"',
+    '[2026-11-15 12:34:56] Subscription task finished (exit=0).',
+    'plain message with time="2026-11-15T04:34:56Z" inside',
+    '    continuation [2026-11-15 12:34:56]',
+    'time="unknown" level=info msg="keep unknown prefix"',
+    '[INFO] Keep severity',
+    '[2026-11-15 12:34:56] [2026-11-16 12:34:56] Message date',
+    ''
+];
+const timestampContent = timestampLines.join('\n') + '\n';
+control('#log-source').value = 'mihomo'; control('#log-source').handlers.change();
+respondLog(timestampContent);
+const originalLog = viewer.value;
+assert.equal(originalLog, decode(timestampLines.join('\n')));
+control('#log-auto-refresh').checked = false;
+viewer.top = 17;
+toggleWrap(false);
+const timestampRequests = requests.length, timestampDecodes = logDecodes;
+hideTime.checked = true; hideTime.handlers.change();
+assert.equal(viewer.value, [
+    'level=info msg="connected & ready"',
+    'level=warning msg="retry at 2026-11-16"',
+    'level=debug msg="trace"',
+    'Subscription task finished (exit=0).',
+    ...timestampLines.slice(4, 8),
+    '[2026-11-16 12:34:56] Message date', ''
+].join('\n'));
+assert.equal(viewer.top, 17, 'Toggling preserves the scroll offset');
+assert.equal(requests.length, timestampRequests, 'Toggling while paused needs no fetch');
+assert.equal(logDecodes, timestampDecodes, 'Toggling uses the decoded cache');
+assert.equal(viewer.wrap, 'off', 'Timestamp hiding does not change the wrapping choice');
+assert.equal(control('#log-match-state').label, '10 / 10');
+control('#log-filter').value = '+08:00'; control('#log-filter').handlers.input();
+assert.equal(viewer.value, 'level=info msg="connected & ready"', 'Hidden timestamps remain searchable');
+assert.equal(control('#log-match-state').label, '1 / 10');
+control('#log-filter').value = 'no match'; control('#log-filter').handlers.input();
+assert.equal(viewer.value, '');
+control('#log-filter').value = ''; control('#log-filter').handlers.input();
+control('#refreshAct').handlers.click(); respondLog(timestampContent);
+assert(!viewer.value.startsWith('time='), 'Unchanged refresh retains timestamp hiding');
+fakeDocument.createElement = () => ({click() {}});
+control('#downloadAct').handlers.click();
+assert.equal(requests.at(-1).params.lines, 5000);
+respondLog(timestampContent);
+assert.equal(logDownloads.at(-1), decode(timestampContent), 'Downloads retain full timestamps and trailing newlines');
+hideTime.checked = false; hideTime.handlers.change();
+assert.equal(viewer.value, originalLog, 'Showing timestamps restores exact decoded content');
+hideTime.checked = true; hideTime.handlers.change();
+control('#log-source').value = 'subscription'; control('#log-source').handlers.change();
+assert.equal(viewer.value, '');
+respondLog('[2026-11-15 13:00:00] New subscription task\n');
+assert.equal(viewer.value, 'New subscription task', 'Source changes retain the choice for new content');
+control('#log-lines').value = '300'; control('#log-lines').handlers.change();
+respondLog('[2026-11-15 13:01:00] Finished\n');
+assert.equal(viewer.value, 'Finished', 'Line count changes retain timestamp hiding');
+control('#refreshAct').handlers.click(); requests.at(-1).done(null, 'error');
+hideTime.checked = false; hideTime.handlers.change();
+assert.equal(viewer.value, '[2026-11-15 13:01:00] Finished', 'Failed reads retain restorable timestamps');
+console.log('Log timestamp toggle: defaults, formats, paused rendering, search, downloads and refreshes passed');
+
 // The same renderer used by the dashboard runs against a strict DOM fixture.
 // HTML parsing is deliberately unavailable: dynamic names must be text/attributes.
 const UI = require('../src/usr/local/www/js/mihomo/ui.js');
