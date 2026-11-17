@@ -33,6 +33,14 @@
             || typeof rule.destination !== 'string' || !rule.destination.trim()) { return ''; }
         return 'from ' + decodeApiText(rule.source) + ' to ' + decodeApiText(rule.destination);
     }
+    // Clipboard permission/security failures leave the caller a manual-copy path.
+    async function copyText(text, clipboard) {
+        try {
+            if (!clipboard || typeof clipboard.writeText !== 'function') { return false; }
+            await clipboard.writeText(text);
+            return true;
+        } catch (error) { return false; }
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -205,6 +213,14 @@
                 'data-group': name, 'data-focus-key': JSON.stringify(['group', name]), 'aria-label': labels.testGroup + ': ' + name, title: labels.testGroup});
             test.appendChild(el('i', {class: 'fa fa-tachometer fa-fw', 'aria-hidden': 'true'}));
             header.appendChild(test);
+            const current = decodeApiText(group.now);
+            const copySelection = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-copy pull-right',
+                'data-copy-text': JSON.stringify(name) + ': ' + JSON.stringify(current) + '\n',
+                'data-focus-key': JSON.stringify(['copy-selection', name]),
+                'aria-label': labels.copySelection + ': ' + name, title: labels.copySelection});
+            copySelection.disabled = !current;
+            copySelection.appendChild(el('i', {class: 'fa fa-copy fa-fw', 'aria-hidden': 'true'}));
+            header.appendChild(copySelection);
             const list = el('ul', {id: listId, class: 'list-group', 'data-group': name, 'aria-label': name,
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
             // Keep members in the DOM so full-group latency tests still include them.
@@ -232,7 +248,12 @@
                 const testMember = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-test', 'data-name': memberName,
                     'data-focus-key': JSON.stringify(['test', name, memberName]), 'aria-label': labels.testNode + ': ' + memberName, title: labels.testNode});
                 testMember.appendChild(el('i', {class: 'fa fa-bolt fa-fw', 'aria-hidden': 'true'}));
-                item.appendChild(testMember); list.appendChild(item);
+                item.appendChild(testMember);
+                const copyName = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-copy',
+                    'data-copy-text': memberName, 'data-focus-key': JSON.stringify(['copy-name', name, memberName]),
+                    'aria-label': labels.copyName + ': ' + memberName, title: labels.copyName});
+                copyName.appendChild(el('i', {class: 'fa fa-copy fa-fw', 'aria-hidden': 'true'}));
+                item.appendChild(copyName); list.appendChild(item);
             });
             card.appendChild(header); card.appendChild(list); column.appendChild(card); row.appendChild(column);
         });
@@ -257,5 +278,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, ruleMatchText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, ruleMatchText, copyText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
 }));
