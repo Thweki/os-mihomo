@@ -1946,3 +1946,24 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
 msgid "Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Downloads include all levels."
 msgstr ""
+
+msgid "Matching lines"
+msgstr ""
+
+msgid "Shown lines"
+msgstr ""
+
+msgid "Surrounding lines"
+msgstr ""
+
+msgid "Matches only"
+msgstr ""
+
+msgid "2 before and after"
+msgstr ""
+
+msgid "5 before and after"
+msgstr ""
+
+msgid "Search is literal and case-insensitive. Context uses nearby loaded lines, respects severity, and shows overlapping lines only once."
+msgstr ""

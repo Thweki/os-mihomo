@@ -58,6 +58,29 @@ for (const line of ['', 'subscription error', '[2026-11-15 12:34:56] task finish
 assert.equal(logLevel('time="2026-11-15T12:34:56Z" level=info msg="level=error WARN[123]"'), 'info');
 console.log('Log severity parsing: structured headers, console colors, aliases and unclassified text passed');
 
+const {filterLogLines} = require('../src/usr/local/www/js/mihomo/ui.js');
+const logFixture = ['start', 'before', 'ERROR [a.*]', 'after', 'ERROR again', 'end', 'unrelated'];
+assert.deepEqual(filterLogLines(logFixture, 'error', 0), {lines: [logFixture[2], logFixture[4]], matches: 2});
+assert.deepEqual(filterLogLines(logFixture, 'error', 2), {lines: logFixture, matches: 2},
+    'Overlapping context windows merge without duplicating lines');
+assert.deepEqual(filterLogLines(logFixture, '[a.*]', 2), {lines: logFixture.slice(0, 5), matches: 1},
+    'Search is literal, including regular expression punctuation');
+assert.deepEqual(filterLogLines(logFixture, 'START', 2), {lines: logFixture.slice(0, 3), matches: 1});
+assert.deepEqual(filterLogLines(logFixture, 'unrelated', 5), {lines: logFixture.slice(1), matches: 1});
+assert.deepEqual(filterLogLines(logFixture, 'absent', 5), {lines: [], matches: 0});
+assert.deepEqual(filterLogLines([], '', 5), {lines: [], matches: 0});
+assert.deepEqual(filterLogLines(logFixture, '', 5), {lines: logFixture, matches: 7});
+assert.deepEqual(filterLogLines(['中文', '', '<tag>&', '中文'], '中文', 2),
+    {lines: ['中文', '', '<tag>&', '中文'], matches: 2}, 'Preserve blank and repeated lines and Unicode');
+for (const radius of [-1, 1, 5000, NaN]) {
+    assert.deepEqual(filterLogLines(logFixture, 'error', radius), filterLogLines(logFixture, 'error', 0),
+        'Only supported context sizes are accepted');
+}
+const largeLog = Array.from({length: 3000}, (_, i) => 'line ' + i);
+largeLog[2] = largeLog[2997] = 'match';
+assert.deepEqual(filterLogLines(largeLog, 'match', 2),
+    {lines: [...largeLog.slice(0, 5), ...largeLog.slice(-5)], matches: 2}, 'Disjoint windows keep source order');
+
 console.log('UI history, formatting and API text decoding: all checks passed');
 
 // Exercise the actual log view script with delayed API responses, without a browser
@@ -89,6 +112,7 @@ function control(selector) {
 control('#log-source').value = 'mihomo';
 control('#log-lines').value = '300';
 control('#log-level').value = 'all';
+control('#log-context').value = '0';
 const logView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt'), 'utf8');
 const logScript = logView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
@@ -100,7 +124,7 @@ vm.runInNewContext(logScript, {
     URL: {createObjectURL: () => 'blob:log-test', revokeObjectURL() {}},
     $: selector => selector === fakeDocument ? {ready: fn => fn()} : control(selector),
     ajaxGet: (url, params, done) => requests.push({params, done}),
-    setInterval: fn => { logTimer = fn; }, MihomoUI: {logLevel, decodeApiText: value => { logDecodes++; return decode(value); }}
+    setInterval: fn => { logTimer = fn; }, MihomoUI: {logLevel, filterLogLines, decodeApiText: value => { logDecodes++; return decode(value); }}
 });
 assert.equal(requests.length, 1);
 control('#log-source').value = 'subscription';
@@ -374,6 +398,44 @@ toggleWrap(true);
 control('#log-auto-refresh').checked = true;
 console.log('Severity with timestamp hiding, full-source search, wrapping and downloads passed');
 
+control('#log-auto-refresh').checked = false;
+control('#log-source').value = 'mihomo'; control('#log-source').handlers.change();
+const contextData = [
+    'time="2026-11-17T01:00:00Z" level=error msg="left"',
+    'time="2026-11-17T01:00:00Z" level=info msg="hit"',
+    'time="2026-11-17T01:00:00Z" level=error msg="hit &lt;tag&gt;"',
+    'time="2026-11-17T01:00:00Z" level=error msg="right"',
+    'time="2026-11-17T01:00:00Z" level=warning msg="elsewhere"',
+    'time="2026-11-17T01:00:00Z" level=error msg="outside"'
+];
+respondLog(contextData.join('\n')+'\n');
+control('#log-hide-timestamps').checked = true; control('#log-hide-timestamps').handlers.change();
+levelControl.value = 'error'; levelControl.handlers.change();
+control('#log-filter').value = 'hit'; control('#log-filter').handlers.input();
+const beforeContext = requests.length;
+control('#log-context').value = '2'; control('#log-context').handlers.change();
+assert.equal(viewer.value, 'level=error msg="left"\nlevel=error msg="hit <tag>"\nlevel=error msg="right"');
+assert.equal(control('#log-match-state').label, 'translated: 1 / 6 · translated: 3');
+assert.equal(requests.length, beforeContext, 'Changing context while paused does not issue requests');
+logTimer();
+assert.equal(requests.length, beforeContext, 'Context does not resume automatic polling');
+control('#downloadAct').handlers.click();
+assert.equal(requests.at(-1).params.lines, 5000);
+respondLog(contextData.join('\n') + '\n');
+assert.equal(logDownloads.at(-1), decode(contextData.join('\n')) + '\n',
+    'Context does not alter the unfiltered download bytes');
+control('#log-auto-refresh').checked = true;
+const contextWork = logWork();
+logTimer(); respondLog(contextData.join('\n') + '\n');
+assert.deepEqual(logWork(), contextWork, 'Unchanged polls do not rebuild context results');
+logTimer(); requests.at(-1).done(null, 'error');
+assert.equal(viewer.value, 'level=error msg="left"\nlevel=error msg="hit <tag>"\nlevel=error msg="right"',
+    'An API failure preserves the context view');
+control('#log-context').value = '0'; control('#log-context').handlers.change();
+assert.equal(viewer.value, 'level=error msg="hit <tag>"');
+assert.equal(control('#log-match-state').label, '1 / 6');
+assert(logView.includes('label for="log-context"'));
+console.log('Log context: literal windows, true line offsets, severity, hidden timestamps and paused requests passed');
 
 // The same renderer used by the dashboard runs against a strict DOM fixture.
 // HTML parsing is deliberately unavailable: dynamic names must be text/attributes.
@@ -1387,3 +1449,11 @@ async function testRuleCopy() {
     console.log('Rule match copy: exact text, safe DOM, keyboard controls, clipboard success/fallback, refresh and read-only behavior passed');
 }
 testRuleCopy().catch(error => { console.error(error); process.exitCode = 1; });
+
+const contextFilter = ['level=error msg="at zero"', 'level=info msg="a"', 'level=info msg="b"',
+    'level=error msg="nearby, but outside radius"', 'level=error msg="hit"', 'level=error msg="context"',
+    'level=info msg="hit wrong severity"'];
+const errorOnly = line => logLevel(line) === 'error';
+assert.deepEqual(filterLogLines(contextFilter, 'hit', 2, errorOnly), {
+    lines: contextFilter.slice(3, 6), matches: 1
+}, 'Context measures original offsets and does not reintroduce other severities');

@@ -54,6 +54,28 @@
         }
         return 'unknown';
     }
+    // Merge context windows by position, preserving repeated/blank log lines.
+    // Search only the already loaded, redacted text; never interpret it as regex/HTML.
+    function filterLogLines(lines, query, context, eligible = () => true) {
+        const needle = query.toLocaleLowerCase();
+        const allowed = lines.map(eligible);
+        if (!needle) {
+            const visible = lines.filter((_, index) => allowed[index]);
+            return {lines: visible, matches: visible.length};
+        }
+        const radius = context === 2 || context === 5 ? context : 0;
+        const ranges = [];
+        let matches = 0;
+        lines.forEach((line, index) => {
+            if (!allowed[index] || !line.toLocaleLowerCase().includes(needle)) { return; }
+            matches++;
+            const start = Math.max(0, index - radius), end = Math.min(lines.length, index + radius + 1);
+            const previous = ranges[ranges.length - 1];
+            if (previous && start <= previous.end) { previous.end = end; }
+            else { ranges.push({start, end}); }
+        });
+        return {lines: ranges.flatMap(range => lines.slice(range.start, range.end).filter((_, offset) => allowed[range.start + offset])), matches};
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -291,5 +313,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, logLevel, ruleMatchText, copyText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
 }));
