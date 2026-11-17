@@ -217,12 +217,41 @@
                 expandGroup: {{ lang._('Expand group') | json_encode }},
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }},
+                copyName: {{ lang._('Copy proxy name') | json_encode }},
+                copySelection: {{ lang._('Copy group selection') | json_encode }},
                 favoriteGroup: {{ lang._('Favorite group') | json_encode }},
                 favoriteProxy: {{ lang._('Favorite proxy') | json_encode }}
             }, delayText, delayClass, favorites, nodeOrder, collapsedGroups);
             if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
+
+        let copying = false;
+        $('#proxy-groups').on('click', '.cmd-copy', async function () {
+            if (copying || this.disabled) { return; }
+            copying = true;
+            // Capture the clicked snapshot before polling can replace its button.
+            const text = this.getAttribute('data-copy-text');
+            $('#proxy-copy-fallback').prop('hidden', true);
+            $('#proxy-copy-text').val('');
+            $('#proxy-copy-state').text({{ lang._('Copying…') | json_encode }});
+            const copied = await MihomoUI.copyText(text, navigator.clipboard);
+            copying = false;
+            $('#proxy-copy-state').text(copied
+                ? {{ lang._('Copied to clipboard.') | json_encode }}
+                : {{ lang._('Clipboard unavailable. Copy the selected text below.') | json_encode }});
+            if (!copied) {
+                $('#proxy-copy-fallback').prop('hidden', false);
+                const field = $('#proxy-copy-text').val(text)[0];
+                field.focus();
+                field.select();
+            }
+        });
+        $('#proxy-copy-dismiss').on('click', function () {
+            $('#proxy-copy-fallback').prop('hidden', true);
+            $('#proxy-copy-text').val('');
+            $('#proxy-copy-state').empty();
+        });
 
         let testing = false;
         $('#proxy-node-order').on('change', function () {
@@ -553,6 +582,12 @@
                 <span id="proxy-node-order-note" class="text-muted">{{ lang._('Favorites stay first. Name order uses natural numbers and ignores case. Resets on page reload.') }}</span>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <p id="proxy-copy-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div id="proxy-copy-fallback" hidden style="padding:0 12px 12px;">
+                <label for="proxy-copy-text">{{ lang._('Text to copy') }}</label>
+                <textarea id="proxy-copy-text" class="form-control" rows="3" readonly spellcheck="false"></textarea>
+                <button id="proxy-copy-dismiss" type="button" class="btn btn-xs btn-default">{{ lang._('Dismiss') }}</button>
+            </div>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
             <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div style="padding: 12px;" id="proxy-groups">

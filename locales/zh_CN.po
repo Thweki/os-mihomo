@@ -1466,3 +1466,31 @@ msgstr "已复制规则匹配条件。"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
 msgid "Clipboard unavailable. Copy the rule match manually."
 msgstr "剪贴板不可用，请手动复制规则匹配条件。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copy proxy name"
+msgstr "复制代理名称"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copy group selection"
+msgstr "复制分组选择"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copying…"
+msgstr "正在复制…"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copied to clipboard."
+msgstr "已复制到剪贴板。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Clipboard unavailable. Copy the selected text below."
+msgstr "剪贴板不可用。请手动复制下方已选中的文本。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Text to copy"
+msgstr "待复制文本"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Dismiss"
+msgstr "关闭"
