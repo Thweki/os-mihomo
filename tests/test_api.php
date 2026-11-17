@@ -83,6 +83,34 @@ namespace {
             \OPNsense\Mihomo\ControllerHttpFixture::$body = false;
             expect(\OPNsense\Mihomo\Controller::$method() === null, $method . ' handles transport failure');
         }
+        $metadata = [
+            ['host' => 'example.invalid', 'sourceIP' => '192.0.2.8', 'sourcePort' => 50000,
+                'destinationIP' => '198.51.100.9', 'destinationPort' => 443],
+            ['host' => 'ipv6.example.invalid', 'sourceIP' => '2001:db8::8', 'sourcePort' => 50001,
+                'destinationIP' => '2001:db8::9', 'destinationPort' => 443],
+            ['host' => 'unresolved.example.invalid', 'sourcePort' => 50002, 'destinationPort' => 443],
+            ['sourceIP' => null, 'destinationIP' => null],
+            ['sourceIP' => '192.0.2.8:443', 'destinationIP' => '[2001:db8::9]'],
+            ['sourceIP' => 'example.invalid', 'destinationIP' => ' 192.0.2.8'],
+            ['sourceIP' => true, 'destinationIP' => 42],
+            ['sourceIP' => '2001:DB8::10', 'destinationIP' => '::ffff:192.0.2.10'],
+            ['sourceIP' => '2001:db8::1%em0', 'destinationIP' => '198.51.100.0/24'],
+        ];
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['connections' =>
+            array_map(fn ($meta) => ['metadata' => $meta], $metadata)]);
+        $rows = \OPNsense\Mihomo\Controller::connectionRows()['rows'];
+        $expectedIPs = [
+            ['192.0.2.8', '198.51.100.9'], ['2001:db8::8', '2001:db8::9'], ['', ''], ['', ''],
+            ['', ''], ['', ''], ['', ''], ['2001:DB8::10', '::ffff:192.0.2.10'], ['', ''],
+        ];
+        foreach ($expectedIPs as $index => [$source, $destination]) {
+            expect($rows[$index]['sourceIP'] === $source, 'Copy source IP excludes port');
+            expect($rows[$index]['destinationIP'] === $destination, 'Copy destination IP excludes port and never falls back to hostname');
+        }
+        expect($rows[0]['host'] === 'example.invalid' && $rows[0]['source'] === '192.0.2.8:50000'
+            && $rows[0]['destination'] === '198.51.100.9:443',
+            'Copy metadata preserves existing display fields');
+        echo "Connection copy addresses: strict IPv4/IPv6, display fields and hostname distinction passed\n";
     } finally {
         \OPNsense\Mihomo\Config::setFileOverride(null);
     }

@@ -241,6 +241,9 @@ class Controller
             $rows[] = [
                 'id' => (string)($conn['id'] ?? ''),
                 'host' => $host,
+                // Only expose validated, bare copy values. Keep display/search fields unchanged.
+                'sourceIP' => self::bareConnectionIp($meta['sourceIP'] ?? null),
+                'destinationIP' => self::bareConnectionIp($meta['destinationIP'] ?? null),
                 'source' => (string)($meta['sourceIP'] ?? '') . (isset($meta['sourcePort']) ? ':' . $meta['sourcePort'] : ''),
                 'destination' => (string)($meta['destinationIP'] ?? '') . (isset($meta['destinationPort']) ? ':' . $meta['destinationPort'] : ''),
                 'network' => strtoupper((string)($meta['network'] ?? '')),
@@ -255,6 +258,11 @@ class Controller
             ];
         }
         return $snapshot + ['rows' => $rows];
+    }
+
+    private static function bareConnectionIp(mixed $value): string
+    {
+        return is_string($value) && filter_var($value, FILTER_VALIDATE_IP) !== false ? $value : '';
     }
 
     /** 关闭单条连接（id 为空时关闭全部） */

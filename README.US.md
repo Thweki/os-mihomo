@@ -53,6 +53,8 @@ Current forwarding is a read-only view of loaded PF rules, preserving address fa
 
 In **Current forwarding → Rule details** on Overview or Policy Routing, click **Copy match** beside a destination to copy that row's observed `from <source> to <destination and conditions>` text. Exclusions, port sets and IPv6 text are preserved. This is a match fragment, not a complete PF rule: interface, protocol, direction and next hop remain in the table. A success message confirms the clipboard write; if the browser blocks it (including on HTTP), a prompt offers the same text for manual copying. Copying makes no configuration changes or extra API requests.
 
+In **Active Connections**, use the copy icon beside **Source** for the source IP or beside **Host** for the destination IP. Hover or focus the button to identify its address. Copying uses the IP reported by Mihomo, without a port or IPv6 brackets; it does not resolve hostnames or substitute the displayed host. Missing IPs have no copy button. If the browser blocks clipboard access (including on HTTP), a selected read-only field lets you copy manually. This also works with view-only privileges and makes no extra API requests.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.

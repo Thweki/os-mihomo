@@ -352,6 +352,58 @@
             });
         });
 
+        function isCopyAddressText(text) {
+            // The controller validates the IP; reject unexpected DOM values as well.
+            return typeof text === 'string' && text.length <= 45 && /^[0-9a-f:.]+$/i.test(text);
+        }
+
+        function connectionAddressCell(column, row) {
+            const source = column.id === 'source';
+            const address = MihomoUI.decodeApiText(row[source ? 'sourceIP' : 'destinationIP']);
+            const cell = MihomoUI.element(document, 'span', {}, MihomoUI.decodeApiText(row[column.id]));
+            if (isCopyAddressText(address)) {
+                const label = (source ? {{ lang._('Copy source IP address') | json_encode }} : {{ lang._('Copy destination IP address') | json_encode }}) + ': ' + address;
+                const button = MihomoUI.element(document, 'button', {type: 'button', class: 'btn btn-xs btn-default cmd-copy-address',
+                    style: 'margin-left:4px', 'data-address': address, 'aria-label': label, title: label});
+                button.appendChild(MihomoUI.element(document, 'i', {class: 'fa fa-copy fa-fw', 'aria-hidden': 'true'}));
+                cell.appendChild(button);
+            }
+            return cell.outerHTML;
+        }
+
+        let addressCopyAttempt = 0;
+        let connectionCopyButton = null;
+        function resetConnectionCopy() {
+            $('#connection-copy-state').text('');
+            $('#connection-copy-manual').prop('hidden', true);
+            $('#connection-copy-value').val('');
+        }
+        $('#grid-connections').on('click', '.cmd-copy-address', async function (event) {
+            event.stopPropagation();
+            const address = this.getAttribute('data-address');
+            if (!isCopyAddressText(address)) { return; }
+            const attempt = ++addressCopyAttempt;
+            connectionCopyButton = this;
+            resetConnectionCopy();
+            const copied = await MihomoUI.copyText(address, navigator.clipboard);
+            if (attempt !== addressCopyAttempt) { return; }
+            $('#connection-copy-state').text(copied
+                ? {{ lang._('IP address copied.') | json_encode }}
+                : {{ lang._('Clipboard unavailable. Copy the selected IP address manually.') | json_encode }});
+            if (!copied) {
+                $('#connection-copy-manual').prop('hidden', false);
+                const field = $('#connection-copy-value').val(address)[0];
+                field.focus();
+                field.select();
+            }
+        });
+        $('#connection-copy-dismiss').on('click', function () {
+            ++addressCopyAttempt;
+            resetConnectionCopy();
+            if (connectionCopyButton && connectionCopyButton.isConnected) { connectionCopyButton.focus(); }
+            connectionCopyButton = null;
+        });
+
         /* ------------------------------------------------------------------ *
          * 活动连接表格
          * ------------------------------------------------------------------ */
@@ -369,6 +421,7 @@
                     return response;
                 },
                 'formatters': {
+                    'addressformatter': connectionAddressCell,
                     'bytesformatter': function (column, row) {
                         return fmtBytes(row[column.id]);
                     },
@@ -627,8 +680,8 @@
                 <table id="grid-connections" class="table table-condensed table-hover table-striped table-responsive" data-editDialog="">
                     <thead>
                         <tr>
-                            <th data-column-id="host" data-type="string">{{ lang._('Host') }}</th>
-                            <th data-column-id="source" data-width="11em" data-type="string">{{ lang._('Source') }}</th>
+                            <th data-column-id="host" data-type="string" data-formatter="addressformatter">{{ lang._('Host') }}</th>
+                            <th data-column-id="source" data-width="11em" data-type="string" data-formatter="addressformatter">{{ lang._('Source') }}</th>
                             <th data-column-id="network" data-width="5em" data-type="string">{{ lang._('Network') }}</th>
                             <th data-column-id="type" data-width="5em" data-type="string">{{ lang._('Type') }}</th>
                             <th data-column-id="rule" data-width="10em" data-type="string">{{ lang._('Rule') }}</th>
@@ -645,6 +698,12 @@
                     <tfoot>
                     </tfoot>
                 </table>
+                </div>
+                <p id="connection-copy-state" class="text-muted" role="status"></p>
+                <div id="connection-copy-manual" hidden>
+                    <label for="connection-copy-value">{{ lang._('IP address to copy') }}</label>
+                    <input id="connection-copy-value" type="text" class="form-control" readonly>
+                    <button id="connection-copy-dismiss" type="button" class="btn btn-xs btn-default">{{ lang._('Dismiss') }}</button>
                 </div>
             </div>
         </div>
