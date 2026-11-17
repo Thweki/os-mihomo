@@ -1557,3 +1557,23 @@ msgstr "恢复统计刷新"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Statistics auto refresh is paused. In-flight reads may finish; actions can still refresh results. Other panels remain live."
 msgstr "统计自动刷新已暂停。正在进行的读取可能完成；操作仍可刷新结果。其他面板继续实时更新。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copy source IP address"
+msgstr "复制源 IP 地址"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copy destination IP address"
+msgstr "复制目标 IP 地址"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "IP address copied."
+msgstr "IP 地址已复制。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Clipboard unavailable. Copy the selected IP address manually."
+msgstr "剪贴板不可用。请手动复制已选中的 IP 地址。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "IP address to copy"
+msgstr "待复制的 IP 地址"
