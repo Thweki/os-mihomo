@@ -1423,3 +1423,7 @@ msgstr "结果"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
 msgid "Wrap lines"
 msgstr "自动换行"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Visible connections"
+msgstr "可见连接数"
