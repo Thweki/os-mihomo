@@ -1845,3 +1845,7 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Visible connections"
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Show totals in bytes"
+msgstr ""

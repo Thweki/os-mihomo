@@ -14,6 +14,12 @@
         while (scaled >= 1024 && index < units.length - 1) { scaled /= 1024; index++; }
         return scaled.toLocaleString(locale || undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' ' + units[index];
     }
+    function formatTrafficTotal(value, rawBytes, locale) {
+        // Counters are whole bytes. Do not present missing or imprecise data as exact totals.
+        if (!Number.isSafeInteger(value) || value < 0) { return '—'; }
+        return rawBytes ? value.toLocaleString(locale || undefined, {maximumFractionDigits: 0}) + ' B'
+            : formatBytes(value, locale);
+    }
     // Internal OPNsense API responses use htmlspecialchars(..., ENT_NOQUOTES).
     // Decode exactly one layer, preserving entities that are literal file data.
     function decodeApiText(value) {
@@ -237,5 +243,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
 }));
