@@ -147,6 +147,8 @@ class Controller
 
         $proxies = $result['data']['proxies'];
         $groups = [];
+        // A shared node's history only needs to be read once per response, even if untested.
+        $delays = [];
         foreach ($proxies as $name => $node) {
             if (empty($node['all'])) {
                 continue;   /* 非分组节点 */
@@ -154,13 +156,16 @@ class Controller
             $members = [];
             foreach ($node['all'] as $member) {
                 $memberNode = $proxies[$member] ?? [];
-                $delay = null;
-                foreach (array_reverse($memberNode['history'] ?? []) as $hist) {
-                    if (isset($hist['delay'])) {
-                        $delay = (int)$hist['delay'];
-                        break;
+                if (!array_key_exists($member, $delays)) {
+                    $delays[$member] = null;
+                    foreach (array_reverse($memberNode['history'] ?? []) as $hist) {
+                        if (isset($hist['delay'])) {
+                            $delays[$member] = (int)$hist['delay'];
+                            break;
+                        }
                     }
                 }
+                $delay = $delays[$member];
                 $members[] = [
                     'name' => $member,
                     'type' => (string)($memberNode['type'] ?? ''),
