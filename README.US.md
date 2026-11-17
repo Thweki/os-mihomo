@@ -31,6 +31,8 @@ In **Log File**, select **Hide timestamps** to make messages easier to scan; cle
 
 Traffic charts cover the last **1 minute, 5 minutes, 15 minutes or 1 hour**, with values shown to one decimal place. Samples are collected while the overview is open, and missing samples leave gaps. There is no background long-term traffic storage. Charts follow the active OPNsense theme without a separate theme switch.
 
+Use **Filter proxy names** to narrow the visible proxy rows by a literal case-insensitive name substring. Clear the filter to restore the complete list. Group latency tests still test every node in the selected group; filtering does not change routing or send requests.
+
 In **Active Connections**, **Visible connections** counts the rows on the current table page after each search, page change or refresh. Empty results show zero; loading shows `—` and an unavailable controller shows **Unavailable**. This count describes the table's latest loaded snapshot, excludes other pages, and is separate from the live total above. It adds no requests or settings.
 
 Select **Show totals in bytes** beside Downloaded/Uploaded to inspect whole-byte counters with locale-specific digit grouping instead of rounded KiB/MiB/GiB values. Both totals update immediately and keep the selected format during polling. Reloading restores human-readable units; rates, charts and memory keep their usual units. Missing, invalid or larger-than-safe-integer counters display “—”.

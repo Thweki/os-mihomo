@@ -217,10 +217,44 @@
         if (text !== undefined) { node.textContent = String(text); }
         return node;
     }
+    function normalizeProxyQuery(query) {
+        return query.trim().toLowerCase();
+    }
+    function filterProxyGroups(groups, query) {
+        const needle = normalizeProxyQuery(query);
+        let total = 0, matched = 0;
+        const visible = [];
+        groups.forEach(group => {
+            const members = group.members || [];
+            const matches = needle ? members.filter(member => decodeApiText(member.name).toLowerCase().includes(needle)) : members;
+            total += members.length;
+            matched += matches.length;
+            if (!needle || matches.length) { visible.push(needle ? {...group, members: matches} : group); }
+        });
+        return {groups: visible, matched, total};
+    }
+    function orderProxyMembers(members, favorites, direction, collator) {
+        if (collator) {
+            // Sort decoded display names on a copy; stable ties keep controller order.
+            members = members.map(member => ({member, name: decodeApiText(member.name)}))
+                .sort((a, b) => direction * collator.compare(a.name, b.name)).map(item => item.member);
+        }
+        // The stable favorite partition preserves name order within both sections.
+        return favorites ? favorites.order(members, 'proxies') : members;
+    }
+    function proxyOrder(nodeOrder) {
+        const direction = nodeOrder === 'name-asc' ? 1 : nodeOrder === 'name-desc' ? -1 : 0;
+        return [direction, direction ? new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'}) : null];
+    }
+    function fullProxyGroupTestNames(groups, name, favorites, nodeOrder) {
+        const group = groups.find(group => decodeApiText(group.name) === name);
+        const members = group ? (group.members || []) : [];
+        return [...new Set(orderProxyMembers(members, favorites, ...proxyOrder(nodeOrder))
+            .map(member => decodeApiText(member.name)))];
+    }
     function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, nodeOrder = 'config', collapsedGroups) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
-        const direction = nodeOrder === 'name-asc' ? 1 : nodeOrder === 'name-desc' ? -1 : 0;
-        const collator = direction ? new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'}) : null;
+        const [direction, collator] = proxyOrder(nodeOrder);
         function favoriteButton(kind, name, group) {
             const starred = favorites.has(kind, name);
             const label = kind === 'groups' ? labels.favoriteGroup : labels.favoriteProxy;
@@ -237,7 +271,7 @@
         const row = el('div', {class: 'row'});
         (favorites ? favorites.order(groups, 'groups') : groups).forEach((group, index) => {
             const name = decodeApiText(group.name);
-            let members = group.members || [];
+            const members = group.members || [];
             const collapsed = collapsedGroups && collapsedGroups.has(name);
             const listId = 'mihomo-group-members-' + index;
             const column = el('div', {class: 'col-md-6', style: 'margin-bottom:15px'});
@@ -273,13 +307,7 @@
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
             // Keep members in the DOM so full-group latency tests still include them.
             if (collapsed) { list.setAttribute('hidden', ''); }
-            if (collator) {
-                // Sort decoded display names on a copy; stable ties keep controller order.
-                members = members.map(member => ({member, name: decodeApiText(member.name)}))
-                    .sort((a, b) => direction * collator.compare(a.name, b.name)).map(item => item.member);
-            }
-            // The stable favorite partition preserves name order within both sections.
-            (favorites ? favorites.order(members, 'proxies') : members).forEach(member => {
+            orderProxyMembers(members, favorites, direction, collator).forEach(member => {
                 const memberName = decodeApiText(member.name);
                 const item = el('li', {class: 'list-group-item' + (member.selected ? ' active' : ''),
                     style: 'padding:8px 12px;display:flex;align-items:center;gap:6px', 'data-group': name, 'data-member': memberName});
@@ -326,5 +354,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, normalizeProxyQuery, filterProxyGroups, fullProxyGroupTestNames, renderProxyGroups, ProxyFavorites};
 }));
