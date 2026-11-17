@@ -5,6 +5,23 @@ assert.equal(formatBytes(1536, 'en-US'), '1.5 KiB');
 assert.equal(formatBytes(1536, 'de-DE'), '1,5 KiB');
 assert.equal(formatBytes(null), '0.0 B');
 assert.equal(formatBytes(NaN), '—');
+const {formatTrafficTotal} = require('../src/usr/local/www/js/mihomo/ui.js');
+for (const [value, human, raw] of [
+    [0, '0.0 B', '0 B'], [738, '738.0 B', '738 B'], [1023, '1,023.0 B', '1,023 B'],
+    [1024, '1.0 KiB', '1,024 B'], [1536, '1.5 KiB', '1,536 B'],
+    [1048576, '1.0 MiB', '1,048,576 B'], [1073741824, '1.0 GiB', '1,073,741,824 B'],
+    [1099511627776, '1.0 TiB', '1,099,511,627,776 B']
+]) {
+    assert.equal(formatTrafficTotal(value, false, 'en-US'), human);
+    assert.equal(formatTrafficTotal(value, true, 'en-US'), raw);
+}
+assert.equal(formatTrafficTotal(1536, true, 'de-DE'), '1.536 B');
+assert.equal(formatTrafficTotal(1536, false, 'de-DE'), '1,5 KiB');
+assert.equal(formatTrafficTotal(1536, true, 'zh-CN'), '1,536 B');
+assert.equal(formatTrafficTotal(Number.MAX_SAFE_INTEGER, true, 'en-US'), '9,007,199,254,740,991 B');
+for (const invalid of [null, undefined, NaN, Infinity, -1, 1.5, '', '1536', Number.MAX_SAFE_INTEGER + 1]) {
+    for (const raw of [false, true]) { assert.equal(formatTrafficTotal(invalid, raw), '—'); }
+}
 const history = new TrafficHistory();
 assert.equal(history.add(1000, 100, 200, true).down, null);
 assert.deepEqual(history.add(3000, 2100, 1200, true), {down: 1000, up: 500});
@@ -525,6 +542,75 @@ for (const locale of ['en-US', 'de-DE']) {
     assert(localeSetups <= 2, 'Repeated redraws must not set up locale formatting for every chart label');
 }
 console.log('Traffic chart localized labels, gaps and formatter reuse: all checks passed');
+
+// Run the real totals control, render and request paths together. A display change
+// must use the latest response without adding requests or traffic-history samples.
+const totalsScript = indexView.slice(indexView.indexOf('        let latestTotals = null;'),
+    indexView.indexOf(overviewFunction) + overviewFunction.length)
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+const totalControls = new Map(), totalRequests = [], totalHistory = new UI.TrafficHistory();
+let totalsNow = 100000, chartDraws = 0, historySaves = 0;
+function totalControl(selector) {
+    if (!totalControls.has(selector)) {
+        totalControls.set(selector, {
+            label: '—', checked: true, handlers: {}, // Simulate a browser-restored checkbox.
+            prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+            text(value) { this.label = value; return this; },
+            on(event, handler) { this.handlers[event] = handler; return this; },
+            data() { return false; }, val() { return this; }
+        });
+    }
+    return totalControls.get(selector);
+}
+const totalsContext = {
+    $: totalControl, Date: {now: () => totalsNow}, lastMetadata: 0, lastHistorySave: 0, processMemory: 1536,
+    MihomoUI: {...UI, formatTrafficTotal: (value, raw) => UI.formatTrafficTotal(value, raw, 'en-US')},
+    fmtBytes: value => UI.formatBytes(value, 'en-US'), fmtCount: String,
+    fmtRate: value => UI.formatBytes(value, 'en-US') + '/s',
+    trafficHistory: totalHistory, drawTraffic: () => chartDraws++,
+    sessionStorage: {setItem: () => historySaves++},
+    ajaxGet: (url, params, done) => totalRequests.push({url, params, done})
+};
+vm.runInNewContext('function renderModeHint() {}\n' + totalsScript, totalsContext);
+const bytesControl = totalControl('#traffic-totals-bytes');
+const shownTotals = () => ['#stat-download', '#stat-upload'].map(id => totalControl(id).label);
+const toggleTotals = checked => { bytesControl.checked = checked; bytesControl.handlers.change(); };
+assert.equal(bytesControl.checked, false, 'Every visit starts in human-readable mode');
+toggleTotals(true);
+assert.deepEqual(shownTotals(), ['—', '—'], 'Toggling before the first response does not invent totals');
+toggleTotals(false);
+function pollTotals(downloadTotal, uploadTotal) {
+    vm.runInNewContext('loadOverview();', totalsContext);
+    totalRequests.at(-1).done({runtime: {downloadTotal, uploadTotal, ready: true}, controller: {alive: true}}, 'success');
+    totalsNow += 2000;
+}
+pollTotals(1536, 1048576);
+assert.deepEqual(shownTotals(), ['1.5 KiB', '1.0 MiB']);
+const displayWork = () => [totalRequests.length, totalHistory.samples.length, chartDraws, historySaves,
+    totalControl('#stat-memory').label, totalControl('#stat-rate-down').label, totalControl('#stat-rate-up').label];
+const beforeToggle = displayWork();
+toggleTotals(true);
+assert.deepEqual(shownTotals(), ['1,536 B', '1,048,576 B']);
+assert.deepEqual(displayWork(), beforeToggle, 'Only totals change: no polling, samples, storage, chart, memory or rate changes');
+pollTotals(3584, 1049600);
+assert.deepEqual(shownTotals(), ['3,584 B', '1,049,600 B'], 'Polling keeps the selected format');
+assert.equal(totalControl('#stat-rate-down').label, '1.0 KiB/s');
+assert.equal(totalControl('#stat-memory').label, '1.5 KiB');
+toggleTotals(false);
+assert.deepEqual(shownTotals(), ['3.5 KiB', '1.0 MiB'], 'Switching back uses the latest counters');
+vm.runInNewContext('loadOverview();', totalsContext);
+totalRequests.at(-1).done(null, 'error');
+toggleTotals(true);
+assert.deepEqual(shownTotals(), ['3,584 B', '1,049,600 B'], 'A failed poll retains the last received counters');
+pollTotals(0, 0);
+assert.deepEqual(shownTotals(), ['0 B', '0 B'], 'A core counter reset is rendered without retaining old totals');
+pollTotals(undefined, null);
+assert.deepEqual(shownTotals(), ['—', '—']);
+toggleTotals(false);
+assert.deepEqual(shownTotals(), ['—', '—']);
+assert.match(indexView, /<label for="traffic-totals-bytes"[^>]*>\s*<input type="checkbox" id="traffic-totals-bytes">/);
+assert(indexView.includes("lang._('Show totals in bytes')"));
+console.log('Traffic totals: units, locale grouping, invalid counters, immediate toggling, polling and counter resets passed');
 // Exercise the actual mode hint, overview renderer and mode-change handler together.
 const translateModeScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
     (_, label) => JSON.stringify(label));
@@ -549,7 +635,8 @@ const modeContext = {
     trafficHistory: {add: () => ({down: null, up: null})}, drawTraffic: () => {},
     overviewPoller: {refresh: () => { modeRefreshes++; }},
     ajaxCall: (url, data, done) => modeWrites.push({url, data, done}),
-    setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; }
+    setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; },
+    renderTrafficTotals() {}
 };
 const modeScript = indexView.match(/        function renderModeHint\(\) \{[\s\S]*?\n        \}\);/)[0];
 const modeOverviewScript = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0];
