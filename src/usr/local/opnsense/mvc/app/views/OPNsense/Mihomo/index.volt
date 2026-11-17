@@ -483,6 +483,17 @@
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateChartTheme);
 
         const overviewPoller = new MihomoUI.Poller(loadOverview, 2000);
+        $('#overview-pause').click(function () {
+            const paused = !overviewPoller.paused;
+            // Even a brief pause must not average traffic across the missing samples.
+            trafficHistory.add(Date.now(), null, null, false);
+            if (!paused) { lastMetadata = 0; }
+            overviewPoller.setPaused(paused);
+            $(this).text(paused ? {{ lang._('Resume statistics') | json_encode }} : {{ lang._('Pause statistics') | json_encode }});
+            $('#overview-polling-state').text(paused
+                ? {{ lang._('Statistics auto refresh is paused. In-flight reads may finish; actions can still refresh results. Other panels remain live.') | json_encode }}
+                : '');
+        });
         const groupsPoller = new MihomoUI.Poller(loadGroups, 15000);
         const servicePoller = new MihomoUI.Poller(loadServiceState, 30000);
         const pollers = [overviewPoller, groupsPoller, servicePoller];
@@ -500,6 +511,8 @@
     <section class="col-xs-12">
         <div id="mihomo-service-state"></div>
         <p id="dashboard-action-state" class="text-danger" role="alert"></p>
+        <button type="button" class="btn btn-default btn-sm" id="overview-pause" aria-describedby="overview-polling-state">{{ lang._('Pause statistics') }}</button>
+        <p id="overview-polling-state" class="text-muted" role="status" aria-live="polite"></p>
     </section>
 </div>
 

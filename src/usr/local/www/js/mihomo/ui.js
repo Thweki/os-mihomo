@@ -130,6 +130,7 @@
             this.pending = false;
             this.failures = 0;
             this.stopped = false;
+            this.paused = false;
         }
         refresh() {
             this.cancel(this.timer);
@@ -141,12 +142,24 @@
                 completed = true;
                 this.pending = false;
                 this.failures = ok ? 0 : Math.min(this.failures + 1, 5);
-                if (!this.stopped && !this.hidden()) {
-                    this.timer = this.schedule(() => this.refresh(), Math.min(this.interval * Math.pow(2, this.failures), 60000));
+                if (!this.stopped && !this.paused && !this.hidden()) {
+                    this.timer = this.schedule(() => {
+                        if (!this.paused) { this.refresh(); }
+                    }, Math.min(this.interval * Math.pow(2, this.failures), 60000));
                 }
             });
         }
-        visibilityChanged() { this.refresh(); }
+        // Pause automatic reads only; explicit refreshes may still show action results.
+        setPaused(paused) {
+            if (this.stopped || this.paused === paused) { return; }
+            this.paused = paused;
+            this.cancel(this.timer);
+            if (!paused) { this.failures = 0; this.refresh(); }
+        }
+        visibilityChanged() {
+            if (this.paused) { this.cancel(this.timer); }
+            else { this.refresh(); }
+        }
         stop() { this.stopped = true; this.cancel(this.timer); }
     }
     function runLimited(items, limit, worker, progress, done) {

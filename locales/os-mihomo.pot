@@ -1967,3 +1967,15 @@ msgstr ""
 
 msgid "Search is literal and case-insensitive. Context uses nearby loaded lines, respects severity, and shows overlapping lines only once."
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Pause statistics"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Resume statistics"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Statistics auto refresh is paused. In-flight reads may finish; actions can still refresh results. Other panels remain live."
+msgstr ""
