@@ -1868,4 +1868,15 @@ msgstr ""
 
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Favorites stay first. Name order uses natural numbers and ignores case. Resets on page reload."
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Copy match"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Rule match copied."
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt
+msgid "Clipboard unavailable. Copy the rule match manually."
 msgstr ""
