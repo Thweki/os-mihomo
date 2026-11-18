@@ -233,13 +233,21 @@
         });
         return {groups: visible, matched, total};
     }
-    function orderProxyMembers(members, favorites, direction, collator) {
+    function orderProxyMembers(members, favorites, direction, collator, delayDirection = 0) {
         if (collator) {
             // Sort decoded display names on a copy; stable ties keep controller order.
             members = members.map(member => ({member, name: decodeApiText(member.name)}))
                 .sort((a, b) => direction * collator.compare(a.name, b.name)).map(item => item.member);
+        } else if (delayDirection) {
+            // The existing controller supplies the last delay as a number or null.
+            members = members.slice().sort((a, b) => {
+                const aValid = Number.isFinite(a.delay) && a.delay > 0;
+                const bValid = Number.isFinite(b.delay) && b.delay > 0;
+                if (aValid !== bValid) { return aValid ? -1 : 1; }
+                return aValid ? delayDirection * (a.delay - b.delay) : 0;
+            });
         }
-        // The stable favorite partition preserves name order within both sections.
+        // The stable favorite partition preserves display order within both sections.
         return favorites ? favorites.order(members, 'proxies') : members;
     }
     function proxyOrder(nodeOrder) {
@@ -249,12 +257,14 @@
     function fullProxyGroupTestNames(groups, name, favorites, nodeOrder) {
         const group = groups.find(group => decodeApiText(group.name) === name);
         const members = group ? (group.members || []) : [];
+        // A latency display sort must not reorder the existing manual probe queue.
         return [...new Set(orderProxyMembers(members, favorites, ...proxyOrder(nodeOrder))
             .map(member => decodeApiText(member.name)))];
     }
     function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, nodeOrder = 'config', collapsedGroups) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         const [direction, collator] = proxyOrder(nodeOrder);
+        const delayDirection = nodeOrder === 'delay-asc' ? 1 : nodeOrder === 'delay-desc' ? -1 : 0;
         function favoriteButton(kind, name, group) {
             const starred = favorites.has(kind, name);
             const label = kind === 'groups' ? labels.favoriteGroup : labels.favoriteProxy;
@@ -307,7 +317,7 @@
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
             // Keep members in the DOM so full-group latency tests still include them.
             if (collapsed) { list.setAttribute('hidden', ''); }
-            orderProxyMembers(members, favorites, direction, collator).forEach(member => {
+            orderProxyMembers(members, favorites, direction, collator, delayDirection).forEach(member => {
                 const memberName = decodeApiText(member.name);
                 const item = el('li', {class: 'list-group-item' + (member.selected ? ' active' : ''),
                     style: 'padding:8px 12px;display:flex;align-items:center;gap:6px', 'data-group': name, 'data-member': memberName});

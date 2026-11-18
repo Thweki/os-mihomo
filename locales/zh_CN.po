@@ -1605,3 +1605,15 @@ msgstr "仅在此浏览器保存布局偏好，关闭后不再记住。"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Compact overview (experimental)"
 msgstr "紧凑概览（实验性）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Last delay: fastest first"
+msgstr "最近延迟：最快优先"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Last delay: slowest first"
+msgstr "最近延迟：最慢优先"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Uses the last recorded delay, which may be old. Failed and untested nodes sort last within each section. Sorting does not run tests or change selections."
+msgstr "使用最后记录的延迟，结果可能已过时。收藏与普通代理各自排序，失败和未测试的节点排在各自部分的最后。排序不会运行测试或更改选择。"
