@@ -90,6 +90,27 @@
          * 运行态概览
          * ------------------------------------------------------------------ */
         let gTrafficChart = null;
+        function initCompactOverview() {
+            const key = 'mihomo.overview.compact.v1';
+            const toggle = document.getElementById('compact-overview');
+            const overview = document.getElementById('mihomo-overview');
+            function apply(enabled) {
+                toggle.checked = enabled;
+                overview.classList.toggle('mihomo-compact', enabled);
+                if (gTrafficChart) { gTrafficChart.resize(); }
+            }
+            let enabled = false;
+            try { enabled = window.localStorage.getItem(key) === '1'; } catch (error) { /* Optional preference. */ }
+            apply(enabled);
+            toggle.addEventListener('change', function () {
+                apply(toggle.checked);
+                try {
+                    if (toggle.checked) { window.localStorage.setItem(key, '1'); }
+                    else { window.localStorage.removeItem(key); }
+                } catch (error) { /* Keep the layout usable when storage is unavailable. */ }
+            });
+        }
+        initCompactOverview();
         let processMemory = null;
         $(document).on('mihomo:runtime', function (event, data) {
             processMemory = data.process && data.process.rss > 0 ? data.process.rss : null;
@@ -581,8 +602,50 @@
     });
 </script>
 
+<style id="mihomo-compact-style">
+    /* Only the opt-in layout overrides the existing inline dimensions. */
+    #mihomo-overview.mihomo-compact .mihomo-metrics .content-box {
+        padding: 8px 12px !important;
+        min-height: 72px !important;
+        margin-bottom: 8px !important;
+    }
+    #mihomo-overview.mihomo-compact #traffic-chart-container { height: 140px !important; }
+    #mihomo-overview.mihomo-compact #proxy-groups > .row { display: flex; flex-wrap: wrap; }
+    #mihomo-overview.mihomo-compact #proxy-groups > .row::before,
+    #mihomo-overview.mihomo-compact #proxy-groups > .row::after { content: none; }
+    #mihomo-overview.mihomo-compact #proxy-groups > .row > div {
+        width: 100%;
+        min-width: 0;
+        margin-bottom: 8px !important;
+    }
+    #mihomo-overview.mihomo-compact #proxy-groups .content-box:has(> ul[data-group]:not([hidden])) { height: 220px !important; }
+    #mihomo-overview.mihomo-compact #proxy-groups .content-box > div {
+        padding: 6px 10px !important;
+        overflow-wrap: anywhere;
+    }
+    #mihomo-overview.mihomo-compact #proxy-groups .list-group-item { padding: 4px 10px !important; }
+    #mihomo-overview.mihomo-compact #proxy-groups button { min-height: 24px; min-width: 24px; }
+    @media (min-width: 768px) {
+        #mihomo-overview.mihomo-compact .mihomo-metrics > div { width: 25%; }
+    }
+    @media (min-width: 992px) {
+        #mihomo-overview.mihomo-compact #proxy-groups > .row > div { width: 50%; }
+    }
+    @media (min-width: 1200px) {
+        #mihomo-overview.mihomo-compact #proxy-groups > .row > div { width: 33.333333%; }
+    }
+</style>
+
+
+<div id="mihomo-overview">
 <div class="row">
     <section class="col-xs-12">
+        <div class="checkbox">
+            <label for="compact-overview" title="{{ lang._('Browser-only layout preference. Turn off to forget it.') }}">
+                <input type="checkbox" id="compact-overview" aria-controls="mihomo-overview">
+                {{ lang._('Compact overview (experimental)') }}
+            </label>
+        </div>
         <div id="mihomo-service-state"></div>
         <p id="dashboard-action-state" class="text-danger" role="alert"></p>
         <button type="button" class="btn btn-default btn-sm" id="overview-pause" aria-describedby="overview-polling-state">{{ lang._('Pause statistics') }}</button>
@@ -642,7 +705,7 @@
             </div>
             <p id="mode-hint" class="text-muted" role="status" style="padding:0 14px;"></p>
             <div style="padding: 12px;">
-                <div style="height: 200px;">
+                <div id="traffic-chart-container" style="height: 200px;">
                     <canvas id="traffic-chart" role="img" aria-label="{{ lang._('Download and upload rates') }}"></canvas>
                 </div>
                 <p class="text-muted" id="traffic-history-note" role="status" style="margin-top:10px;"></p>
@@ -736,4 +799,5 @@
             </div>
         </div>
     </section>
+</div>
 </div>
