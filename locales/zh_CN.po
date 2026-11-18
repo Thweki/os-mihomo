@@ -1666,3 +1666,35 @@ msgstr "记录无正延迟"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Untested or unknown"
 msgstr "未测试或未知"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Hide proxy until reload"
+msgstr "隐藏代理至页面重新加载"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore proxy"
+msgstr "恢复显示代理"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Show hidden proxies"
+msgstr "显示已隐藏的代理"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Names marked hidden"
+msgstr "标记为隐藏的名称数"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Restore all proxies"
+msgstr "恢复显示所有代理"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "All matching proxies in this group are hidden."
+msgstr "此分组中符合筛选条件的代理均已隐藏。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Name matches before hiding"
+msgstr "应用隐藏前的名称匹配数"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Hiding changes only this page. Selected entries stay visible when they match the name filter. Routing and group latency tests are unchanged."
+msgstr "隐藏只影响本页。符合名称筛选条件的选中项仍显示。不影响路由或整组延迟测试。"

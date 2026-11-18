@@ -326,7 +326,7 @@
         return [...new Set(orderProxyMembers(members, favorites, ...proxyOrder(nodeOrder))
             .map(member => decodeApiText(member.name)))];
     }
-    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, nodeOrder = 'config', collapsedGroups) {
+    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, nodeOrder = 'config', collapsedGroups, visibility) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         const [direction, collator] = proxyOrder(nodeOrder);
         const delayDirection = nodeOrder === 'delay-asc' ? 1 : nodeOrder === 'delay-desc' ? -1 : 0;
@@ -380,10 +380,12 @@
             header.appendChild(copySelection);
             const list = el('ul', {id: listId, class: 'list-group', 'data-group': name, 'aria-label': name,
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
-            // Keep members in the DOM so full-group latency tests still include them.
+            // Collapsing changes only presentation; tests use the full group snapshot.
             if (collapsed) { list.setAttribute('hidden', ''); }
             orderProxyMembers(members, favorites, direction, collator, delayDirection).forEach(member => {
                 const memberName = decodeApiText(member.name);
+                const hidden = visibility && visibility.hiddenNames.has(memberName);
+                if (hidden && !visibility.showHidden && !member.selected) { return; }
                 const item = el('li', {class: 'list-group-item' + (member.selected ? ' active' : ''),
                     style: 'padding:8px 12px;display:flex;align-items:center;gap:6px', 'data-group': name, 'data-member': memberName});
                 if (favorites) { item.appendChild(favoriteButton('proxies', memberName, name)); }
@@ -404,15 +406,32 @@
                     'data-copy-text': memberName, 'data-focus-key': JSON.stringify(['copy-name', name, memberName]),
                     'aria-label': labels.copyName + ': ' + memberName, title: labels.copyName});
                 copyName.appendChild(el('i', {class: 'fa fa-copy fa-fw', 'aria-hidden': 'true'}));
-                item.appendChild(copyName); list.appendChild(item);
+                item.appendChild(copyName);
+                if (visibility && (!member.selected || hidden)) {
+                    const label = hidden ? labels.restoreProxy : labels.hideProxy;
+                    const toggle = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-hide-proxy',
+                        'data-name': memberName, 'data-group': name, 'data-focus-key': JSON.stringify(['visibility', name, memberName]),
+                        'aria-label': label + ': ' + memberName, title: label});
+                    toggle.appendChild(el('i', {class: 'fa ' + (hidden ? 'fa-eye' : 'fa-eye-slash') + ' fa-fw', 'aria-hidden': 'true'}));
+                    item.appendChild(toggle);
+                }
+                list.appendChild(item);
             });
+            if (visibility && members.length && !list.children.length) {
+                list.appendChild(el('li', {class: 'list-group-item text-muted'}, labels.allHidden));
+            }
             card.appendChild(header); card.appendChild(list); column.appendChild(card); row.appendChild(column);
         });
         container.replaceChildren(row);
         // Names are map keys, never interpolated CSS selectors.
         container.querySelectorAll('ul[data-group]').forEach(node => { node.scrollTop = scroll.get(node.getAttribute('data-group')) || 0; });
         if (focusKey) {
-            const replacement = Array.from(container.querySelectorAll('[data-focus-key]')).find(node => node.getAttribute('data-focus-key') === focusKey);
+            const controls = Array.from(container.querySelectorAll('[data-focus-key]'));
+            let replacement = controls.find(node => node.getAttribute('data-focus-key') === focusKey);
+            if (!replacement && visibility && active.getAttribute('data-group') !== null) {
+                const groupKey = JSON.stringify(['collapse', active.getAttribute('data-group')]);
+                replacement = controls.find(node => node.getAttribute('data-focus-key') === groupKey);
+            }
             if (replacement) { replacement.focus({preventScroll: true}); }
         }
     }
