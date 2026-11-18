@@ -1617,3 +1617,15 @@ msgstr "最近延迟：最慢优先"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Uses the last recorded delay, which may be old. Failed and untested nodes sort last within each section. Sorting does not run tests or change selections."
 msgstr "使用最后记录的延迟，结果可能已过时。收藏与普通代理各自排序，失败和未测试的节点排在各自部分的最后。排序不会运行测试或更改选择。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Download filtered log"
+msgstr "下载筛选后的日志"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Download only the currently visible log lines"
+msgstr "仅下载当前可见的日志行"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Full log downloads include all levels."
+msgstr "日志级别筛选仅针对已加载的行。无法识别级别的日志行归为未知级别。完整日志下载包含所有级别。"
