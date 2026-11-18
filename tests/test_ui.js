@@ -1357,7 +1357,7 @@ assert.deepEqual(sortedNames(), exactNames.slice().sort(new Intl.Collator(undefi
 
 const nodeOrderScript = indexView.match(/        \$\('#proxy-node-order'\)\.on\('change',[\s\S]*?\n        \}\);/)[0];
 assert(indexView.includes('label for="proxy-node-order"'), 'Sort control has an accessible label');
-for (const mode of ['config', 'name-asc', 'name-desc']) { assert(indexView.includes('option value="' + mode + '"')); }
+for (const mode of ['config', 'name-asc', 'name-desc', 'delay-asc', 'delay-desc']) { assert(indexView.includes('option value="' + mode + '"')); }
 vm.runInContext(nodeOrderScript, groupContext);
 const orderBy = value => nodeOrderHandler.call({value});
 groupContext.latestGroups = null;
@@ -1403,6 +1403,55 @@ pollGroups(updatedSortResponse);
 assert.deepEqual(displayedMembers()[0], ['Node 10', 'Node 3', 'node 2', 'NODE 2', 'Node 1'], 'New poll members use current order');
 assert.deepEqual(selectedNames(), ['Node 10']);
 console.log('Proxy name sorting, natural/stable order, exact names, favorites, controls, polling and recovery: all checks passed');
+
+// Delay order changes only presentation and uses the existing exact group data.
+const lastRecorded = [{name: 'Latency', members: [
+    {name: 'old-timeout', delay: 0}, {name: 'fast-a', delay: 15}, {name: 'untested', delay: null},
+    {name: 'slow', delay: 90}, {name: 'bad negative', delay: -1}, {name: 'fast-b', delay: 15},
+    {name: 'bad string', delay: '2'}, {name: 'bad NaN', delay: NaN}, {name: 'bad infinity', delay: Infinity}
+].map(Object.freeze)}];
+lastRecorded.forEach(group => { Object.freeze(group.members); Object.freeze(group); });
+Object.freeze(lastRecorded);
+const latencyOriginalOrder = lastRecorded[0].members.map(member => member.name);
+const unknownLatency = ['old-timeout', 'untested', 'bad negative', 'bad string', 'bad NaN', 'bad infinity'];
+const latencyFavorite = new UI.ProxyFavorites(() => null);
+latencyFavorite.toggle('proxies', 'old-timeout');
+latencyFavorite.toggle('proxies', 'slow');
+const delayLabels = {memberCount: 'Members: %s'};
+for (const [mode, ordinary] of [
+    ['delay-asc', ['fast-a', 'fast-b', 'slow', ...unknownLatency]],
+    ['delay-desc', ['slow', 'fast-a', 'fast-b', ...unknownLatency]]
+]) {
+    UI.renderProxyGroups(groupBox, lastRecorded, delayLabels, String, () => '', null, mode);
+    assert.deepEqual(sortedNames(), ordinary, 'Last delay preserves ties and puts unavailable readings last');
+    UI.renderProxyGroups(groupBox, lastRecorded, delayLabels, String, () => '', latencyFavorite, mode);
+    assert.deepEqual(sortedNames(), ['slow', 'old-timeout', ...ordinary.filter(name => name !== 'slow' && name !== 'old-timeout')]);
+    assert.deepEqual(UI.fullProxyGroupTestNames(lastRecorded, 'Latency', latencyFavorite, mode),
+        UI.fullProxyGroupTestNames(lastRecorded, 'Latency', latencyFavorite, 'config'),
+        'Selecting a latency order never changes the existing favorite-first probe queue');
+}
+assert.deepEqual(latencyOriginalOrder, lastRecorded[0].members.map(member => member.name));
+pollGroups(sortResponse);
+orderBy('delay-asc');
+assert.deepEqual(displayedGroups(), ['Z group', 'A group']);
+assert.deepEqual(displayedMembers()[0], ['Node 10', 'NODE 2', 'node 2', 'Node 1']);
+pollingDoc.activeElement = pollingBox.querySelectorAll('button[data-focus-key]')[2];
+const delayFocus = pollingDoc.activeElement.attrs['data-focus-key'];
+groupContext.testing = true;
+orderBy('delay-desc');
+assert.deepEqual(displayedMembers()[0], ['NODE 2', 'Node 10', 'node 2', 'Node 1']);
+assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], delayFocus);
+assert.equal(testsDisabled, true);
+assert.deepEqual(selectedNames(), ['Node 10']);
+groupContext.testing = false;
+const beforeDelayRecovery = pollingBox.children[0];
+pollGroups(sortResponse);
+assert.equal(pollingBox.children[0], beforeDelayRecovery);
+pollGroups({ready: false});
+pollGroups({ready: true, groups: [{name: 'Z group', members: [{name: 'Node 1', delay: 80}, {name: 'Node 10', delay: 20}]}, sortGroups[1]]});
+assert.deepEqual(displayedMembers()[0], ['Node 1', 'Node 10'], 'Use refreshed recorded latency after recovery');
+orderBy('name-desc');
+console.log('Last delay sorting: stable, favorites-first, display-only, polling, focus and recovery passed');
 
 // Exercise the real collapse handler and renderer. No API or storage is available
 // to this handler: folding cards must be a purely local display operation.
@@ -1503,6 +1552,13 @@ dashboardFavorites.toggle('proxies', 'Other');
 testGroupHandler.call(wholeGroup);
 assert.deepEqual(foldedTestNames, ['Other', 'literal &gt;', 'ZA [a.*]', 'ZA & Zurich', '中文节点'],
     'Filtered groups still probe every exact name in prior natural/favorite order');
+for (const mode of ['delay-asc', 'delay-desc']) {
+    nodeOrderHandler.call({value: mode});
+    testGroupHandler.call(wholeGroup);
+    assert.deepEqual(foldedTestNames, ['Other', 'ZA & Zurich', 'ZA [a.*]', '中文节点', 'literal &gt;'],
+        'Latency sorting and a filter cannot change full-group configured/favorite probe scope or queue order');
+}
+nodeOrderHandler.call({value: 'name-asc'});
 filter('[a.*]');
 assert.deepEqual(shownNames(), ['ZA [a.*]']);
 filter('&gt;');

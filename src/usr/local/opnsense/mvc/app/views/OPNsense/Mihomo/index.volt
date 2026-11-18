@@ -724,12 +724,15 @@
             </div>
             <div style="padding:0 12px 12px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
                 <label for="proxy-node-order" style="font-weight:normal; margin:0;">{{ lang._('Node order') }}</label>
-                <select id="proxy-node-order" class="form-control" style="width:auto;" aria-describedby="proxy-node-order-note">
+                <select id="proxy-node-order" class="form-control" style="width:auto;" aria-describedby="proxy-node-order-note proxy-node-delay-order-note">
                     <option value="config">{{ lang._('Configuration order') }}</option>
                     <option value="name-asc">{{ lang._('Name (A–Z)') }}</option>
                     <option value="name-desc">{{ lang._('Name (Z–A)') }}</option>
+                    <option value="delay-asc">{{ lang._('Last delay: fastest first') }}</option>
+                    <option value="delay-desc">{{ lang._('Last delay: slowest first') }}</option>
                 </select>
                 <span id="proxy-node-order-note" class="text-muted">{{ lang._('Favorites stay first. Name order uses natural numbers and ignores case. Resets on page reload.') }}</span>
+                <span id="proxy-node-delay-order-note" class="text-muted">{{ lang._('Uses the last recorded delay, which may be old. Failed and untested nodes sort last within each section. Sorting does not run tests or change selections.') }}</span>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p id="proxy-copy-state" class="text-muted" role="status" style="padding:0 12px;"></p>
