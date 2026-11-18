@@ -1597,3 +1597,11 @@ msgstr "没有代理名称符合筛选。"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Case-insensitive name substring. Group latency tests still cover all nodes in the group."
 msgstr "按名称子串匹配，不区分大小写。分组延迟测试仍覆盖该组的全部节点。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Browser-only layout preference. Turn off to forget it."
+msgstr "仅在此浏览器保存布局偏好，关闭后不再记住。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Compact overview (experimental)"
+msgstr "紧凑概览（实验性）"
