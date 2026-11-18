@@ -378,6 +378,14 @@
             if (testing) { done(true); return; }
             ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
                 const ok = status === 'success' && data && data.ready;
+                const health = ok && data.ready === true ? MihomoUI.summarizeProxyLatency(data.groups) : null;
+                const note = health
+                    ? {{ lang._('Responding') | json_encode }} + ': ' + fmtCount(health.responding)
+                        + ' · ' + {{ lang._('No positive result') | json_encode }} + ': ' + fmtCount(health.noPositive)
+                        + ' · ' + {{ lang._('Untested or unknown') | json_encode }} + ': ' + fmtCount(health.unknown)
+                    : {{ lang._('Status unavailable') | json_encode }};
+                const $summary = $('#proxy-health-summary');
+                if ($summary.text() !== note) { $summary.text(note); }
                 if (data && status === 'success') { renderGroups(data); }
                 if (!ok) { $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }}); }
                 done(!!ok);
@@ -761,6 +769,11 @@
                 </select>
                 <span id="proxy-node-order-note" class="text-muted">{{ lang._('Favorites stay first. Name order uses natural numbers and ignores case. Resets on page reload.') }}</span>
                 <span id="proxy-node-delay-order-note" class="text-muted">{{ lang._('Uses the last recorded delay, which may be old. Failed and untested nodes sort last within each section. Sorting does not run tests or change selections.') }}</span>
+            </div>
+            <div style="padding:0 12px;">
+                <b>{{ lang._('Proxy latency summary') }}</b>
+                <p id="proxy-health-summary" role="status">{{ lang._('Loading …') }}</p>
+                <p class="text-muted">{{ lang._('Latest recorded results across all groups, not live availability. The name filter does not change these counts. Groups and built-in actions are excluded.') }}</p>
             </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p id="proxy-copy-state" class="text-muted" role="status" style="padding:0 12px;"></p>

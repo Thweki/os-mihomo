@@ -113,6 +113,34 @@
             return {download: this.current.download - base.download, upload: this.current.upload - base.upload};
         }
     }
+    // Summarize only the projection supplied by the current successful poll.
+    function summarizeProxyLatency(groups) {
+        if (!Array.isArray(groups) || groups.some(group =>
+            !group || typeof group.name !== 'string' || !Array.isArray(group.members))) {
+            return null;
+        }
+        const groupNames = new Set(groups.map(group => group.name));
+        const actions = new Set(['direct', 'reject', 'rejectdrop', 'pass']);
+        const groupTypes = new Set(['selector', 'urltest', 'fallback', 'loadbalance', 'relay']);
+        const seen = new Set();
+        const totals = {responding: 0, noPositive: 0, unknown: 0};
+        for (const group of groups) {
+            for (const member of group.members) {
+                if (!member || typeof member.name !== 'string' || !member.name ||
+                    typeof member.type !== 'string') {
+                    return null;
+                }
+                const type = member.type.toLowerCase();
+                if (groupNames.has(member.name) || groupTypes.has(type) ||
+                    actions.has(type) || seen.has(member.name)) { continue; }
+                seen.add(member.name);
+                if (!member.type || !Number.isSafeInteger(member.delay)) { totals.unknown++; }
+                else if (member.delay > 0) { totals.responding++; }
+                else { totals.noPositive++; }
+            }
+        }
+        return totals;
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -401,5 +429,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, formatTrafficTotal, TrafficTotals, TrafficHistory, theme, decodeApiText, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, normalizeProxyQuery, filterProxyGroups, fullProxyGroupTestNames, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatTrafficTotal, TrafficTotals, TrafficHistory, summarizeProxyLatency, theme, decodeApiText, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, normalizeProxyQuery, filterProxyGroups, fullProxyGroupTestNames, renderProxyGroups, ProxyFavorites};
 }));
