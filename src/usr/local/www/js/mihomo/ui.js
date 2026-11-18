@@ -76,6 +76,43 @@
         });
         return {lines: ranges.flatMap(range => lines.slice(range.start, range.end).filter((_, offset) => allowed[range.start + offset])), matches};
     }
+    // Page-local measurement; raw counters still feed the rate/history calculation.
+    class TrafficTotals {
+        constructor() {
+            this.current = null;
+            this.previous = null;
+            this.baseline = null;
+            this.restarted = false;
+        }
+        update(download, upload, ready) {
+            if (!ready || !Number.isSafeInteger(download) || download < 0 || !Number.isSafeInteger(upload) || upload < 0) {
+                this.current = null;
+                return;
+            }
+            // Keep the last valid sample across failures to detect a counter reset.
+            if (this.baseline && this.previous && (download < this.previous.download || upload < this.previous.upload)) {
+                this.baseline = null;
+                this.restarted = true;
+            }
+            this.current = {download, upload};
+            this.previous = this.current;
+        }
+        reset() {
+            if (!this.current) { return false; }
+            this.baseline = this.current;
+            this.restarted = false;
+            return true;
+        }
+        restore() {
+            this.baseline = null;
+            this.restarted = false;
+        }
+        values() {
+            if (!this.current) { return null; }
+            const base = this.baseline || {download: 0, upload: 0};
+            return {download: this.current.download - base.download, upload: this.current.upload - base.upload};
+        }
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -364,5 +401,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, formatTrafficTotal, TrafficHistory, theme, decodeApiText, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, normalizeProxyQuery, filterProxyGroups, fullProxyGroupTestNames, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatTrafficTotal, TrafficTotals, TrafficHistory, theme, decodeApiText, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, normalizeProxyQuery, filterProxyGroups, fullProxyGroupTestNames, renderProxyGroups, ProxyFavorites};
 }));

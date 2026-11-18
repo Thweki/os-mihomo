@@ -965,7 +965,7 @@ function dashboardFixture() {
     const context = vm.createContext({
         MihomoUI: {...UI, Poller: DashboardPoller}, document, $: element,
         window: {addEventListener: (event, handler) => { pageEvents[event] = handler; }},
-        Date: {now: () => time}, trafficHistory: traffic, processMemory: null, lastHistorySave: time, latestTotals: null, renderTrafficTotals: () => {},
+        Date: {now: () => time}, trafficHistory: traffic, processMemory: null, lastHistorySave: time, latestTotals: null, trafficTotals: new UI.TrafficTotals(), renderTrafficTotals: () => {},
         fmtCount: String, fmtBytes: String, fmtRate: String, drawTraffic: () => {},
         sessionStorage: {setItem() {}},
         ajaxGet: (url, data, done) => reads.push({url, data, done}),
@@ -1122,6 +1122,127 @@ assert(!/display:\s*none|visibility:\s*hidden/.test(compactCSS), 'Compact mode m
 console.log('Experimental compact overview: opt-in, persistence/removal, storage failures, chart resize and scoped styles passed');
 assert(compactCSS.includes('.content-box:has(> ul[data-group]:not([hidden]))'), 'Collapsed groups retain auto height');
 
+// Traffic measurement uses the real overview handlers and request/render path.
+// No write API is provided: resetting must work with view-only access.
+const totals = new UI.TrafficTotals();
+assert.equal(totals.reset(), false);
+assert.equal(totals.values(), null);
+totals.update(100, 50, true);
+assert.deepEqual(totals.values(), {download: 100, upload: 50});
+assert.equal(totals.reset(), true);
+assert.deepEqual(totals.values(), {download: 0, upload: 0});
+for (const invalid of [null, undefined, NaN, Infinity, -1, 0.5, Number.MAX_SAFE_INTEGER + 1, '123', false]) {
+    for (const pair of [[invalid, 60], [200, invalid]]) {
+        totals.update(...pair, true);
+        assert.equal(totals.values(), null, 'Invalid counters cannot create a measurement');
+        assert.equal(totals.reset(), false, 'Invalid samples cannot replace the baseline');
+    }
+}
+totals.update(300, 150, true);
+assert.deepEqual(totals.values(), {download: 200, upload: 100}, 'Recovery preserves the baseline');
+totals.update(250, 160, true);
+assert.equal(totals.baseline, null, 'A decrease above the baseline still ends the measurement');
+assert.equal(totals.restarted, true);
+assert.deepEqual(totals.values(), {download: 250, upload: 160});
+totals.reset();
+totals.update(300, 159, true);
+assert.equal(totals.baseline, null, 'Either counter decreasing ends both measurements');
+totals.update(0, 0, true);
+assert.equal(totals.reset(), true, 'Zero counters are valid');
+totals.update(2 ** 40, 2 ** 39, true);
+assert.deepEqual(totals.values(), {download: 2 ** 40, upload: 2 ** 39}, 'No 32-bit truncation');
+
+const trafficMeasurementScript = ('let gTrafficChart = null;\n' + indexView.slice(indexView.indexOf('        let processMemory = null;'),
+    indexView.indexOf('        const favorites =')))
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+function trafficPage() {
+    const elements = new Map(), reads = [];
+    let now = 100000;
+    const element = selector => {
+        if (!elements.has(selector)) {
+            elements.set(selector, {label: '', handlers: {}, disabled: true, writes: 0,
+                text(value) { this.label = value; this.writes++; return this; },
+                prop(key, value) { if (arguments.length === 1) { return this[key]; } this[key] = value; return this; },
+                on(event, handler) { this.handlers[event] = handler; return this; },
+                data() { return false; }, val() { return this; }});
+        }
+        return elements.get(selector);
+    };
+    const context = vm.createContext({
+        MihomoUI: {...UI, formatTrafficTotal: (value, raw) => UI.formatTrafficTotal(value, raw, 'en-US')},
+        $: element, document: {}, Date: {now: () => now},
+        fmtBytes: value => UI.formatBytes(value, 'en-US'), fmtCount: String,
+        fmtRate: value => UI.formatBytes(value, 'en-US') + '/s',
+        sessionStorage: {getItem() { throw new Error('Storage denied'); }, setItem() { throw new Error('Storage denied'); }},
+        ajaxGet: (url, params, done) => { assert.equal(url, '/api/mihomo/dashboard/overview'); reads.push(done); }
+    });
+    vm.runInContext('function renderModeHint() {}\n' + trafficMeasurementScript, context);
+    return {element, context, reads,
+        request() { now += 2000; vm.runInContext('loadOverview();', context); },
+        respond(download, upload, ready = true, alive = true) {
+            reads.shift()({runtime: {downloadTotal: download, uploadTotal: upload, ready}, controller: {alive}}, 'success');
+        },
+        click(selector) { element(selector).handlers.click(); },
+        values() { return ['#stat-download', '#stat-upload'].map(id => element(id).label); }
+    };
+}
+const traffic = trafficPage();
+traffic.click('#reset-traffic-totals');
+assert.equal(traffic.element('#reset-traffic-totals').disabled, true);
+assert.deepEqual(traffic.values(), ['—', '—']);
+traffic.request(); traffic.respond(1000, 500);
+assert.deepEqual(traffic.values(), ['1,000.0 B', '500.0 B']);
+assert.equal(traffic.element('#reset-traffic-totals').disabled, false);
+traffic.request(); // A response is in flight while the latest displayed sample is reset.
+const rawHistory = vm.runInContext('JSON.stringify(trafficHistory)', traffic.context);
+traffic.click('#reset-traffic-totals');
+assert.deepEqual(traffic.values(), ['0.0 B', '0.0 B']);
+assert.equal(traffic.element('#traffic-totals-note').label, 'Since reset (this page)');
+const byteToggle = traffic.element('#traffic-totals-bytes');
+byteToggle.checked = true; byteToggle.handlers.change();
+assert.deepEqual(traffic.values(), ['0 B', '0 B'], 'Reset totals also honor raw bytes mode');
+byteToggle.checked = false; byteToggle.handlers.change();
+assert.equal(vm.runInContext('JSON.stringify(trafficHistory)', traffic.context), rawHistory, 'Reset preserves chart and rate history');
+assert.equal(traffic.reads.length, 1, 'Reset makes no request');
+const statusWrites = traffic.element('#traffic-totals-note').writes;
+traffic.respond(1200, 600);
+assert.equal(traffic.element('#traffic-totals-note').writes, statusWrites, 'Unchanged status is not reannounced every poll');
+assert.deepEqual(traffic.values(), ['200.0 B', '100.0 B']);
+assert.equal(traffic.element('#stat-rate-down').label, '100.0 B/s', 'Rates still use raw counters');
+traffic.click('#reset-traffic-totals');
+traffic.request(); traffic.respond(1300, 650);
+assert.deepEqual(traffic.values(), ['100.0 B', '50.0 B'], 'Repeated reset uses the latest sample');
+traffic.request(); traffic.reads.shift()(null, 'error');
+assert.deepEqual(traffic.values(), ['—', '—']);
+assert.equal(traffic.element('#reset-traffic-totals').disabled, true);
+traffic.click('#reset-traffic-totals'); // Guard even if invoked programmatically.
+traffic.request(); traffic.respond(1400, 700);
+assert.deepEqual(traffic.values(), ['200.0 B', '100.0 B']);
+for (const state of [[false, true], [true, false]]) {
+    traffic.request(); traffic.respond(0, 0, ...state);
+    assert.equal(traffic.element('#reset-traffic-totals').disabled, true);
+    assert.deepEqual(traffic.values(), ['—', '—']);
+}
+traffic.request(); traffic.respond(1500, 750);
+assert.deepEqual(traffic.values(), ['300.0 B', '150.0 B'], 'Unavailable controller zeros do not erase baseline');
+traffic.request(); traffic.respond(1400, 800);
+assert.equal(traffic.element('#traffic-totals-note').label, 'Core counters decreased; showing core totals.');
+assert.deepEqual(traffic.values(), ['1.4 KiB', '800.0 B']);
+assert.equal(traffic.element('#restore-traffic-totals').disabled, true);
+traffic.click('#reset-traffic-totals');
+traffic.request(); traffic.respond(1500, 900);
+traffic.click('#restore-traffic-totals');
+assert.deepEqual(traffic.values(), ['1.5 KiB', '900.0 B']);
+assert.equal(traffic.element('#traffic-totals-note').label, 'Core totals');
+traffic.click('#reset-traffic-totals');
+const reloadedTraffic = trafficPage();
+reloadedTraffic.request(); reloadedTraffic.respond(1500, 900);
+assert.deepEqual(reloadedTraffic.values(), ['1.5 KiB', '900.0 B'], 'Another page/reload starts with core totals');
+assert.deepEqual(traffic.values(), ['0.0 B', '0.0 B'], 'Page measurement remains independent');
+for (const id of ['reset-traffic-totals', 'restore-traffic-totals']) {
+    assert.match(indexView, new RegExp('<button type="button" id="' + id + '"[^>]* disabled'), 'Native keyboard-accessible controls start disabled');
+}
+console.log('Traffic totals: reset, restore, polling, failures, counter decreases, raw rates and page isolation passed');
 // Exercise the actual mode hint, overview renderer and mode-change handler together.
 const translateModeScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
     (_, label) => JSON.stringify(label));
@@ -1147,7 +1268,7 @@ const modeContext = {
     overviewPoller: {refresh: () => { modeRefreshes++; }},
     ajaxCall: (url, data, done) => modeWrites.push({url, data, done}),
     setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; },
-    renderTrafficTotals() {}
+    renderTrafficTotals() {}, trafficTotals: new UI.TrafficTotals()
 };
 const modeScript = indexView.match(/        function renderModeHint\(\) \{[\s\S]*?\n        \}\);/)[0];
 const modeOverviewScript = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0];
