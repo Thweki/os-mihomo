@@ -2039,3 +2039,15 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Uses the last recorded delay, which may be old. Failed and untested nodes sort last within each section. Sorting does not run tests or change selections."
 msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Download filtered log"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Download only the currently visible log lines"
+msgstr ""
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt
+msgid "Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Full log downloads include all levels."
+msgstr ""

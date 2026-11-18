@@ -117,15 +117,21 @@ const logView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt'), 'utf8');
 const logScript = logView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
     .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
-const logDownloads = [];
+const logDownloads = [], logDownloadTypes = [], logDownloadCleanups = [], logRevokedUrls = [];
 vm.runInNewContext(logScript, {
     document: fakeDocument,
-    Blob: class { constructor(parts) { logDownloads.push(parts.join('')); } },
-    URL: {createObjectURL: () => 'blob:log-test', revokeObjectURL() {}},
+    Blob: class { constructor(parts, options) { logDownloads.push(parts.join('')); logDownloadTypes.push(options.type); } },
+    URL: {createObjectURL: () => 'blob:log-test', revokeObjectURL(url) { logRevokedUrls.push(url); }},
+    setTimeout: (fn, ms) => { logDownloadCleanups.push({fn, ms}); },
     $: selector => selector === fakeDocument ? {ready: fn => fn()} : control(selector),
     ajaxGet: (url, params, done) => requests.push({params, done}),
     setInterval: fn => { logTimer = fn; }, MihomoUI: {logLevel, filterLogLines, decodeApiText: value => { logDecodes++; return decode(value); }}
 });
+assert.match(logView, /<button[^>]*id="download-filteredAct"[^>]*disabled/);
+assert.equal(typeof control('#download-filteredAct').handlers.click, 'function');
+assert.equal(logDownloads.length, 0, 'Loading the page must not export anything');
+control('#download-filteredAct').handlers.click();
+assert.equal(logDownloads.length, 0, 'Cannot download before any response');
 assert.equal(requests.length, 1);
 control('#log-source').value = 'subscription';
 control('#log-source').handlers.change();
@@ -436,6 +442,77 @@ assert.equal(viewer.value, 'level=error msg="hit <tag>"');
 assert.equal(control('#log-match-state').label, '1 / 6');
 assert(logView.includes('label for="log-context"'));
 console.log('Log context: literal windows, true line offsets, severity, hidden timestamps and paused requests passed');
+
+// The local download is exactly the read-only projection of the redacted API
+// response. This fixture pretends the existing server-side redactor has run.
+control('#log-auto-refresh').checked = false;
+const filteredDownload = control('#download-filteredAct');
+const savedAnchors = [];
+fakeDocument.createElement = tag => {
+    assert.equal(tag, 'a');
+    return {click() { savedAnchors.push({url: this.href, filename: this.download}); }};
+};
+const projectionInput = [
+    'time="2026-11-17T01:00:00Z" level=error msg="before 中文"',
+    'time="2026-11-17T01:00:00Z" level=info msg="don’t export"',
+    'time="2026-11-17T01:00:00Z" level=error msg="hit &lt;tag&gt; &amp;gt; [URL redacted] token=[redacted]"',
+    'time="2026-11-17T01:00:00Z" level=error msg="after"',
+    'time="2026-11-17T01:00:00Z" level=warning msg="outside"'
+].join('\n') + '\n';
+control('#refreshAct').handlers.click(); respondLog(projectionInput);
+control('#log-context').value = '2'; control('#log-context').handlers.change();
+const projected = 'level=error msg="before 中文"\nlevel=error msg="hit <tag> &gt; [URL redacted] token=[redacted]"\nlevel=error msg="after"';
+assert.equal(viewer.value, projected);
+assert.equal(filteredDownload.disabled, false);
+const noRead = requests.length, noDecode = logDecodes, noViewWrite = viewer.writes;
+const wasRevoked = logRevokedUrls.length;
+filteredDownload.handlers.click();
+assert.equal(requests.length, noRead, 'Visible download makes no network request');
+assert.equal(logDecodes, noDecode, 'No second entity decode');
+assert.equal(viewer.writes, noViewWrite, 'Downloading does not change the current view');
+assert.equal(logDownloads.at(-1), projected);
+assert.equal(logDownloadTypes.at(-1), 'text/plain;charset=utf-8');
+assert.deepEqual(savedAnchors.at(-1), {url: 'blob:log-test', filename: 'mihomo-filtered.log'});
+assert.equal(logRevokedUrls.length, wasRevoked);
+assert.equal(logDownloadCleanups.at(-1).ms, 1000);
+logDownloadCleanups.at(-1).fn();
+assert.equal(logRevokedUrls.at(-1), 'blob:log-test');
+
+control('#log-filter').value = 'no matches'; control('#log-filter').handlers.input();
+assert.equal(filteredDownload.disabled, true);
+filteredDownload.handlers.click();
+assert.equal(savedAnchors.length, 1, 'Cannot export a projection with no matches');
+control('#log-filter').value = ''; control('#log-filter').handlers.input();
+levelControl.value = 'all'; levelControl.handlers.change();
+assert.equal(filteredDownload.disabled, false);
+control('#refreshAct').handlers.click();
+filteredDownload.handlers.click();
+assert.equal(logDownloads.at(-1), viewer.value, 'Empty filters export visible text while same-source refresh is queued');
+assert.equal(savedAnchors.length, 2);
+
+control('#log-source').value = 'subscription'; control('#log-source').handlers.change();
+assert.equal(viewer.value, '', 'Source change clears the snapshot before another download');
+assert.equal(filteredDownload.disabled, true);
+filteredDownload.handlers.click();
+respondLog('stale mihomo content'); // Replaced by the queued selected source.
+assert.equal(requests.at(-1).params.key, 'subscription');
+assert.equal(filteredDownload.disabled, true);
+respondLog('订阅日志 [URL redacted]\n');
+assert.equal(filteredDownload.disabled, false);
+control('#refreshAct').handlers.click(); requests.at(-1).done(null, 'error');
+filteredDownload.handlers.click();
+assert.equal(savedAnchors.length, 3);
+assert.equal(logDownloads.at(-1), viewer.value, 'Failure retains the current source’s exportable projection');
+assert.equal(logDownloads.at(-1), '订阅日志 [URL redacted]');
+assert.equal(savedAnchors.at(-1).filename, 'subscription-filtered.log');
+
+control('#downloadAct').handlers.click();
+assert.equal(requests.at(-1).params.lines, 5000, 'Full download still fetches the independent 5,000-line tail');
+respondLog('time="2026-11-17T01:00:00Z" level=info full-only\n');
+assert.equal(logDownloads.at(-1), 'time="2026-11-17T01:00:00Z" level=info full-only\n');
+assert.equal(savedAnchors.at(-1).filename, 'subscription.log');
+assert.equal(viewer.value, '订阅日志 [URL redacted]', 'Full download does not replace the displayed projection');
+console.log('Filtered log download: exact redacted projection, no requests, source resets and unchanged full download passed');
 
 // The same renderer used by the dashboard runs against a strict DOM fixture.
 // HTML parsing is deliberately unavailable: dynamic names must be text/attributes.

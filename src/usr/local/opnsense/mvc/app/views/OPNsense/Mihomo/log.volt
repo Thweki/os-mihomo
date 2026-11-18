@@ -27,7 +27,9 @@
                 line => level === 'all' || MihomoUI.logLevel(line) === level);
             const lines = result.lines;
             const visible = $('#log-hide-timestamps').prop('checked') ? lines.map(withoutTimestamp) : lines;
-            $('#log-viewer').val(visible.join('\n'));
+            const content = visible.join('\n');
+            $('#log-viewer').val(content);
+            $('#download-filteredAct').prop('disabled', !content);
             $('#log-match-state').text(!allLines.length ? {{ lang._('No log entries yet.') | json_encode }}
                 : !lines.length ? {{ lang._('No matching log entries.') | json_encode }} : query && (context === 2 || context === 5)
                     ? {{ lang._('Matching lines') | json_encode }} + ': ' + result.matches + ' / ' + allLines.length
@@ -100,6 +102,24 @@
         });
         $('#log-lines').change(function () { refreshLogs(true); });
         $('#refreshAct').click(function () { refreshLogs(true); });
+        $('#download-filteredAct').click(function () {
+            // The read-only projection is built from the redacted tail response.
+            // Export exactly what is shown; do not refetch or decode a second time.
+            const content = $('#log-viewer').val();
+            const source = $('#log-source').val();
+            if (!content || (source !== 'mihomo' && source !== 'subscription')) { return; }
+            const blob = new Blob([content], {type: 'text/plain;charset=utf-8'});
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            link.download = source + '-filtered.log';
+            try {
+                link.click();
+            } finally {
+                // Let the browser start the download before releasing the blob.
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+        });
         $('#downloadAct').click(function () {
             const key = $('#log-source').val();
             ajaxGet('/api/mihomo/log/tail', { 'key': key, 'lines': 5000 }, function (data, status) {
@@ -158,6 +178,7 @@
                 <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:12px;">
                     <label for="log-filter" style="flex:0 0 auto; white-space:nowrap;">{{ lang._('Filter log') }}</label>
                     <input id="log-filter" type="search" class="form-control" style="flex:1 1 200px; width:auto; max-width:100%;" placeholder="{{ lang._('Filter the loaded lines') }}" aria-describedby="log-search-help">
+                    <button type="button" class="btn btn-xs btn-default" id="download-filteredAct" disabled title="{{ lang._('Download only the currently visible log lines') }}"><i class="fa fa-download fa-fw" aria-hidden="true"></i> {{ lang._('Download filtered log') }}</button>
                     <label for="log-context" style="margin:0;">{{ lang._('Surrounding lines') }}</label>
                     <select id="log-context" class="form-control" style="width:auto;" aria-describedby="log-search-help">
                         <option value="0" selected="selected">{{ lang._('Matches only') }}</option>
@@ -181,7 +202,7 @@
                     <span id="log-match-state" class="text-muted" role="status"></span>
                 </div>
                 <p id="log-search-help" class="text-muted">{{ lang._('Search is literal and case-insensitive. Context uses nearby loaded lines, respects severity, and shows overlapping lines only once.') }}</p>
-                <p id="log-level-help" class="text-muted">{{ lang._('Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Downloads include all levels.') }}</p>
+                <p id="log-level-help" class="text-muted">{{ lang._('Severity filters only loaded lines. Lines without a recognized level appear under Unknown level. Full log downloads include all levels.') }}</p>
                 <p id="log-state" class="text-muted" role="status"></p>
                 <textarea aria-label="{{ lang._('Log contents') }}" id="log-viewer" class="form-control" rows="30" wrap="soft" readonly
                           style="width: 100%; max-width: 100%; font-family: Menlo, Monaco, Consolas, 'Courier New', monospace; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere;"></textarea>
