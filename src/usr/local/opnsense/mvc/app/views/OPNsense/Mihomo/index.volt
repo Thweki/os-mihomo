@@ -238,6 +238,8 @@
         let latestGroups = null;
         let renderedGroups = null;
         let proxyQuery = '';
+        const hiddenProxyNames = new Set(); // Page visit only; never persisted.
+        let showHiddenProxies = false;
         function renderGroups(data) {
             latestGroups = data;
             const $box = $('#proxy-groups');
@@ -258,11 +260,13 @@
             }
 
             // Polls return fresh objects; retain the DOM while their data is unchanged.
-            const snapshot = JSON.stringify([groups, proxyQuery]);
+            const snapshot = JSON.stringify([groups, proxyQuery, [...hiddenProxyNames], showHiddenProxies]);
             if (snapshot === renderedGroups) { return; }
             const visible = MihomoUI.filterProxyGroups(groups, proxyQuery);
             $('#proxy-filter-state').text(proxyQuery
-                ? {{ lang._('Visible proxy entries') | json_encode }} + ': ' + visible.matched + '/' + visible.total : '');
+                ? (hiddenProxyNames.size && !showHiddenProxies
+                    ? {{ lang._('Name matches before hiding') | json_encode }}
+                    : {{ lang._('Visible proxy entries') | json_encode }}) + ': ' + visible.matched + '/' + visible.total : '');
             if (!visible.groups.length) {
                 const message = MihomoUI.element($box[0].ownerDocument, 'div', {class: 'text-muted', style: 'padding:12px;'},
                     {{ lang._('No proxy names match the filter.') | json_encode }});
@@ -279,8 +283,12 @@
                 copyName: {{ lang._('Copy proxy name') | json_encode }},
                 copySelection: {{ lang._('Copy group selection') | json_encode }},
                 favoriteGroup: {{ lang._('Favorite group') | json_encode }},
-                favoriteProxy: {{ lang._('Favorite proxy') | json_encode }}
-            }, delayText, delayClass, favorites, nodeOrder, collapsedGroups);
+                favoriteProxy: {{ lang._('Favorite proxy') | json_encode }},
+                hideProxy: {{ lang._('Hide proxy until reload') | json_encode }},
+                restoreProxy: {{ lang._('Restore proxy') | json_encode }},
+                allHidden: {{ lang._('All matching proxies in this group are hidden.') | json_encode }}
+            }, delayText, delayClass, favorites, nodeOrder, collapsedGroups,
+                {hiddenNames: hiddenProxyNames, showHidden: showHiddenProxies});
             if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
@@ -318,6 +326,27 @@
             $('#proxy-copy-fallback').prop('hidden', true);
             $('#proxy-copy-text').val('');
             $('#proxy-copy-state').empty();
+        });
+
+        function updateProxyVisibility() {
+            $('#proxy-hidden-count').text(fmtCount(hiddenProxyNames.size));
+            $('#proxy-restore-all').prop('disabled', !hiddenProxyNames.size);
+            if (latestGroups) { renderGroups(latestGroups); }
+        }
+        $('#proxy-groups').on('click', '.cmd-hide-proxy', function () {
+            const name = $(this).attr('data-name');
+            if (hiddenProxyNames.has(name)) { hiddenProxyNames.delete(name); }
+            else { hiddenProxyNames.add(name); }
+            updateProxyVisibility();
+        });
+        $('#proxy-show-hidden').prop('checked', false).on('change', function () {
+            showHiddenProxies = this.checked;
+            updateProxyVisibility();
+        });
+        $('#proxy-restore-all').on('click', function () {
+            $('#proxy-show-hidden').trigger('focus');
+            hiddenProxyNames.clear();
+            updateProxyVisibility();
         });
 
         let testing = false;
@@ -790,6 +819,12 @@
                 <button type="button" id="proxy-filter-clear" class="btn btn-default">{{ lang._('Clear filter') }}</button>
                 <span id="proxy-filter-state" class="text-muted" role="status"></span>
                 <p id="proxy-filter-help" class="help-block">{{ lang._('Case-insensitive name substring. Group latency tests still cover all nodes in the group.') }}</p>
+            </div>
+            <div class="form-inline" style="padding:0 12px;">
+                <label><input type="checkbox" id="proxy-show-hidden" aria-controls="proxy-groups" aria-describedby="proxy-hide-help" /> {{ lang._('Show hidden proxies') }}</label>
+                <span class="text-muted" role="status">{{ lang._('Names marked hidden') }}: <span id="proxy-hidden-count">0</span></span>
+                <button type="button" id="proxy-restore-all" class="btn btn-default" disabled>{{ lang._('Restore all proxies') }}</button>
+                <p id="proxy-hide-help" class="help-block">{{ lang._('Hiding changes only this page. Selected entries stay visible when they match the name filter. Routing and group latency tests are unchanged.') }}</p>
             </div>
             <div style="padding: 12px;" id="proxy-groups">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>

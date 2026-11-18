@@ -2166,3 +2166,100 @@ summaryContext.testing = true;
 summaryPoll(validSummary, 'success');
 assert.equal(summaryRequests, 7, 'Busy group tests still pause polling');
 console.log('Proxy latency summary: deduplication, unknown values, failed reads, true empty results and request isolation passed');
+
+// Hide is only a projection of the existing full snapshot and exact display names.
+{
+    const hiddenDoc = {activeElement: null, createElement(tag) { return new DomNode(this, tag); }};
+    const hiddenBox = hiddenDoc.createElement('div');
+    const exactHiddenName = 'Alpha &gt; <visible> 中文"';
+    const fixtureNode = (name, selected = false, delay = 20) =>
+        ({name: encode(name), selected, type: 'fake', delay});
+    const hiddenFixture = {ready: true, groups: [
+        {name: 'A', now: 'Selected', type: 'Selector', members: [fixtureNode(exactHiddenName), fixtureNode('Selected', true), fixtureNode('Archive')]},
+        {name: 'B', now: encode(exactHiddenName), type: 'Selector', members: [fixtureNode(exactHiddenName, true)]},
+        {name: 'C', now: '', type: 'Selector', members: [fixtureNode(exactHiddenName)]},
+        {name: 'Empty', now: '', type: 'Selector', members: []}
+    ]};
+    const hiddenCopy = JSON.stringify(hiddenFixture);
+    const controls = new Map(), hideHandlers = new Map();
+    const controlFor = key => {
+        if (!controls.has(key)) {
+            const c = {value: '', checked: true, handlers: {}, disabled: false, focused: false, disabledTests: false,
+                on(event, handler) { this.handlers[event] = handler; return this; },
+                empty() { this.value = ''; },
+                val(value) { this.value = value; return this; },
+                text(value) { this.value = value; return this; },
+                prop(key, value) { this[key] = value; return this; },
+                trigger(event) { if (event === 'focus') { this.focused = true; } else { this.handlers[event].call(this); } return this; }};
+            controls.set(key,c);
+        }
+        return controls.get(key);
+    };
+    let hiddenProbes, hiddenNetwork = 0;
+    const hiddenVM = vm.createContext({
+        $: selector => {
+            if (selector === '#proxy-groups') {
+                return {0: hiddenBox, on: (event, target, handler) => { assert.equal(event, 'click'); hideHandlers.set(target, handler); },
+                    html: text => { const n = hiddenDoc.createElement('placeholder'); n.textContent = text; hiddenBox.replaceChildren(n); }};
+            }
+            if (selector instanceof DomNode) { return {attr: key => selector.getAttribute(key)}; }
+            return controlFor(selector);
+        },
+        fmtCount: String, MihomoUI: UI, favorites: null, nodeOrder: 'config', latestGroups: null, testing: false,
+        delayText: String, delayClass: () => 'label-success', testNodes: names => { hiddenProbes = Array.from(names); },
+        ajaxCall() { hiddenNetwork++; }, ajaxGet() { hiddenNetwork++; }
+    });
+    const visibilityScript = indexView.match(/        function updateProxyVisibility\(\) \{[\s\S]*?(?=        let testing = false;)/)[0];
+    vm.runInContext(collapseStateScript + '\n' + renderGroupsScript + '\n' + visibilityScript + '\n' + testGroupScript, hiddenVM);
+    assert.equal(controlFor('#proxy-show-hidden').checked, false, 'Reset restored form checkbox on a fresh load');
+    const boxMembers = () => hiddenBox.querySelectorAll('li[data-member]').map(n => [n.getAttribute('data-group'), n.getAttribute('data-member')]);
+    const getHide = (group, name) => hiddenBox.querySelectorAll('button[data-focus-key]').find(n =>
+        n.getAttribute('data-focus-key') === JSON.stringify(['visibility', group, name]));
+    const getProbe = group => hiddenBox.querySelectorAll('button[data-focus-key]').find(n =>
+        n.getAttribute('data-focus-key') === JSON.stringify(['group', group]));
+    const getGroupList = group => hiddenBox.querySelectorAll('ul[data-group]').find(n => n.getAttribute('data-group') === group);
+    hiddenVM.response = hiddenFixture;
+    vm.runInContext('renderGroups(response);', hiddenVM);
+    assert.equal(getHide('B', exactHiddenName), undefined, 'Do not offer hiding the currently selected occurrence');
+    const oldHideButton = getHide('A', exactHiddenName);
+    assert.equal(oldHideButton.getAttribute('title'), 'Hide proxy until reload');
+    hiddenDoc.activeElement = oldHideButton;
+    hideHandlers.get('.cmd-hide-proxy').call(oldHideButton);
+    assert.deepEqual(boxMembers(), [['A','Selected'],['A','Archive'],['B',exactHiddenName]], 'Hide exact names except selected occurrences');
+    assert.equal(hiddenDoc.activeElement.getAttribute('data-focus-key'), JSON.stringify(['collapse','A']), 'Move focus to the retained group after its button disappears');
+    assert.equal(getGroupList('C').children[0].textContent, 'All matching proxies in this group are hidden.');
+    assert.equal(getGroupList('Empty').children.length, 0, 'Genuine empty groups do not show a hidden message');
+    assert.equal(controlFor('#proxy-hidden-count').value, '1');
+    assert.equal(JSON.stringify(hiddenFixture), hiddenCopy, 'No snapshot mutation');
+    hideHandlers.get('.cmd-test-group').call(getProbe('C'));
+    assert.deepEqual(hiddenProbes, [exactHiddenName], 'A group with all members hidden still probes the full preexisting scope when explicitly clicked');
+    const hiddenRoot = hiddenBox.children[0];
+    vm.runInContext('renderGroups(response);', hiddenVM);
+    assert.equal(hiddenBox.children[0], hiddenRoot, 'Repeated identical poll keeps current DOM');
+    const filter = controlFor('#proxy-filter');
+    filter.value = 'archive';
+    filter.handlers.input.call(filter);
+    assert.deepEqual(boxMembers(), [['A','Archive']], 'The existing name filter remains independent');
+    assert.equal(controlFor('#proxy-filter-state').value, 'Name matches before hiding: 1/5');
+    filter.value = 'missing';
+    filter.handlers.input.call(filter);
+    assert.equal(hiddenBox.children[0].textContent, 'No proxy names match the filter.');
+    filter.value = '';
+    filter.handlers.input.call(filter);
+    const eye = controlFor('#proxy-show-hidden');
+    eye.checked = true;
+    eye.handlers.change.call(eye);
+    assert(boxMembers().some(([group,name]) => group === 'C' && name === exactHiddenName), 'Reveal hidden proxies without changing the hidden set');
+    assert.equal(getHide('A', exactHiddenName).getAttribute('title'), 'Restore proxy');
+    hideHandlers.get('.cmd-hide-proxy').call(getHide('A', exactHiddenName));
+    assert.equal(controlFor('#proxy-hidden-count').value, '0');
+    eye.checked = false;
+    eye.handlers.change.call(eye);
+    hideHandlers.get('.cmd-hide-proxy').call(getHide('A', exactHiddenName));
+    const restoreAll = controlFor('#proxy-restore-all');
+    restoreAll.handlers.click.call(restoreAll);
+    assert.equal(controlFor('#proxy-hidden-count').value, '0');
+    assert(restoreAll.disabled && eye.focused, 'Restore all keeps focus on a reachable control');
+    assert.equal(hiddenNetwork, 0, 'The new controls neither issue requests nor run automatic probes');
+    console.log('Proxy temporary hiding: exact names, selected entries, independent filtering, focus and unchanged group probe scope passed');
+}
