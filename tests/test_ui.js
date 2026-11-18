@@ -2097,3 +2097,72 @@ const clickAddress = button => addressClick.call(button, {stopPropagation() { st
     assert.equal(stoppedCopies, 10);
     console.log('Connection copy UI: IPv4/IPv6, safe DOM, missing IPs, reloads, clipboard success/failure, dismissible fallback and stale results passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });
+
+// Read-only aggregate from the existing successful poll, independent of row filters.
+const summaryRows = [
+    {name: 'A', members: [{name: 'Shared', type: 'VLESS', delay: 19},
+        {name: 'Zero', type: 'SS', delay: 0}, {name: 'Negative', type: 'SS', delay: -1},
+        {name: 'Unknown', type: 'VLESS', delay: null}, {name: 'Malformed delay', type: 'VLESS', delay: '55'},
+        {name: 'Fraction', type: 'VLESS', delay: 1.1}, {name: 'Infinite', type: 'VLESS', delay: Infinity},
+        {name: 'Dangling', type: '', delay: null},
+        {name: 'Nested', type: 'Selector', delay: 3}, {name: 'Omitted group', type: 'URLTest', delay: 4},
+        {name: 'DIRECT', type: 'Direct', delay: 2}, {name: 'REJECT', type: 'Reject', delay: 0},
+        {name: 'REJECT-DROP', type: 'RejectDrop', delay: 0}, {name: 'PASS', type: 'Pass', delay: 1}]},
+    {name: 'Nested', members: [{name: 'Shared', type: 'VLESS', delay: 19}]}
+];
+assert.deepEqual(UI.summarizeProxyLatency(summaryRows), {responding: 1, noPositive: 2, unknown: 5});
+assert.deepEqual(UI.summarizeProxyLatency([]), {responding: 0, noPositive: 0, unknown: 0});
+for (const bad of [undefined, null, {}, [null], [{name: 'Bad'}], [{name: 'Bad', members: [null]}]]) {
+    assert.equal(UI.summarizeProxyLatency(bad), null, 'Malformed projections must not become zero counts');
+}
+const summaryHandler = indexView.match(/        function loadGroups\(done\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, msg) => JSON.stringify(msg));
+let summaryStatus = 'Loading …', summaryWrites = 0, groupWrites = 0, summaryRequests = 0, saidDone;
+const summaryContext = vm.createContext({
+    testing: false, MihomoUI: UI, fmtCount: String,
+    ajaxGet(path, args, done) {
+        assert.equal(path, '/api/mihomo/dashboard/proxies');
+        assert.equal(Object.keys(args).length, 0);
+        summaryRequests++;
+        done(summaryContext.response, summaryContext.status);
+    },
+    renderGroups() { groupWrites++; },
+    $: selector => selector === '#proxy-health-summary' ? {text(value) {
+        if (typeof value === 'undefined') { return summaryStatus; }
+        summaryStatus = value; summaryWrites++;
+    }} : {text() {}},
+    done: status => { saidDone = status; }
+});
+vm.runInContext(summaryHandler, summaryContext);
+function summaryPoll(response, status) {
+    summaryContext.response = response;
+    summaryContext.status = status;
+    vm.runInContext('loadGroups(done);', summaryContext);
+}
+const validSummary = {ready: true, groups: summaryRows};
+summaryPoll(validSummary, 'success');
+assert.equal(summaryStatus, 'Responding: 1 · No positive result: 2 · Untested or unknown: 5');
+assert.equal(saidDone, true);
+summaryPoll(validSummary, 'success');
+assert.equal(summaryWrites, 1, 'Unchanged live-region text is not announced every poll');
+summaryPoll(validSummary, 'error');
+assert.equal(summaryStatus, 'Status unavailable');
+assert.equal(saidDone, false);
+assert.equal(groupWrites, 2, 'Transport failure retains the existing group rows');
+summaryPoll({ready: true}, 'success');
+assert.equal(summaryStatus, 'Status unavailable');
+assert.equal(saidDone, true, 'Summary validity does not change the original poll success result');
+assert.equal(groupWrites, 3, 'A successful response still uses the original group rendering path');
+summaryPoll({ready: false, groups: []}, 'success');
+assert.equal(summaryStatus, 'Status unavailable');
+assert.equal(saidDone, false);
+summaryPoll({ready: true, groups: []}, 'success');
+assert.equal(summaryStatus, 'Responding: 0 · No positive result: 0 · Untested or unknown: 0');
+assert.equal(saidDone, true);
+summaryPoll(validSummary, 'success');
+assert.equal(summaryStatus, 'Responding: 1 · No positive result: 2 · Untested or unknown: 5');
+assert.equal(summaryRequests, 7, 'Only the existing one-request poll is used');
+summaryContext.testing = true;
+summaryPoll(validSummary, 'success');
+assert.equal(summaryRequests, 7, 'Busy group tests still pause polling');
+console.log('Proxy latency summary: deduplication, unknown values, failed reads, true empty results and request isolation passed');
