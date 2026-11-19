@@ -28,6 +28,14 @@
         });
     }
     // Copy the observed match conditions, not a reconstructed executable PF rule.
+    // Report only selection metadata, never the full controller response.
+    function exportSelections(groups, capturedAt) {
+        return JSON.stringify({capturedAt, groups: groups.map(group => ({
+            group: decodeApiText(group.name),
+            type: decodeApiText(group.type),
+            selected: typeof group.now === 'string' && group.now !== '' ? decodeApiText(group.now) : null
+        }))}, null, 2);
+    }
     function ruleMatchText(rule) {
         if (!rule || typeof rule.source !== 'string' || !rule.source.trim()
             || typeof rule.destination !== 'string' || !rule.destination.trim()) { return ''; }
@@ -448,5 +456,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, formatTrafficTotal, TrafficTotals, TrafficHistory, summarizeProxyLatency, theme, decodeApiText, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, normalizeProxyQuery, filterProxyGroups, fullProxyGroupTestNames, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatTrafficTotal, TrafficTotals, TrafficHistory, summarizeProxyLatency, theme, decodeApiText, exportSelections, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, normalizeProxyQuery, filterProxyGroups, fullProxyGroupTestNames, renderProxyGroups, ProxyFavorites};
 }));

@@ -68,6 +68,8 @@ In **Current forwarding → Rule details** on Overview or Policy Routing, click 
 
 In **Active Connections**, use the copy icon beside **Source** for the source IP or beside **Host** for the destination IP. Hover or focus the button to identify its address. Copying uses the IP reported by Mihomo, without a port or IPv6 brackets; it does not resolve hostnames or substitute the displayed host. Missing IPs have no copy button. If the browser blocks clipboard access (including on HTTP), a selected read-only field lets you copy manually. This also works with view-only privileges and makes no extra API requests.
 
+In **Overview → Proxy Groups**, choose **Export selections (JSON)** to read all current group selections into a selected, read-only snippet for notes or troubleshooting. Press **Ctrl+C / Command+C** to copy it. The report contains a capture time, group names, types and selected member names; `null` means no single selection was reported. Automatic selections may change afterward; export again to refresh. Exporting does not change routing or save a restorable snapshot.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.
