@@ -1698,3 +1698,27 @@ msgstr "应用隐藏前的名称匹配数"
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Hiding changes only this page. Selected entries stay visible when they match the name filter. Routing and group latency tests are unchanged."
 msgstr "隐藏只影响本页。符合名称筛选条件的选中项仍显示。不影响路由或整组延迟测试。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Export selections (JSON)"
+msgstr "导出选择（JSON）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Group selections (JSON)"
+msgstr "分组选择（JSON）"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Reading current group selections…"
+msgstr "正在读取当前分组选择…"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Could not read current selections. Try exporting again."
+msgstr "无法读取当前选择，请重新导出。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Copy the selected JSON with Ctrl+C or Command+C. Export again to refresh it."
+msgstr "按 Ctrl+C 或 Command+C 复制选中的 JSON。再次导出即可刷新。"
+
+#: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
+msgid "Includes all reported groups. Automatic selections may change; null means no single selection was reported. Group and node names are included."
+msgstr "包含所有已报告的分组。自动选择可能变化；null 表示未报告单一选择。内容包含分组和节点名称。"
