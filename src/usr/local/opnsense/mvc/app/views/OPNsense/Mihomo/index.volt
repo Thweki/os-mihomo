@@ -546,6 +546,29 @@
         /* ------------------------------------------------------------------ *
          * 活动连接表格
          * ------------------------------------------------------------------ */
+        function showConnectionDetails(row) {
+            const details = MihomoUI.element(document, 'div');
+            details.appendChild(MihomoUI.element(document, 'p', {class: 'text-muted'},
+                {{ lang._('Snapshot from the connection list. Refresh the list to inspect newer data.') | json_encode }}));
+            const fields = MihomoUI.element(document, 'dl');
+            [
+                [{{ lang._('Host') | json_encode }}, row.host],
+                [{{ lang._('Source') | json_encode }}, row.source],
+                [{{ lang._('Destination') | json_encode }}, row.destination],
+                [{{ lang._('Network') | json_encode }}, row.network],
+                [{{ lang._('Type') | json_encode }}, row.type],
+                [{{ lang._('Rule') | json_encode }}, row.rule],
+                [{{ lang._('Rule value') | json_encode }}, row.rulePayload],
+                [{{ lang._('Chain') | json_encode }}, row.chain]
+            ].forEach(function (field) {
+                fields.appendChild(MihomoUI.element(document, 'dt', {}, field[0]));
+                fields.appendChild(MihomoUI.element(document, 'dd', {style: 'white-space:pre-wrap; overflow-wrap:anywhere; margin-bottom:10px;'},
+                    MihomoUI.decodeApiText(field[1]) || '—'));
+            });
+            details.appendChild(fields);
+            BootstrapDialog.show({title: {{ lang._('Connection details') | json_encode }}, message: $(details)});
+        }
+
         let connectionsReady = false;
         $("#grid-connections").on('load.rs.jquery.bootgrid', function () {
             connectionsReady = false;
@@ -561,6 +584,14 @@
                 },
                 'formatters': {
                     'addressformatter': connectionAddressCell,
+                    'detailsformatter': function (column, row) {
+                        const button = MihomoUI.element(document, 'button', {type: 'button', class: 'btn btn-xs btn-default cmd-connection-details',
+                            'data-details': JSON.stringify({host: row.host, source: row.source, destination: row.destination,
+                                network: row.network, type: row.type, rule: row.rule, rulePayload: row.rulePayload, chain: row.chain}),
+                            'aria-label': {{ lang._('Connection details') | json_encode }}, title: {{ lang._('Connection details') | json_encode }}});
+                        button.appendChild(MihomoUI.element(document, 'i', {class: 'fa fa-info-circle fa-fw', 'aria-hidden': 'true'}));
+                        return button.outerHTML;
+                    },
                     'bytesformatter': function (column, row) {
                         return fmtBytes(row[column.id]);
                     },
@@ -591,6 +622,9 @@
                 ? fmtCount($('#grid-connections').bootgrid('getCurrentRows').length)
                 : {{ lang._('Unavailable') | json_encode }});
             $('[data-toggle="tooltip"]').tooltip({ 'container': 'body' });
+            $('.cmd-connection-details').off('click').on('click', function () {
+                showConnectionDetails(JSON.parse($(this).attr('data-details')));
+            });
             $('.cmd-close-connection').off('click').on('click', function () {
                 closeConnections($(this).attr('data-id'));
             });
@@ -903,6 +937,7 @@
                             <th data-column-id="upload" data-width="7em" data-type="string" data-formatter="bytesformatter">{{ lang._('Upload') }}</th>
                             <th data-column-id="start" data-width="7em" data-type="string" data-formatter="timeformatter">{{ lang._('Age') }}</th>
                             <th data-column-id="id" data-type="string" data-identifier="true" data-visible="false">{{ lang._('ID') }}</th>
+                            <th data-column-id="details" data-width="4em" data-formatter="detailsformatter" data-sortable="false">{{ lang._('Details') }}</th>
                             <th data-column-id="commands" data-width="4em" data-formatter="closeformatter" data-sortable="false">{{ lang._('Close') }}</th>
                         </tr>
                     </thead>

@@ -732,6 +732,74 @@ console.log('Recent settings applies: bounded history, captured labels, outcomes
 // Exercise the real overview request function, including its metadata cadence.
 const indexView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt'), 'utf8');
+
+// Run the real connection formatter, click binding and dialog with a strict DOM.
+// No request helpers are provided: inspecting a row must remain read-only/offline.
+const detailsScript = indexView.slice(indexView.indexOf('        function showConnectionDetails(row)'),
+    indexView.indexOf('        function closeConnections(id)'))
+    .replace(/\{\{\s*lang\._\('([^']*)'\)[\s\S]*?\}\}/g, (_, label) => JSON.stringify(label));
+assert(detailsScript.includes('function showConnectionDetails'), 'Connection details must be implemented in the view');
+assert.match(indexView, /data-column-id="details"[^>]*data-formatter="detailsformatter"[^>]*data-sortable="false"/);
+let detailsGrid, gridLoaded, detailClick, detailsButton;
+const dialogs = [];
+const connectionContext = {
+    document: doc,
+    connectionAddressCell() {},
+    MihomoUI: {...UI, element(...args) {
+        const node = UI.element(...args);
+        if (node.attrs.class && node.attrs.class.includes('cmd-connection-details')) { detailsButton = node; }
+        return node;
+    }},
+    BootstrapDialog: {show: options => dialogs.push(options)},
+    $: selector => {
+        if (selector instanceof DomNode) { return {attr: key => selector.getAttribute(key), node: selector}; }
+        if (selector === '#grid-connections') {
+            return {
+                UIBootgrid(options) { detailsGrid = options; return this; },
+                bootgrid(action) { assert.equal(action, 'getCurrentRows'); return []; },
+                on(event, callback) {
+                    if (event === 'loaded.rs.jquery.bootgrid') { gridLoaded = callback; }
+                    else { assert.equal(event, 'load.rs.jquery.bootgrid'); }
+                    return this;
+                }
+            };
+        }
+        return {text() {}, tooltip() {}, off() { return this; }, on(event, callback) {
+            if (selector === '.cmd-connection-details') { assert.equal(event, 'click'); detailClick = callback; }
+        }};
+    }
+};
+vm.runInNewContext(detailsScript, connectionContext);
+const connection = {id: 'fixture-id', host: encode('<img src=x onerror="bad()">'), source: '192.0.2.10:1234',
+    destination: '198.51.100.20:443', network: 'TCP', type: 'TUN', rule: 'DomainSuffix',
+    rulePayload: encode('example.invalid & literal &gt;'), chain: encode('中文 "group" → node')};
+detailsGrid.options.formatters.detailsformatter({}, connection);
+const firstDetailsButton = detailsButton;
+assert.equal(detailsButton.attrs.type, 'button');
+assert.equal(detailsButton.attrs['aria-label'], 'Connection details');
+assert.equal(JSON.parse(detailsButton.attrs['data-details']).rulePayload, connection.rulePayload);
+assert(!Object.hasOwn(JSON.parse(detailsButton.attrs['data-details']), 'id'), 'Only displayed fields are copied');
+gridLoaded();
+detailClick.call(detailsButton);
+assert.equal(dialogs[0].title, 'Connection details');
+const detailFields = dialog => dialog.message.node.children[1].children;
+assert.deepEqual(detailFields(dialogs[0]).filter(node => node.tagName === 'dt').map(node => node.textContent),
+    ['Host', 'Source', 'Destination', 'Network', 'Type', 'Rule', 'Rule value', 'Chain']);
+assert.deepEqual(detailFields(dialogs[0]).filter(node => node.tagName === 'dd').map(node => node.textContent),
+    ['<img src=x onerror="bad()">', connection.source, connection.destination, 'TCP', 'TUN', 'DomainSuffix',
+        'example.invalid & literal &gt;', '中文 "group" → node']);
+assert(dialogs[0].message.node.children[0].textContent.includes('Snapshot'));
+connection.rulePayload = 'newer value';
+detailsGrid.options.formatters.detailsformatter({}, {rule: 'Match', rulePayload: '', destination: null});
+gridLoaded();
+detailClick.call(detailsButton);
+assert.deepEqual(detailFields(dialogs[1]).filter(node => node.tagName === 'dd').map(node => node.textContent),
+    ['—', '—', '—', '—', '—', 'Match', '—', '—'], 'Missing optional metadata has an explicit fallback');
+detailClick.call(firstDetailsButton);
+assert.equal(detailFields(dialogs[2])[13].textContent, 'example.invalid & literal &gt;',
+    'Each button keeps its own snapshot, independent of later rows or refreshes');
+console.log('Connection details: matched rule, destination, safe text, missing fields and per-row snapshots passed');
+
 const overviewFunction = indexView.match(/        function loadOverview\(done\) \{[\s\S]*?\n        \}/)[0];
 const overviewRequests = [];
 let now = 100000;
@@ -1910,7 +1978,7 @@ vm.runInNewContext(countFunction + connectionScript, {
             return {text: value => { visibleConnectionCount = value; }};
         }
         if (selector === '[data-toggle="tooltip"]') { return {tooltip: () => {}}; }
-        assert.equal(selector, '.cmd-close-connection');
+        assert(['.cmd-close-connection', '.cmd-connection-details'].includes(selector));
         return {off() { return this; }, on() { return this; }};
     }
 });
@@ -2074,7 +2142,7 @@ assert.deepEqual(filterLogLines(contextFilter, 'hit', 2, errorOnly), {
 
 // Run the actual connection formatter and delegated click handler. DOM values
 // remain text/attributes even when controller strings contain markup or quotes.
-const addressScript = indexView.match(/        function isCopyAddressText\(text\) \{[\s\S]*?(?=        let connectionsReady = false;)/)[0]
+const addressScript = indexView.match(/        function isCopyAddressText\(text\) \{[\s\S]*?(?=        function showConnectionDetails\(row\))/)[0]
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 const copyControls = new Map();
 let addressClick, dismissAddress, renderedCell;

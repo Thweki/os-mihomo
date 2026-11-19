@@ -70,6 +70,8 @@ In **Active Connections**, use the copy icon beside **Source** for the source IP
 
 In **Overview → Proxy Groups**, choose **Export selections (JSON)** to read all current group selections into a selected, read-only snippet for notes or troubleshooting. Press **Ctrl+C / Command+C** to copy it. The report contains a capture time, group names, types and selected member names; `null` means no single selection was reported. Automatic selections may change afterward; export again to refresh. Exporting does not change routing or save a restorable snapshot.
 
+In **Active Connections**, use the **Details** button on a row to inspect its destination IP/port, matched rule and rule value, and proxy chain. The dialog shows a snapshot from that row; refresh the connection list and reopen details for newer data. Missing fields appear as `—`.
+
 ![Mihomo overview with live metrics and traffic history](docs/assets/overview.png)
 
 These screenshots show the actual interface with sensitive information blurred by a local script. Colors inherit the system theme; pictured configuration values illustrate the interface only.
