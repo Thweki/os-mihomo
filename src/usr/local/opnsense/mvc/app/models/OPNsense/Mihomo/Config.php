@@ -94,29 +94,85 @@ class Config
             }
             $indent = strlen($m[1]);
             $key = $m[2];
-            $raw = ($m[3] ?? '') !== '' ? rtrim($m[4]) : null;
+            [$raw] = self::splitScalar($m[4] ?? '');
 
             while (!empty($stack) && end($stack)['indent'] >= $indent) {
                 array_pop($stack);
             }
             $path = implode('.', array_merge(array_column($stack, 'key'), [$key]));
 
-            if ($raw === null || $raw === '') {
+            if ($raw === '') {
                 $stack[] = ['indent' => $indent, 'key' => $key];
                 continue;
             }
-            /* 去掉行尾注释与包裹引号 */
-            $value = preg_replace('/\s+#.*$/', '', $raw);
-            $value = trim((string)$value);
-            if (strlen($value) >= 2 && (
-                ($value[0] === '"' && substr($value, -1) === '"') ||
-                ($value[0] === "'" && substr($value, -1) === "'")
-            )) {
-                $value = substr($value, 1, -1);
-            }
-            $result[$path] = $value;
+            $result[$path] = self::decodeScalar($raw);
         }
         return $result;
+    }
+
+    /**
+     * Split a single-line scalar from its comment, retaining the comment's spacing.
+     * Quotes only open at the start of a scalar; apostrophes in plain text are literal.
+     * @return array{0: string, 1: string} [trimmed YAML scalar, comment suffix]
+     */
+    public static function splitScalar(string $raw): array
+    {
+        $value = ltrim($raw, " \t");
+        $quote = in_array($value[0] ?? '', ['"', "'"], true) ? $value[0] : null;
+        $length = strlen($value);
+        for ($i = $quote === null ? 0 : 1; $i < $length; $i++) {
+            $char = $value[$i];
+            if ($quote !== null) {
+                if ($quote === '"' && $char === '\\') {
+                    $i++;
+                } elseif ($char === $quote) {
+                    if ($quote === "'" && ($value[$i + 1] ?? '') === "'") {
+                        $i++;
+                    } else {
+                        $quote = null;
+                    }
+                }
+            } elseif ($char === '#' && ($i === 0 || $value[$i - 1] === ' ' || $value[$i - 1] === "\t")) {
+                $scalar = rtrim(substr($value, 0, $i), " \t");
+                return [$scalar, substr($value, strlen($scalar))];
+            }
+        }
+        return [rtrim($value, " \t"), ''];
+    }
+
+    /** Decode the supported single-line YAML scalar, preserving case and quoted whitespace. */
+    public static function decodeScalar(string $value): string
+    {
+        if (strlen($value) < 2) {
+            return $value;
+        }
+        if ($value[0] === "'" && substr($value, -1) === "'") {
+            return str_replace("''", "'", substr($value, 1, -1));
+        }
+        if ($value[0] !== '"' || substr($value, -1) !== '"') {
+            return $value;
+        }
+        $escapes = [
+            '0' => "\0", 'a' => "\x07", 'b' => "\x08", 't' => "\t", 'n' => "\n",
+            'v' => "\x0b", 'f' => "\x0c", 'r' => "\r", 'e' => "\x1b", ' ' => ' ',
+            '"' => '"', '/' => '/', '\\' => '\\', 'N' => "\xc2\x85", '_' => "\xc2\xa0",
+            'L' => "\xe2\x80\xa8", 'P' => "\xe2\x80\xa9",
+        ];
+        return (string)preg_replace_callback('/\\\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)/s', function (array $m) use ($escapes): string {
+            if (isset($escapes[$m[1]])) {
+                return $escapes[$m[1]];
+            }
+            if (strlen($m[1]) > 1) {
+                $code = hexdec(substr($m[1], 1));
+                if ($code <= 0x10ffff && !($code >= 0xd800 && $code <= 0xdfff)) {
+                    $unicode = $code <= 0xffff
+                        ? sprintf('\\u%04x', $code)
+                        : sprintf('\\u%04x\\u%04x', 0xd800 + (($code - 0x10000) >> 10), 0xdc00 + (($code - 0x10000) & 0x3ff));
+                    return (string)json_decode('"' . $unicode . '"');
+                }
+            }
+            return $m[0];
+        }, substr($value, 1, -1));
     }
 
     /**
@@ -200,8 +256,10 @@ class Config
             return $value;
         }
         /* 需要引号的情形：空串 / 以特殊字符开头 / 含 ": " 或 " #" / 首尾空白 */
-        if ($value === '' || preg_match('/^[\s#\[\]{}&*!|>\'"%@`]/', $value) || preg_match('/:\s|#\s|^\s|\s$/', $value)) {
-            return '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $value) . '"';
+        if ($value === '' || preg_match('/^[\s#\[\]{}&*!|>\'"%@`]/', $value) || preg_match('/:\s|#\s|\s#|^\s|\s$|[\x00-\x1f\x7f]/', $value)) {
+            $escaped = str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
+            $escaped = preg_replace_callback('/[\x00-\x1f\x7f]/', fn (array $m): string => sprintf('\\x%02x', ord($m[0])), $escaped);
+            return '"' . $escaped . '"';
         }
         return $value;
     }
@@ -297,10 +355,9 @@ class Config
             /* 叶子：替换或追加（改动时保留行尾注释） */
             if ($lineNo !== null) {
                 $existing = $lines[$lineNo];
-                $comment = '';
-                $hashPos = strpos($existing, ' #');
-                if ($hashPos !== false) {
-                    $comment = substr($existing, $hashPos);
+                [, $comment] = self::splitScalar(substr($existing, strpos($existing, ':') + 1));
+                if (str_starts_with($comment, '#')) {
+                    $comment = ' ' . $comment;
                 }
                 $lines[$lineNo] = $indentStr . $key . ': ' . $rendered . $comment;
             } else {
@@ -331,7 +388,7 @@ class Config
         $subIndent = self::childIndent($lines, $lineNo + 1, $blockEnd, $indent);
 
         /* 若该行写成 `tun: {}` 或标量，无法安全下钻，改写为块形式 */
-        $afterColon = trim((string)preg_replace('/^[^:]+:/', '', $lines[$lineNo]));
+        [$afterColon] = self::splitScalar((string)preg_replace('/^[^:]+:/', '', $lines[$lineNo]));
         if ($afterColon !== '') {
             $lines[$lineNo] = $indentStr . $key . ':';
         }
@@ -363,19 +420,18 @@ class Config
         return implode($eol, $lines);
     }
 
-    /** 目标值与文件中已有值是否等价（忽略引号与布尔写法差异） */
+    /** Compare decoded values exactly; only a boolean target accepts boolean spellings. */
     public static function valuesEqual(mixed $current, mixed $wanted): bool
     {
         if ($current === null) {
             return false;
         }
-        $normalize = function (mixed $value): string {
-            if (is_bool($value)) {
-                return $value ? 'true' : 'false';
-            }
-            return strtolower(trim((string)$value, " \t\"'"));
-        };
-        return $normalize($current) === $normalize($wanted);
+        $current = is_bool($current) ? ($current ? 'true' : 'false') : (string)$current;
+        if (is_bool($wanted)) {
+            $spellings = $wanted ? ['true', 'yes', 'on', '1'] : ['false', 'no', 'off', '0'];
+            return in_array(strtolower($current), $spellings, true);
+        }
+        return $current === (string)$wanted;
     }
 
     /* =====================================================================

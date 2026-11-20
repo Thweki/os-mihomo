@@ -103,9 +103,10 @@ class Inspector
 
     /**
      * 把各种写法归一化，便于比较：true/1/yes/on → 'true'，false/0/no/off → 'false'，
-     * 其余去掉首尾引号与空白后返回小写。
+     * YAML 输入先解码引号与转义，其余字符串保留大小写及引号内空白。
+     * 页面模型值已经是字符串，调用时传 yaml=false，避免二次解码。
      */
-    public static function normalize(mixed $value): ?string
+    public static function normalize(mixed $value, bool $yaml = true): ?string
     {
         if ($value === null) {
             return null;
@@ -113,8 +114,7 @@ class Inspector
         if (is_bool($value)) {
             return $value ? 'true' : 'false';
         }
-        $text = trim((string)$value);
-        $text = trim($text, "\"'");
+        $text = $yaml ? Config::decodeScalar(trim((string)$value)) : (string)$value;
         $lower = strtolower($text);
         if (in_array($lower, ['true', 'yes', 'on', '1'], true)) {
             return 'true';
@@ -122,7 +122,7 @@ class Inspector
         if (in_array($lower, ['false', 'no', 'off', '0'], true)) {
             return 'false';
         }
-        return $lower;
+        return $text;
     }
 
     /**
@@ -153,9 +153,9 @@ class Inspector
             $value = trim($raw);
             $last = $index === count($segments) - 1;
             if ($last) {
-                return self::stripComment($value);
+                return Config::splitScalar($value)[0];
             }
-            if ($value === '') {
+            if (Config::splitScalar($value)[0] === '') {
                 $indent += 2;
                 $start++;
                 continue;
@@ -164,24 +164,6 @@ class Inspector
             return null;
         }
         return null;
-    }
-
-    /** 去掉行尾注释（引号内的 # 不算注释） */
-    private static function stripComment(string $value): string
-    {
-        if ($value === '') {
-            return '';
-        }
-        if ($value[0] === '"' || $value[0] === "'") {
-            $quote = $value[0];
-            $end = strpos($value, $quote, 1);
-            return $end === false ? $value : substr($value, 0, $end + 1);
-        }
-        $pos = strpos($value, ' #');
-        if ($pos === false) {
-            $pos = strpos($value, "\t#");
-        }
-        return $pos === false ? $value : rtrim(substr($value, 0, $pos));
     }
 
     /** 这份配置看起来是"手写的"还是"订阅模板生成的" */
@@ -343,11 +325,17 @@ class Inspector
         }
 
         $state = self::STATE_MATCH;
+        $boolean = in_array($key, [
+            'allow-lan', 'tun.enable', 'tun.auto-route', 'tun.strict-route',
+            'dns.enable', 'dns.ipv6', 'ipv6', 'sniffer.enable',
+        ], true);
         if ($runtimeOnly) {
             $state = self::STATE_NA;
         } elseif ($fileValue === null) {
             $state = self::STATE_MISSING;
-        } elseif (self::normalize($fileValue) !== self::normalize($modelValue)) {
+        } elseif ($boolean
+            ? self::normalize($fileValue) !== self::normalize($modelValue, false)
+            : !Config::valuesEqual(Config::decodeScalar($fileValue), $modelValue)) {
             $state = self::STATE_DIFFERS;
         }
 
