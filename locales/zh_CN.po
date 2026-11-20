@@ -1737,3 +1737,15 @@ msgstr "按 Ctrl+C 或 Command+C 复制选中的 JSON。再次导出即可刷新
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Includes all reported groups. Automatic selections may change; null means no single selection was reported. Group and node names are included."
 msgstr "包含所有已报告的分组。自动选择可能变化；null 表示未报告单一选择。内容包含分组和节点名称。"
+
+msgid "Stop tests"
+msgstr "停止测试"
+
+msgid "Skipped"
+msgstr "已跳过"
+
+msgid "Tests stopped."
+msgstr "测试已停止。"
+
+msgid "Stopping tests; waiting for active requests."
+msgstr "正在停止测试，等待已发出的请求完成。"

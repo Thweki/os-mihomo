@@ -237,20 +237,33 @@
     }
     function runLimited(items, limit, worker, progress, done) {
         let next = 0, active = 0, completed = 0, failed = 0;
+        let cancelled = false, finished = false;
+        const state = () => ({completed, total: items.length, failed, cancelled, skipped: cancelled ? items.length - next : 0});
         function pump() {
-            if (completed === items.length) { done({completed, failed}); return; }
-            while (active < limit && next < items.length) {
+            if (finished) { return; }
+            if (active === 0 && (cancelled || completed === items.length)) {
+                finished = true; done(state()); return;
+            }
+            while (!cancelled && !finished && active < limit && next < items.length) {
                 const item = items[next++]; active++;
                 let settled = false;
                 worker(item, ok => {
                     if (settled) { return; }
                     settled = true; active--; completed++; if (!ok) { failed++; }
-                    progress({completed, total: items.length, failed});
+                    progress(state());
                     pump();
                 });
             }
         }
         pump();
+        return {cancel() {
+            if (finished || cancelled) { return; }
+            // Requests already sent may still update core latency history. Drain
+            // them before completing so a new batch cannot overlap this one.
+            cancelled = true;
+            progress(state());
+            pump();
+        }};
     }
     // Browser-local display preferences; names are decoded once at the API boundary.
     class ProxyFavorites {
