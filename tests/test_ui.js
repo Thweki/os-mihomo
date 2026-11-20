@@ -625,8 +625,37 @@ UI.runLimited(Array.from({length: 12}, (_, i) => i), 3, (item, done) => {
 assert.equal(completions.length, 3);
 while (nextTest < completions.length) { completions[nextTest++](nextTest % 4 !== 0); }
 assert.equal(peakTests, 3);
-assert.deepEqual(result, {completed: 12, failed: 3});
+assert.deepEqual(result, {completed: 12, total: 12, failed: 3, cancelled: false, skipped: 0});
 assert.deepEqual(progress.map(item => item.completed), Array.from({length: 12}, (_, i) => i + 1));
+// Stopping a batch discards only queued work and drains active requests before
+// allowing another batch. Duplicate responses and repeated stops are harmless.
+const pendingProbes = [], stoppedProgress = [], stoppedResults = [];
+const stoppedBatch = UI.runLimited(['a', 'b', 'c', 'd', 'e', 'f'], 3,
+    (name, done) => pendingProbes.push({name, done}),
+    state => stoppedProgress.push(state), state => stoppedResults.push(state));
+pendingProbes[0].done(true);
+assert.equal(pendingProbes.length, 4);
+stoppedBatch.cancel();
+stoppedBatch.cancel();
+assert.equal(stoppedResults.length, 0, 'Stop must wait for already submitted probes');
+assert.deepEqual(stoppedProgress.at(-1), {completed: 1, total: 6, failed: 0, cancelled: true, skipped: 2});
+pendingProbes[2].done(false);
+pendingProbes[2].done(false);
+pendingProbes[1].done(true);
+assert.equal(stoppedResults.length, 0);
+pendingProbes[3].done(true);
+assert.equal(pendingProbes.length, 4, 'Queued probes must never be submitted after stopping');
+assert.deepEqual(stoppedResults, [{completed: 4, total: 6, failed: 1, cancelled: true, skipped: 2}]);
+stoppedBatch.cancel();
+pendingProbes[3].done(false);
+assert.equal(stoppedResults.length, 1, 'Completion fires exactly once');
+for (const items of [[], ['single'], ['one', 'two', 'three', 'four']]) {
+    const results = [];
+    const batch = UI.runLimited(items, 3, (_, done) => done(true), () => {}, state => results.push(state));
+    batch.cancel();
+    assert.deepEqual(results, [{completed: items.length, total: items.length, failed: 0, cancelled: false, skipped: 0}],
+        'Empty, synchronous and already finished batches complete exactly once');
+}
 const subscriptionView = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt'), 'utf8');
 assert(subscriptionView.includes('/api/mihomo/subscription/status'));
@@ -2428,3 +2457,77 @@ console.log('Proxy latency summary: deduplication, unknown values, failed reads,
     assert.equal(hiddenNetwork, 0, 'The new controls neither issue requests nor run automatic probes');
     console.log('Proxy temporary hiding: exact names, selected entries, independent filtering, focus and unchanged group probe scope passed');
 }
+
+// Run the dashboard's actual batch/stop handlers with delayed API responses.
+const stopButtonMarkup = indexView.match(/<button[^>]*id="stop-proxy-tests"[^>]*>/)[0];
+assert(stopButtonMarkup.includes('type="button"') && stopButtonMarkup.includes(' disabled'),
+    'Stop is a native keyboard button, disabled until a batch starts');
+assert(stopButtonMarkup.includes('aria-describedby="proxy-test-state"'));
+const probeRequests = [], probeControls = new Map();
+let probeRefreshes = 0;
+function probeControl(selector) {
+    if (typeof selector !== 'string') { return selector; }
+    if (!probeControls.has(selector)) {
+        probeControls.set(selector, {disabled: true, label: '',
+            prop(key, value) { this[key] = value; return this; },
+            text(value) { this.label = value; return this; },
+            on(event, handler) { assert.equal(event, 'click'); this.click = handler; return this; }});
+    }
+    return probeControls.get(selector);
+}
+const probeContext = vm.createContext({
+    $: probeControl, MihomoUI: UI,
+    ajaxCall: (url, data, done) => {
+        assert.equal(url, '/api/mihomo/dashboard/test_delay');
+        probeRequests.push({name: data.name, done});
+    },
+    groupsPoller: {refresh() { probeRefreshes++; }}
+});
+const probeScript = indexView.match(/        function testNodes\(names\) \{[\s\S]*?(?=        \$\('#proxy-groups'\)\.on\('click', '\.cmd-test',)/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInContext('let testing = false; let latencyBatch = null;\n' + probeScript, probeContext);
+const stopProbes = probeControl('#stop-proxy-tests');
+const probeStatus = probeControl('#proxy-test-state');
+const testButtons = probeControl('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group');
+stopProbes.click();
+vm.runInContext('testNodes([]);', probeContext);
+assert.equal(probeRequests.length, 0);
+vm.runInContext('testNodes(["a", "b", "c", "d", "e", "f"]);', probeContext);
+assert.equal(stopProbes.disabled, false);
+assert.equal(testButtons.disabled, true);
+probeRequests[0].done({status: 'ok'}, 'success');
+assert.equal(probeRequests.length, 4);
+stopProbes.click();
+stopProbes.click();
+assert.equal(stopProbes.disabled, true);
+assert(probeStatus.label.includes('Skipped: 2'));
+assert(probeStatus.label.includes('Stopping tests; waiting for active requests.'));
+vm.runInContext('testNodes(["overlap"]);', probeContext);
+assert.equal(probeRequests.length, 4, 'New batches stay blocked while cancelled requests drain');
+probeRequests[1].done(null, 'error');
+probeRequests[2].done({status: 'failed'}, 'success');
+assert.equal(testButtons.disabled, true);
+assert.equal(probeRefreshes, 0);
+probeRequests[3].done({status: 'ok'}, 'success');
+assert.equal(testButtons.disabled, false);
+assert.equal(probeRefreshes, 1, 'Refresh controller results after the last active response');
+assert.equal(probeStatus.label, 'Latency tests: 4/6 · Failed: 2 · Skipped: 2 · Tests stopped.');
+vm.runInContext('testNodes(["new"]);', probeContext);
+assert.equal(stopProbes.disabled, false);
+assert.equal(probeStatus.label, 'Latency tests: 0/1 · Failed: 0', 'A new batch clears the stopped summary');
+probeRequests[3].done({status: 'ok'}, 'success');
+assert.equal(testButtons.disabled, true, 'An old duplicate response cannot finish the new batch');
+probeRequests[4].done({status: 'ok'}, 'success');
+assert.equal(probeStatus.label, 'Latency tests: 1/1 · Failed: 0');
+assert.equal(stopProbes.disabled, true);
+assert.equal(testButtons.disabled, false);
+assert.equal(probeRefreshes, 2);
+// Stopping a single request cannot abort it, but still waits and records its result.
+vm.runInContext('testNodes(["single"]);', probeContext);
+stopProbes.click();
+assert(probeStatus.label.includes('Skipped: 0'));
+assert.equal(testButtons.disabled, true);
+probeRequests[5].done(null, 'timeout');
+assert.equal(probeStatus.label, 'Latency tests: 1/1 · Failed: 1 · Skipped: 0 · Tests stopped.');
+assert.equal(probeRefreshes, 3);
+console.log('Latency test stopping: queued work, active drain, counts, failures, duplicates, restart and dashboard controls passed');
