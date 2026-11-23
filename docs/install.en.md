@@ -12,7 +12,7 @@ Choose one installation path based on your package source.
 
 ## Install through the plugin manager
 
-Use this path if your administrator has configured a **trusted signed repository** that provides os-mihomo. This is a third-party plugin and the project currently has no hosted signed feed. For your own deployment, the repository maintainer sets up HTTPS and distributes the trusted public key before enabling the feed on appliances. [Signed repository setup](ci-cd.md#optional-signed-package-repository)
+The project's signed HTTPS feed follows the latest stable GitHub release and provides only `os-mihomo`. For a first install or migration from an offline source, have an administrator verify the public key and add the custom repository. Keep the existing OPNsense repositories enabled. [Add the project feed](ci-cd.md#use-the-project-feed)
 
 1. Open **System → Firmware → Status** and check for updates to refresh the package catalogue.
 2. Open **System → Firmware → Plugins**, select **Show community plugins** if needed, and search for `os-mihomo`.

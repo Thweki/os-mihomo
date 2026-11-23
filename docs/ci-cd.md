@@ -81,9 +81,19 @@ gh attestation verify SHA256SUMS --repo Thweki/os-mihomo
 
 This requires a successful run of the updated tag workflow and GitHub artifact-attestation support. A local build and older releases have no GitHub attestation unless one was separately generated. SHA-256 alone detects corruption, not publisher identity. See the official [GitHub attestation action](https://github.com/actions/attest) and [verification guide](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline).
 
+## Use the project feed
+
+The project publishes a signed FreeBSD 15 amd64 catalogue at `https://thweki.github.io/os-mihomo/freebsd15-amd64`. Its catalogue contains only `os-mihomo`. The OPNsense firmware manager lists new versions when it checks for updates. The administrator decides when to install them.
+
+1. Obtain the public signing key and check that its SHA-256 is `a57255717f9840a63608b903afaee68e76af9ef25c1ff568f1e711c67a5af919` before installing it as `/usr/local/etc/pkg/keys/os-mihomo.pub`. [Key in the source repository](../packaging/freebsd/pkg-feed.pub) · [Key on the HTTPS feed](https://thweki.github.io/os-mihomo/freebsd15-amd64/os-mihomo.pub)
+2. Review the [published repository template](https://thweki.github.io/os-mihomo/freebsd15-amd64/os-mihomo.conf). Its URL must match the feed above, its signature type must be `pubkey`, and its key path must match step 1. Save it as `/usr/local/etc/pkg/repos/os-mihomo.conf`, set `enabled: yes` for this feed, and keep the official OPNsense source enabled.
+3. Check for updates under **System → Firmware → Status**, then install or upgrade `os-mihomo`. See the [upgrade and migration steps](install.en.md#upgrade-and-remove) if the package is already installed.
+
+The feed uses GitHub Pages and the **Publish signed OPNsense package feed** workflow. Publishing a stable GitHub Release triggers the workflow. For the initial setup or a retry, run that workflow manually from `main`. It verifies the upstream release attestation and source, signs and tests a catalogue from the released package, and deploys it only if the release is still the latest. The signing key is kept in the encrypted Actions secret `MIHOMO_PKG_FEED_RSA_KEY_B64`. Rotate the client trust key before switching the signing key.
+
 ## Optional signed package repository
 
-The default build emits an **unsigned** repository and a disabled client template. A hosted source and production signing key are not provisioned. To publish a signed source, keep an RSA private key outside the checkout and web root, readable only by the signing account. Distribute the public key through an independently authenticated channel; downloading an unauthenticated key beside the repository does not establish trust.
+The default `make repo` build emits an **unsigned** repository and a disabled client template. To publish your own signed source, keep an RSA private key outside the checkout and web root, readable only by the signing account. Distribute the public key through an independently authenticated channel.
 
 ```sh
 # On a protected signing host; these are examples, not bundled credentials.

@@ -7,10 +7,12 @@ import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parent.parent
-FILES = {'.gitattributes', '.gitignore', '.github/workflows/ci.yml', '.github/dependabot.yml',
+FILES = {'.gitattributes', '.gitignore', '.github/workflows/ci.yml',
+         '.github/workflows/pkg-feed.yml', '.github/dependabot.yml',
          'README.md', 'README.US.md', 'Makefile', 'build.sh', 'docs/ci-cd.md',
          'docs/install.md', 'docs/install.en.md', 'docs/usage.md', 'docs/usage.en.md',
-         'scripts/ci_build.sh', 'scripts/make_repo.sh', 'scripts/deploy.sh', 'scripts/rollback.sh',
+         'scripts/ci_build.sh', 'scripts/make_repo.sh', 'scripts/build_pkg_feed.sh',
+         'scripts/deploy.sh', 'scripts/rollback.sh',
          'tests/test_patch.php', 'tests/test_ui.js', 'tests/test_runtime.php', 'tools/build_locales.py',
          'tools/extract_strings.py', 'tools/mo_editor.py', 'tools/validate.py',
          'tools/check_publication.py', 'tools/reproducible_archive.py',

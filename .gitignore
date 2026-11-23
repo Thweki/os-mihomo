@@ -32,6 +32,7 @@ images/
 /scripts/*
 !/scripts/ci_build.sh
 !/scripts/make_repo.sh
+!/scripts/build_pkg_feed.sh
 !/scripts/deploy.sh
 !/scripts/rollback.sh
 /tools/*

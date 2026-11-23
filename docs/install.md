@@ -12,7 +12,7 @@
 
 ## 通过插件管理器安装
 
-适用于管理员已配置提供此插件的**受信签名软件源**的环境。os-mihomo 是第三方插件，项目当前未提供托管签名源。自行分发时，由维护者配置 HTTPS 仓库和公钥信任，再向设备启用该源。[签名软件源配置](ci-cd.md#optional-signed-package-repository)
+项目的 HTTPS 签名源只提供 `os-mihomo`，跟随 GitHub 最新正式 Release。首次安装或从离线源迁移时，由管理员核对公钥并添加仓库配置。保留原有 OPNsense 软件源。[添加项目签名源](ci-cd.md#use-the-project-feed)
 
 1. 在 **系统 → 固件 → 状态** 检查更新，刷新软件包目录。
 2. 打开 **系统 → 固件 → 插件**，需要时勾选 **显示社区插件**，搜索 `os-mihomo`。

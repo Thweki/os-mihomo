@@ -1,0 +1,108 @@
+name: Publish signed OPNsense package feed
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: os-mihomo-package-feed
+  cancel-in-progress: false
+
+env:
+  FEED_URL: https://thweki.github.io/os-mihomo/freebsd15-amd64
+
+jobs:
+  catalogue:
+    if: >-
+      github.repository == 'Thweki/os-mihomo' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'release' && !github.event.release.prerelease))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      attestations: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: refs/heads/main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the latest stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          commit=$(git rev-parse "refs/tags/$tag^{}")
+          git merge-base --is-ancestor "$commit" HEAD
+          install -d work/pkg-feed/input
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir work/pkg-feed/input \
+            --pattern os-mihomo.pkg --pattern SHA256SUMS --pattern build-info.json
+          cd work/pkg-feed/input
+          for asset in os-mihomo.pkg SHA256SUMS; do
+            gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml" \
+              --source-ref "refs/tags/$tag" --source-digest "$commit" --deny-self-hosted-runners
+          done
+          awk '$2 == "os-mihomo.pkg" || $2 == "build-info.json" { print $1 "  " $2; count++ }
+               END { if (count != 2) exit 1 }' SHA256SUMS > verified-checksums
+          sha256sum --check --strict verified-checksums
+          jq -e --arg commit "$commit" --arg hash "$(sha256sum os-mihomo.pkg | cut -d ' ' -f 1)" \
+            '.source.commit == $commit and .source.dirty == false and .artifacts["os-mihomo.pkg"] == $hash' \
+            build-info.json >/dev/null
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+          printf 'FEED_VERSION=%s\n' "${tag#v}" >> "$GITHUB_ENV"
+      - name: Stage signing key for the isolated build
+        env:
+          SIGNING_KEY_B64: ${{ secrets.MIHOMO_PKG_FEED_RSA_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$SIGNING_KEY_B64"
+          printf '%s' "$SIGNING_KEY_B64" | base64 --decode > work/pkg-feed/signing.key
+      - name: Sign and verify the FreeBSD catalogue
+        uses: vmactions/freebsd-vm@811efaaac0668df8bfb8308c3ec997b5ab50037b # v1
+        with:
+          release: '15.1'
+          arch: x86_64
+          envs: FEED_URL FEED_VERSION
+          disable-cache: true
+          prepare: env ASSUME_ALWAYS_YES=yes pkg bootstrap -f
+          run: sh scripts/build_pkg_feed.sh "$FEED_VERSION" "$FEED_URL"
+      - name: Remove runner copy of the signing key
+        if: always()
+        run: rm -f -- work/pkg-feed/signing.key
+      - name: Upload only the public feed
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: work/pkg-feed/public
+
+  deploy:
+    needs: catalogue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - name: Check release selection is still current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILT_TAG: ${{ needs.catalogue.outputs.tag }}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)" = "$BUILT_TAG"
+      - name: Deploy signed package feed
+        id: pages
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

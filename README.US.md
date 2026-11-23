@@ -6,7 +6,7 @@ os-mihomo is a third-party OPNsense plugin. It brings Mihomo proxy groups, conne
 
 ## Install
 
-The target is **OPNsense 26.7 on FreeBSD 15 amd64**. If a trusted signed repository provides the plugin, install `os-mihomo` under **System → Firmware → Plugins**. Otherwise, follow the guide to verify the `.pkg` from an official project release and install it with the OPNsense package manager. [Installation, upgrades and removal](docs/install.en.md)
+The target is **OPNsense 26.7 on FreeBSD 15 amd64**. Add the project's signed repository to install and update `os-mihomo` under **System → Firmware**. You can also verify and install a standalone `.pkg` from a published project release. [Installation, upgrades and removal](docs/install.en.md)
 
 On a fresh installation, Mihomo stays stopped and start at boot is disabled. Validate your own configuration before starting it. If you plan to route client traffic through Mihomo, review the TUN, routing and DNS settings first. [First-time setup and everyday use](docs/usage.en.md#first-time-setup)
 

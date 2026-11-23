@@ -6,7 +6,7 @@ os-mihomo 是一个第三方 OPNsense 插件。它把 Mihomo 的代理分组、�
 
 ## 安装
 
-适用目标为 **OPNsense 26.7 系列，FreeBSD 15 amd64**。已配置提供本插件的受信签名软件源时，在 **系统 → 固件 → 插件** 安装 `os-mihomo`。否则，按指南下载并验证正式 Release 的 `.pkg`，通过 OPNsense 的包管理器安装。[安装、升级与卸载](docs/install.md)
+适用目标为 **OPNsense 26.7 系列，FreeBSD 15 amd64**。添加项目的签名软件源后，可以在 **系统 → 固件** 安装和更新 `os-mihomo`。也可以下载并验证正式 Release 的 `.pkg` 后单独安装。[安装、升级与卸载](docs/install.md)
 
 全新安装后 Mihomo 保持停止，开机自启默认关闭。用自己的配置完成校验后再启动。如需接管客户端流量，请另行确认 TUN、路由和 DNS 的影响。[首次配置与日常使用](docs/usage.md#首次配置)
 
