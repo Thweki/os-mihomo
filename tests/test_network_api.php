@@ -74,6 +74,9 @@ namespace OPNsense\Firewall {
     }
 }
 namespace {
+    if (!function_exists('gettext')) {
+        function gettext(string $message): string { return $message; }
+    }
     $app = dirname(__DIR__) . '/src/usr/local/opnsense/mvc/app/';
     require $app . 'models/OPNsense/Mihomo/RequestParamsTrait.php';
     require $app . 'controllers/OPNsense/Mihomo/Api/RoutingController.php';

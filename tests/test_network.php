@@ -6,6 +6,10 @@ use OPNsense\Core\Config as CoreConfig;
 use OPNsense\Mihomo\NetworkConfig;
 use OPNsense\Mihomo\WriteCoordinator;
 
+if (!function_exists('gettext')) {
+    function gettext(string $message): string { return $message; }
+}
+
 function transaction(?string $expected = null): NetworkConfig
 {
     $dir = getenv('NETWORK_FIXTURE');

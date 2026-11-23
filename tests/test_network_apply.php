@@ -73,12 +73,17 @@ expectNetwork(NetworkApply::bindings($legacy) === ['lan'], 'Rollback supports le
 $scratch = sys_get_temp_dir() . '/mihomo-net-test-' . bin2hex(random_bytes(6));
 mkdir($scratch, 0700);
 $staging = '/tmp/mihomo-' . bin2hex(random_bytes(8));
-$source = dirname(__DIR__) . '/src/usr/local/opnsense/scripts/mihomo/policy_net.php';
+$scripts = dirname(__DIR__) . '/src/usr/local/opnsense/scripts/mihomo';
+$source = $scripts . '/policy_net.php';
 $script = str_replace(
-    ["dirname(__DIR__, 2)", '/conf/'],
-    [var_export(dirname($source, 3), true), $scratch . '/'],
+    ["'config.inc'", "__DIR__ . '/write_common.php'", 'dirname(__DIR__, 2)', '/conf/config.xml', 'new NetworkConfig('],
+    [var_export(__DIR__ . '/fixtures/network/config.inc', true), var_export($scripts . '/write_common.php', true),
+        var_export(dirname($scripts, 2), true), $scratch . '/config.xml', 'fixtureTransaction('],
     file_get_contents($source)
 );
+$script = str_replace('use OPNsense\\Mihomo\\NetworkConfig;', 'use OPNsense\\Mihomo\\NetworkConfig;' . "\n"
+    . 'function fixtureTransaction(?string $version = null): NetworkConfig { return new NetworkConfig($version, '
+    . var_export($scratch . '/config.xml', true) . ', ' . var_export($scratch . '/.write.lock', true) . '); }', $script);
 file_put_contents($scratch . '/policy_net.php', $script);
 $shim = <<<'SHIM'
 <?php
@@ -101,16 +106,24 @@ function runNetworkCli(string $action, array $payload, string $current, array $o
 {
     global $scratch, $staging;
     foreach (glob($scratch . '/config.xml*') as $path) { unlink($path); }
+    $current = simplexml_load_string($current)->asXML();
     file_put_contents($scratch . '/config.xml', $current);
-    if ($backup !== null) { file_put_contents($scratch . '/config.xml.mihomo-bak.20000101_000000', $backup); }
+    if ($backup !== null) {
+        $backupPath = $scratch . '/config.xml.mihomo-bak.20000101_000000_000000_000000000001';
+        file_put_contents($backupPath, $backup);
+        file_put_contents($backupPath . '.revision', hash('sha256', $current));
+    }
     file_put_contents($scratch . '/outcomes.json', json_encode($outcomes));
     file_put_contents($scratch . '/calls', '');
+    $payload['version'] = hash('sha256', $current);
     file_put_contents($staging, json_encode($payload));
+    chmod($staging, 0600);
     $command = [PHP_BINARY, $scratch . '/policy_net.php', $action];
     if ($action === 'apply') { $command[] = $staging; }
     $pipes = [];
     $env = getenv();
     $env['PATH'] = $scratch . PATH_SEPARATOR . ($env['PATH'] ?? '');
+    $env['NETWORK_FIXTURE'] = $scratch;
     $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $env);
     $stdout = stream_get_contents($pipes[1]);
     $stderr = stream_get_contents($pipes[2]);
@@ -126,13 +139,14 @@ try {
     foreach ($cases as [$label, $interfaces, $reload, $pf, $status]) {
         $result = runNetworkCli('apply', ['interfaces' => $interfaces, 'verify_only' => true], $xml,
             ['configctl' => [$reload], 'pfctl' => [$pf]]);
-        expectNetwork($result['status'] === $status, 'CLI verification: ' . $label);
+        expectNetwork($result['status'] === $status, 'CLI verification: ' . $label . ' - ' . ($result['message'] ?? ''));
     }
     foreach ([[[1, 'failed'], [0, $both], 'failed'], [[0, 'OK'], [1, $both], 'failed'],
         [[0, 'OK'], [0, $lan], 'failed'], [[0, 'OK'], [0, $both], 'ok']] as [$reload, $pf, $status]) {
         $result = runNetworkCli('rollback', [], networkConfig([]), ['configctl' => [$reload], 'pfctl' => [$pf]], $xml);
         expectNetwork($result['status'] === $status, 'Explicit rollback verifies both reload and every restored binding');
-        expectNetwork(file_get_contents($scratch . '/config.xml') === $xml, 'Rollback restores saved bytes');
+        expectNetwork(file_get_contents($scratch . '/config.xml') === simplexml_load_string($xml)->asXML(),
+            'Rollback restores saved configuration through core');
     }
     foreach ([$lan => 'failed', '' => 'ok'] as $pf => $status) {
         $result = runNetworkCli('rollback', [], $xml, ['configctl' => [[0, 'OK']], 'pfctl' => [[0, $pf]]], networkConfig([]));
@@ -155,7 +169,8 @@ try {
             ['configctl' => [[0, 'OK'], $reload], 'pfctl' => [[0, $lan], $pf]]);
         expectNetwork($result['status'] === 'failed', 'Stale loaded binding fails full apply');
         expectNetwork($result['rollback']['status'] === $status, 'Automatic rollback reports its own verified outcome');
-        expectNetwork(file_get_contents($scratch . '/config.xml') === $xml, 'Automatic rollback restores saved bytes');
+        expectNetwork(file_get_contents($scratch . '/config.xml') === simplexml_load_string($xml)->asXML(),
+            'Automatic rollback restores saved configuration through core');
     }
     $result = runNetworkCli('apply', ['interfaces' => []], $xml,
         ['configctl' => [[1, 'failed'], [0, 'OK']], 'pfctl' => [[0, $both]]]);
@@ -165,6 +180,7 @@ try {
     expectNetwork($result['status'] === 'ok' && !isset($result['rollback']), 'Full apply confirms removal');
 } finally {
     if (is_file($staging)) { unlink($staging); }
+    if (is_file($scratch . '/.write.lock')) { unlink($scratch . '/.write.lock'); }
     foreach (glob($scratch . '/*') as $path) { unlink($path); }
     rmdir($scratch);
 }
