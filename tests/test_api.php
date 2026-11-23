@@ -65,7 +65,6 @@ namespace OPNsense\Mihomo {
             [ControllerHttpFixture::$status, ControllerHttpFixture::$body] = array_shift(ControllerHttpFixture::$responses);
         }
         return ControllerHttpFixture::$body;
-        public static array $urls = [];
     }
     function curl_getinfo($handle, $option) { return ControllerHttpFixture::$status; }
     function curl_error($handle) { return 'Fixture transport failure'; }
@@ -192,9 +191,9 @@ namespace {
         }
         $fixture::$body = json_encode(['proxies' => $proxies]);
         $fixture::$historyReads = 0;
-        $fixture::$requests = 0;
+        $fixture::$requestCount = 0;
         $result = \OPNsense\Mihomo\Controller::proxyGroups();
-        expect($fixture::$requests === 1, 'One controller request per proxy group response');
+        expect($fixture::$requestCount === 1, 'One controller request per proxy group response');
         expect($fixture::$url === 'http://127.0.0.1:9090/proxies', 'Proxy group read uses the existing API endpoint');
         expect($result['ready'] && $result['error'] === '', 'Successful response preserved');
         expect(count($result['groups']) === 20, 'Every group remains present');
@@ -231,7 +230,7 @@ namespace {
         $fixture::$body = '';
         $fixture::$status = 200;
         $fixture::$historyReads = 0;
-        $fixture::$requests = 0;
+        $fixture::$requestCount = 0;
     }
     \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
     try {
