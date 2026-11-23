@@ -170,31 +170,14 @@ class Safety
         /* --- 7. 策略路由：服务停止时被路由的接口会断网 --- */
         try {
             $cfg = \OPNsense\Core\Config::getInstance()->object();
-            $routed = [];
-            if (isset($cfg->filter->rule)) {
-                foreach ($cfg->filter->rule as $rule) {
-                    if (
-                        (string)$rule->gateway === 'MIHOMO_TUN'
-                        && stripos((string)$rule->descr, 'Mihomo policy routing') !== false
-                    ) {
-                        $iface = (string)$rule->interface;
-                        $descr = (string)($cfg->interfaces->$iface->descr ?? '');
-                        $routed[] = $descr !== '' ? sprintf('%s (%s)', $descr, $iface) : $iface;
-                    }
-                }
+            $snapshot = [];
+            try {
+                $snapshot = json_decode((string)$backend->configdRun('mihomo runtime-status'), true);
+            } catch (\Throwable $e) {
+                // Retain configured exposure even when runtime inspection fails.
             }
-            if ($routed !== []) {
-                $items[] = [
-                    'level' => self::LEVEL_WARNING,
-                    'title' => gettext('Policy routing is active'),
-                    'detail' => sprintf(
-                        gettext(
-                            'Traffic from these interfaces is routed into the mihomo TUN device: %s. While the service is stopped or fails to start, clients on these interfaces lose Internet access.'
-                        ),
-                        implode(', ', array_unique($routed))
-                    ),
-                ];
-            }
+            $items = array_merge($items, self::routingItems($cfg, is_array($snapshot) ? $snapshot : [],
+                (string)(Config::scan()['tun.device'] ?? 'tun_mihomo'), Config::interfaceSubnets()));
         } catch (\Throwable $e) {
             /* 只读判断失败不影响体检 */
         }
@@ -224,6 +207,31 @@ class Safety
         }
 
         return ['status' => $status, 'items' => $items];
+    }
+
+    /** Configured exposure remains a warning even when PF is absent or unreadable. */
+    public static function routingItems(\SimpleXMLElement $cfg, array $snapshot, string $tun, array $subnets): array
+    {
+        $items = [];
+        $interfaces = array_unique(array_merge(array_keys($subnets),
+            array_column(RoutingStatus::configuredRules($cfg), 'interface')));
+        foreach ($interfaces as $iface) {
+            $evidence = RoutingStatus::evidence($cfg, $snapshot, $tun, $iface, $subnets[$iface] ?? '');
+            if ($evidence['configured_rules'] === [] && $evidence['observed_rules'] === []) { continue; }
+            $description = (string)($cfg->interfaces->$iface->descr ?? '');
+            $label = $description !== '' ? sprintf('%s (%s)', $description, $iface) : $iface;
+            $observation = !$evidence['rules_available'] ? gettext('The loaded PF ruleset could not be read.')
+                : ($evidence['observed_rules'] !== [] ? gettext('Matching TUN forwarding rules were observed in PF.')
+                    : gettext('No matching TUN forwarding rule was observed in PF.'));
+            $items[] = [
+                'level' => self::LEVEL_WARNING,
+                'title' => $evidence['configured_rules'] !== [] ? gettext('Policy routing is configured')
+                    : gettext('TUN forwarding remains loaded'),
+                'detail' => sprintf(gettext('%s: %s Traffic matching these rules may lose Internet access while mihomo is stopped. Rule presence does not verify reachability.'),
+                    $label, $observation),
+            ];
+        }
+        return $items;
     }
 
     /** 读取 /etc/rc.conf.d/mihomo 中的自启开关 */

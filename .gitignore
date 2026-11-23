@@ -16,8 +16,12 @@ images/
 # Keep public documentation separate from local reports and screenshots
 /docs/*
 !/docs/ci-cd.md
+!/docs/install.md
+!/docs/install.en.md
+!/docs/usage.md
+!/docs/usage.en.md
 
-# Only reviewed, sanitized README images may be published.
+# Only reviewed, sanitized documentation images may be published.
 !/docs/assets/
 /docs/assets/*
 !/docs/assets/overview.png
@@ -75,3 +79,22 @@ node_modules/
 .venv/
 .idea/
 .vscode/
+
+# PR integration fixtures
+!/tests/fixtures/
+/tests/fixtures/*
+!/tests/fixtures/network/
+!/tests/fixtures/routing/
+!/docs/audit-b7.md
+!/tests/fixtures/network/api.php
+!/tests/fixtures/network/config.inc
+!/tests/fixtures/routing/fresh.xml
+!/tests/fixtures/routing/legacy.pf
+!/tests/fixtures/routing/legacy.xml
+!/tests/fixtures/routing/native.pf
+!/tests/fixtures/routing/native.xml
+!/tests/test_network.php
+!/tests/test_network_api.php
+!/tests/test_network_apply.php
+!/tests/test_routing_status.php
+!/tests/test_service.py

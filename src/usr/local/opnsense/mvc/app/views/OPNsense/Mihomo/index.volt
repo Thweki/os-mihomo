@@ -115,7 +115,18 @@
         $(document).on('mihomo:runtime', function (event, data) {
             processMemory = data.process && data.process.rss > 0 ? data.process.rss : null;
             $('#stat-memory').text(processMemory !== null ? fmtBytes(processMemory) : {{ lang._('Unavailable') | json_encode }});
+            renderCoreTiming(data);
         });
+        $(document).on('mihomo:runtime-unavailable', function () { renderCoreTiming({}); });
+        function renderCoreTiming(data) {
+            const unavailable = {{ lang._('Unavailable') | json_encode }};
+            const uptime = MihomoUI.formatUptime(data.process && data.process.uptime_seconds);
+            $('#stat-uptime').text(uptime === null ? unavailable : uptime);
+            const timestamp = data.last_reload_at;
+            const date = new Date(timestamp * 1000);
+            $('#stat-last-reload').text(Number.isSafeInteger(timestamp) && timestamp > 0 && Number.isFinite(date.getTime())
+                ? date.toLocaleString() : unavailable);
+        }
         let storedHistory = [];
         try { storedHistory = JSON.parse(sessionStorage.getItem('mihomo.traffic.v1') || '[]'); } catch (error) { /* Optional cache. */ }
         const trafficHistory = new MihomoUI.TrafficHistory(storedHistory);
@@ -178,10 +189,36 @@
             renderTrafficTotals();
         });
 
+        let renderedClients;
+        function renderClients(summary) {
+            const snapshot = JSON.stringify(summary || null);
+            if (snapshot === renderedClients) { return; }
+            MihomoUI.renderConnectionClients(document.getElementById('client-traffic'), summary, {
+                source: {{ lang._('Source IP') | json_encode }},
+                connections: {{ lang._('Active Connections') | json_encode }},
+                download: {{ lang._('Download') | json_encode }},
+                upload: {{ lang._('Upload') | json_encode }},
+                shown: {{ lang._('Clients shown') | json_encode }},
+                unknown: {{ lang._('Unknown source') | json_encode }},
+                empty: {{ lang._('No active connections.') | json_encode }},
+                unavailable: {{ lang._('Client traffic is unavailable.') | json_encode }}
+            });
+            renderedClients = snapshot;
+        }
+
         function renderOverview(data) {
             const runtime = data['runtime'] || {};
             const controller = data['controller'] || {};
             const config = data['config'] || {};
+            renderClients(runtime.ready && controller.alive ? runtime.clients : null);
+
+            if (!runtime.ready || !controller.alive) {
+                $('#stat-rules').text({{ lang._('Unavailable') | json_encode }});
+                lastMetadata = 0;
+            } else if (Object.prototype.hasOwnProperty.call(runtime, 'ruleCount')) {
+                $('#stat-rules').text(Number.isSafeInteger(runtime.ruleCount) && runtime.ruleCount >= 0
+                    ? fmtCount(runtime.ruleCount) : {{ lang._('Unavailable') | json_encode }});
+            }
 
             $('#stat-connections').text(fmtCount(runtime['connections']));
             latestTotals = runtime;
@@ -221,6 +258,9 @@
                 } else {
                     trafficTotals.update(null, null, false);
                     renderTrafficTotals();
+                    renderClients(null);
+                    $('#stat-rules').text({{ lang._('Unavailable') | json_encode }});
+                    lastMetadata = 0;
                     trafficHistory.add(Date.now(), null, null, false);
                     $('#stat-rate-down, #stat-rate-up').text('—');
                     drawTraffic();
@@ -234,14 +274,20 @@
          * ------------------------------------------------------------------ */
         const favorites = new MihomoUI.ProxyFavorites();
         let nodeOrder = 'config';
+        const proxyNotes = new MihomoUI.ProxyNotes();
         const collapsedGroups = new Set(); // Page visit only; reload starts expanded.
         let latestGroups = null;
         let renderedGroups = null;
         let proxyQuery = '';
         const hiddenProxyNames = new Set(); // Page visit only; never persisted.
         let showHiddenProxies = false;
+        function updateTestAll() {
+            $('#test-all-groups').prop('disabled', testing || !latestGroups || !latestGroups.ready
+                || !(latestGroups.groups || []).some(group => (group.members || []).length > 0));
+        }
         function renderGroups(data) {
             latestGroups = data;
+            updateTestAll();
             const $box = $('#proxy-groups');
             if (!data['ready']) {
                 renderedGroups = null;
@@ -276,20 +322,26 @@
             }
             MihomoUI.renderProxyGroups($box[0], visible.groups, {
                 memberCount: {{ lang._('Members: %s') | json_encode }},
+                emptyGroup: {{ lang._('No usable proxies') | json_encode }},
+                emptyGroupHint: {{ lang._('No forwarding candidate in the reported members and latest latency results, including nested groups. Untested or missing results are unknown; DIRECT is usable. This is not a live connectivity check.') | json_encode }},
                 collapseGroup: {{ lang._('Collapse group') | json_encode }},
                 expandGroup: {{ lang._('Expand group') | json_encode }},
                 testGroup: {{ lang._('Test all nodes in this group') | json_encode }},
                 testNode: {{ lang._('Test node latency') | json_encode }},
                 copyName: {{ lang._('Copy proxy name') | json_encode }},
                 copySelection: {{ lang._('Copy group selection') | json_encode }},
+                latencyHistory: {{ lang._('Recent latency, oldest first') | json_encode }},
+                resetGroup: {{ lang._('Resume automatic selection') | json_encode }},
                 favoriteGroup: {{ lang._('Favorite group') | json_encode }},
                 favoriteProxy: {{ lang._('Favorite proxy') | json_encode }},
+                editNote: {{ lang._('Edit local note') | json_encode }},
                 hideProxy: {{ lang._('Hide proxy until reload') | json_encode }},
                 restoreProxy: {{ lang._('Restore proxy') | json_encode }},
                 allHidden: {{ lang._('All matching proxies in this group are hidden.') | json_encode }}
             }, delayText, delayClass, favorites, nodeOrder, collapsedGroups,
-                {hiddenNames: hiddenProxyNames, showHidden: showHiddenProxies});
+                {hiddenNames: hiddenProxyNames, showHidden: showHiddenProxies}, proxyNotes);
             if (testing) { $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true); }
+            if (selecting) { $('#proxy-groups .cmd-select, #proxy-groups .cmd-reset-group').prop('disabled', true); }
             renderedGroups = snapshot;
         }
 
@@ -391,6 +443,156 @@
             renderedGroups = null;
             if (latestGroups) { renderGroups(latestGroups); }
         });
+        let autoTestEnabled = false, autoTestAttempted = false, autoTestCancelled = false;
+        try { autoTestEnabled = sessionStorage.getItem('mihomo.autoTest.v1') === '1'; } catch (error) { /* Default off. */ }
+        $('#auto-test-latency').prop('checked', autoTestEnabled).on('change', function () {
+            autoTestEnabled = this.checked;
+            if (!autoTestEnabled && autoTestAttempted) { autoTestCancelled = true; }
+            try { sessionStorage.setItem('mihomo.autoTest.v1', autoTestEnabled ? '1' : '0'); } catch (error) { /* This page only. */ }
+            if (autoTestEnabled && !autoTestAttempted) { groupsPoller.refresh(); }
+        });
+
+        let selecting = false, snapshotBusy = false, groupsRevision = 0;
+        const snapshotErrors = {
+            name: {{ lang._('Enter a snapshot name of 1 to 80 characters.') | json_encode }},
+            duplicate: {{ lang._('That snapshot name already exists. Delete it first or choose another name.') | json_encode }},
+            limit: {{ lang._('Up to 20 snapshots can be saved. Delete one first.') | json_encode }},
+            empty: {{ lang._('No manual Selector groups are available to save.') | json_encode }},
+            groups: {{ lang._('Could not read current selections. No changes were made.') | json_encode }}
+        };
+        let snapshotStore = null;
+        function snapshotError(error) {
+            $('#proxy-snapshot-state').text(snapshotErrors[error.message] || {{ lang._('Snapshot storage is unavailable or invalid. No snapshot was saved or deleted.') | json_encode }});
+        }
+        function listSnapshots(selected) {
+            const list = document.getElementById('proxy-snapshot-list');
+            list.replaceChildren(MihomoUI.element(document, 'option', {value: ''}, {{ lang._('Choose a snapshot') | json_encode }}));
+            snapshotStore.read().forEach(item => list.appendChild(MihomoUI.element(document, 'option', {value: item.name}, item.name)));
+            if (selected) { $('#proxy-snapshot-list').val(selected); }
+        }
+        try {
+            snapshotStore = new MihomoUI.ProxySnapshots(window.localStorage);
+            listSnapshots();
+        } catch (error) { snapshotError(error); }
+        function snapshotLock(busy) {
+            snapshotBusy = busy;
+            groupsRevision++;
+            $('#proxy-snapshots input, #proxy-snapshots select, #proxy-snapshots button, #proxy-groups .cmd-select').prop('disabled', busy);
+            if (!busy) { groupsPoller.refresh(); }
+        }
+        function readSnapshotGroups(callback) {
+            snapshotLock(true);
+            $('#proxy-snapshot-state').text({{ lang._('Reading current selections…') | json_encode }});
+            ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
+                if (status !== 'success' || !data || data.ready !== true || !Array.isArray(data.groups)) {
+                    snapshotError(new Error('groups')); snapshotLock(false); return;
+                }
+                callback(data.groups);
+            });
+        }
+        $('#proxy-snapshot-save').on('click', function () {
+            if (snapshotBusy || selecting || testing) { return; }
+            const name = $('#proxy-snapshot-name').val();
+            readSnapshotGroups(function (groups) {
+                try {
+                    if (!snapshotStore) { throw new Error('storage'); }
+                    const saved = snapshotStore.save(name, groups);
+                    listSnapshots(saved);
+                    $('#proxy-snapshot-state').text({{ lang._('Snapshot saved in this browser.') | json_encode }});
+                } catch (error) { snapshotError(error); }
+                snapshotLock(false);
+            });
+        });
+        $('#proxy-snapshot-delete').on('click', function () {
+            if (snapshotBusy || selecting || testing) { return; }
+            const name = $('#proxy-snapshot-list').val();
+            if (!name) { return; }
+            try {
+                snapshotStore.remove(name); listSnapshots();
+                $('#proxy-snapshot-state').text({{ lang._('Snapshot deleted.') | json_encode }});
+            } catch (error) { snapshotError(error); }
+        });
+        $('#proxy-snapshot-restore').on('click', function () {
+            if (snapshotBusy || selecting || testing) { return; }
+            let snapshot;
+            try { snapshot = snapshotStore.read().find(item => item.name === $('#proxy-snapshot-list').val()); }
+            catch (error) { snapshotError(error); return; }
+            if (!snapshot) { return; }
+            readSnapshotGroups(function (groups) {
+                let plan;
+                try { plan = MihomoUI.planProxySnapshot(snapshot, groups); }
+                catch (error) { snapshotError(error); snapshotLock(false); return; }
+                if (plan.missing.length) {
+                    $('#proxy-snapshot-state').text({{ lang._('Restore blocked: missing groups, members or changed group types. No changes were made.') | json_encode }} + ' ' + plan.missing.join(', '));
+                    snapshotLock(false); return;
+                }
+                if (!plan.changes.length) {
+                    $('#proxy-snapshot-state').text({{ lang._('All saved selections are already active.') | json_encode }});
+                    snapshotLock(false); return;
+                }
+                const preview = plan.changes.map(pair => pair.group + ': ' + pair.previous + ' → ' + pair.member).join('\n');
+                if (!window.confirm({{ lang._('Restore these selections? This changes live routing. Other groups are left as they are.') | json_encode }} + '\n\n' + preview)) {
+                    $('#proxy-snapshot-state').text({{ lang._('Restore cancelled. No changes were made.') | json_encode }});
+                    snapshotLock(false); return;
+                }
+                let applied = 0;
+                function restoreNext() {
+                    const summary = {{ lang._('Selections applied') | json_encode }} + ': ' + applied + '/' + plan.changes.length;
+                    $('#proxy-snapshot-state').text(summary);
+                    if (applied === plan.changes.length) { snapshotLock(false); return; }
+                    const pair = plan.changes[applied];
+                    ajaxCall('/api/mihomo/dashboard/select_proxy', {group: pair.group, member: pair.member}, function (data, status) {
+                        if (status === 'success' && data && data.status === 'ok') { applied++; restoreNext(); }
+                        else {
+                            $('#proxy-snapshot-state').text(summary + '. ' + {{ lang._('Restore stopped; this selection is unconfirmed. Earlier changes remain active. Check current groups before retrying:') | json_encode }} + ' ' + pair.group);
+                            snapshotLock(false);
+                        }
+                    });
+                }
+                restoreNext();
+            });
+        });
+
+        let autoSwitchGeneration = 0;
+        const $autoSwitch = $('#proxy-autoswitch').prop('checked', false);
+        function cancelAutoSwitch() { autoSwitchGeneration++; }
+        $autoSwitch.on('change', cancelAutoSwitch);
+        document.addEventListener('visibilitychange', function () { if (document.hidden) { cancelAutoSwitch(); } });
+        window.addEventListener('pagehide', cancelAutoSwitch);
+        // Keep the editor outside the polled group DOM so drafts survive refreshes.
+        let noteName = null, noteFocusKey = null;
+        function closeNoteEditor() {
+            $('#proxy-note-editor').prop('hidden', true);
+            $('#proxy-note-text').val('');
+            noteName = null;
+            const box = $('#proxy-groups')[0];
+            const button = Array.from(box.querySelectorAll('button[data-focus-key]'))
+                .find(node => node.getAttribute('data-focus-key') === noteFocusKey);
+            (button || box).focus({preventScroll: true});
+        }
+        $('#proxy-groups').on('click', '.cmd-proxy-note', function () {
+            noteName = $(this).attr('data-name');
+            noteFocusKey = $(this).attr('data-focus-key');
+            $('#proxy-note-name').text(noteName);
+            $('#proxy-note-editor').prop('hidden', false);
+            $('#proxy-note-text').val(proxyNotes.get(noteName))[0].focus();
+        });
+        $('#proxy-note-editor').on('submit', function (event) {
+            event.preventDefault();
+            if (noteName === null) { return; }
+            const result = proxyNotes.set(noteName, $('#proxy-note-text').val());
+            if (result === 'invalid') {
+                $('#proxy-note-state').text({{ lang._('Use at most 160 characters for a local note.') | json_encode }});
+                return;
+            }
+            $('#proxy-note-state').text(result === 'saved'
+                ? {{ lang._('Local note saved.') | json_encode }}
+                : {{ lang._('Note changes could not be saved in this browser. They will last only for this page visit.') | json_encode }});
+            renderedGroups = null;
+            if (latestGroups) { renderGroups(latestGroups); }
+            closeNoteEditor();
+        });
+        $('#proxy-note-cancel').on('click', closeNoteEditor);
         $('#proxy-groups').on('click', '.cmd-collapse-group', function () {
             const name = $(this).attr('data-group');
             if (collapsedGroups.has(name)) { collapsedGroups.delete(name); }
@@ -404,9 +606,16 @@
             renderedGroups = null;
             if (latestGroups) { renderGroups(latestGroups); }
         });
-        function testNodes(names) {
-            if (testing || !names.length) { return; }
+        function testNodes(names, groupName, automatic) {
+            if (testing || selecting || snapshotBusy || !names.length) { return; }
+            const group = groupName && latestGroups?.ready
+                ? (latestGroups.groups || []).find(item => MihomoUI.decodeApiText(item.name) === groupName) : null;
+            const autoSwitch = $autoSwitch.prop('checked') && group && group.type === 'Selector';
+            const generation = autoSwitchGeneration, delays = new Map();
+            const cancelled = () => generation !== autoSwitchGeneration || document.hidden || !$autoSwitch.prop('checked');
+            $('#proxy-autoswitch-state').empty();
             testing = true;
+            updateTestAll();
             $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', true);
             $('#stop-proxy-tests').prop('disabled', false);
             const progress = function (state) {
@@ -421,42 +630,97 @@
                 $('#proxy-test-state').text(message);
             };
             progress({completed: 0, total: names.length, failed: 0});
-            latencyBatch = MihomoUI.runLimited(names, 3, function (name, done) {
-                ajaxCall('/api/mihomo/dashboard/test_delay', {name: name}, function (data, status) {
-                    done(status === 'success' && data && data.status === 'ok');
-                });
-            }, progress, function () {
+            const finish = function (state) {
                 testing = false;
                 latencyBatch = null;
                 $('#stop-proxy-tests').prop('disabled', true);
+                if (automatic && state.completed < names.length) {
+                    $('#proxy-test-state').append(document.createTextNode(' · ' + {{ lang._('Automatic tests stopped; reload to run again.') | json_encode }}));
+                }
+                updateTestAll();
                 $('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').prop('disabled', false);
                 groupsPoller.refresh();
-            });
+            };
+            const skipped = function (state) {
+                $('#proxy-autoswitch-state').text({{ lang._('Automatic switch skipped: cancelled, changed group, failed read, or no faster responding proxy.') | json_encode }});
+                finish(state);
+            };
+            latencyBatch = MihomoUI.runLimited(names, 3, function (name, done) {
+                ajaxCall('/api/mihomo/dashboard/test_delay', {name: name}, function (data, status) {
+                    if (status === 'success' && data && data.status === 'ok') { delays.set(name, data.delay); }
+                    done(status === 'success' && data && data.status === 'ok');
+                });
+            }, progress, function (state) {
+                if (!autoSwitch) { finish(state); return; }
+                if (state.cancelled || cancelled()) { skipped(state); return; }
+                const member = MihomoUI.fastestProxy(group, delays);
+                if (member === null) { skipped(state); return; }
+                // Check membership and selection again after probing, before a live write.
+                ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
+                    const current = status === 'success' && data && data.ready
+                        && (data.groups || []).find(item => MihomoUI.decodeApiText(item.name) === groupName);
+                    if (cancelled() || selecting || !current
+                        || MihomoUI.proxyGroupSignature(current) !== MihomoUI.proxyGroupSignature(group)) { skipped(state); return; }
+                    selecting = true; groupsRevision++;
+                    $('#proxy-groups .cmd-select').prop('disabled', true);
+                    ajaxCall('/api/mihomo/dashboard/select_proxy', {group: groupName, member: member}, function (result, resultStatus) {
+                        selecting = false; groupsRevision++;
+                        $('#proxy-groups .cmd-select').prop('disabled', false);
+                        if (resultStatus === 'success' && result && result.status === 'ok') {
+                            $('#dashboard-action-state').empty();
+                            $('#proxy-autoswitch-state').text({{ lang._('Automatically selected') | json_encode }} + ': ' + groupName + ' → ' + member);
+                        } else { actionFailed(result); }
+                        finish(state);
+                    });
+                });
+            }, automatic ? () => autoTestEnabled && !autoTestCancelled && !document.hidden : undefined);
         }
         $('#stop-proxy-tests').on('click', function () {
             if (!testing || !latencyBatch) { return; }
             $(this).prop('disabled', true);
+            cancelAutoSwitch();
             latencyBatch.cancel();
         });
         $('#proxy-groups').on('click', '.cmd-test', function () { testNodes([$(this).attr('data-name')]); });
         $('#proxy-groups').on('click', '.cmd-test-group', function () {
             // Filtering and collapsing only change the view, never the group probe scope.
             const groups = latestGroups && latestGroups.ready ? latestGroups.groups || [] : [];
-            testNodes(MihomoUI.fullProxyGroupTestNames(groups, $(this).attr('data-group'), favorites, nodeOrder));
+            const groupName = $(this).attr('data-group');
+            testNodes(MihomoUI.fullProxyGroupTestNames(groups, groupName, favorites, nodeOrder), groupName);
         });
-        $('#proxy-groups').on('click', '.cmd-select', function () {
-            const $button = $(this), $item = $button.closest('li');
-            $button.prop('disabled', true);
-            ajaxCall('/api/mihomo/dashboard/select_proxy', {group: $item.attr('data-group'), member: $item.attr('data-member')}, function (data, status) {
-                $button.prop('disabled', false);
+        $('#test-all-groups').on('click', function () {
+            if (!latestGroups || !latestGroups.ready) { return; }
+            // Snapshot the displayed cards, including collapsed member lists.
+            // Shared members need only one probe, regardless of group or order.
+            const names = [];
+            $('#proxy-groups .cmd-test').each(function () { names.push($(this).attr('data-name')); });
+            testNodes(Array.from(new Set(names)));
+        });
+        function changeSelection(action, params) {
+            if (selecting || snapshotBusy) { return; }
+            cancelAutoSwitch();
+            selecting = true; groupsRevision++;
+            $('#proxy-groups .cmd-select, #proxy-groups .cmd-reset-group').prop('disabled', true);
+            ajaxCall('/api/mihomo/dashboard/' + action, params, function (data, status) {
+                selecting = false; groupsRevision++;
+                $('#proxy-groups .cmd-select, #proxy-groups .cmd-reset-group').prop('disabled', false);
                 if (status === 'success' && data && data.status === 'ok') { $('#dashboard-action-state').empty(); groupsPoller.refresh(); }
                 else { actionFailed(data); }
             });
+        }
+        $('#proxy-groups').on('click', '.cmd-select', function () {
+            const $item = $(this).closest('li');
+            changeSelection('select_proxy', {group: $item.attr('data-group'), member: $item.attr('data-member')});
+        });
+        $('#proxy-groups').on('click', '.cmd-reset-group', function () {
+            changeSelection('reset_proxy', {group: $(this).attr('data-group')});
         });
 
         function loadGroups(done) {
-            if (testing) { done(true); return; }
+            if (testing || selecting || snapshotBusy) { done(true); return; }
+            const revision = groupsRevision;
             ajaxGet('/api/mihomo/dashboard/proxies', {}, function (data, status) {
+                if (revision !== groupsRevision) { done(true); return; }
                 const ok = status === 'success' && data && data.ready;
                 const health = ok && data.ready === true ? MihomoUI.summarizeProxyLatency(data.groups) : null;
                 const note = health
@@ -467,8 +731,19 @@
                 const $summary = $('#proxy-health-summary');
                 if ($summary.text() !== note) { $summary.text(note); }
                 if (data && status === 'success') { renderGroups(data); }
-                if (!ok) { $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }}); }
+                if (!ok) {
+                    latestGroups = null;
+                    updateTestAll();
+                    $('#proxy-test-state').text({{ lang._('Read failed. The last result is retained.') | json_encode }});
+                }
                 done(!!ok);
+                if (ok && autoTestEnabled && !autoTestAttempted && !testing && !document.hidden && !autoTestCancelled) {
+                    const names = MihomoUI.automaticTestNames(data.groups || []);
+                    if (names.length) {
+                        autoTestAttempted = true;
+                        testNodes(names, null, true);
+                    }
+                }
             });
         }
 
@@ -586,9 +861,25 @@
         }
 
         let connectionsReady = false;
+        let closingVisible = false, connectionsLoading = true;
+        function visibleConnectionIds() {
+            const ids = new Set();
+            $('#grid-connections tbody .cmd-close-connection').each(function () {
+                const id = $(this).attr('data-id');
+                // Empty IDs mean "close all" to the existing endpoint.
+                if (typeof id === 'string' && id.trim() !== '' && !/[\x00-\x1f\x7f]/.test(id)) { ids.add(id); }
+            });
+            return Array.from(ids);
+        }
+        function updateConnectionActions() {
+            $('#close-visible-connections').prop('disabled', closingVisible || connectionsLoading || !visibleConnectionIds().length);
+            $('#close-all-connections, #grid-connections .cmd-close-connection').prop('disabled', closingVisible);
+        }
         $("#grid-connections").on('load.rs.jquery.bootgrid', function () {
             connectionsReady = false;
             $('#connection-visible-count').text('—');
+            connectionsLoading = true;
+            updateConnectionActions();
         }).UIBootgrid({
             'search': '/api/mihomo/dashboard/connections',
             'options': {
@@ -597,6 +888,10 @@
                 'responseHandler': function (response) {
                     connectionsReady = !!(response && response.ready === true && Array.isArray(response.rows));
                     return response;
+                },
+                'requestHandler': function (request) {
+                    request.connectionScope = $('#connection-search-scope').val();
+                    return request;
                 },
                 'formatters': {
                     'addressformatter': connectionAddressCell,
@@ -607,6 +902,11 @@
                             'aria-label': {{ lang._('Connection details') | json_encode }}, title: {{ lang._('Connection details') | json_encode }}});
                         button.appendChild(MihomoUI.element(document, 'i', {class: 'fa fa-info-circle fa-fw', 'aria-hidden': 'true'}));
                         return button.outerHTML;
+                    },
+                    'processformatter': function (column, row) {
+                        const name = MihomoUI.decodeApiText(row.process || '');
+                        const path = MihomoUI.decodeApiText(row.processPath || '');
+                        return MihomoUI.element(document, 'span', {title: path}, name || path || '—').outerHTML;
                     },
                     'bytesformatter': function (column, row) {
                         return fmtBytes(row[column.id]);
@@ -637,6 +937,8 @@
             $('#connection-visible-count').text(connectionsReady
                 ? fmtCount($('#grid-connections').bootgrid('getCurrentRows').length)
                 : {{ lang._('Unavailable') | json_encode }});
+            connectionsLoading = false;
+            updateConnectionActions();
             $('[data-toggle="tooltip"]').tooltip({ 'container': 'body' });
             $('.cmd-connection-details').off('click').on('click', function () {
                 showConnectionDetails(JSON.parse($(this).attr('data-details')));
@@ -646,7 +948,12 @@
             });
         });
 
+        $('#connection-search-scope').change(function () {
+            $('#grid-connections').bootgrid('reload');
+        });
+
         function closeConnections(id) {
+            if (closingVisible) { return; }
             ajaxCall('/api/mihomo/dashboard/close_connection', {id: id}, function (data, status) {
                 if (status === 'success' && data && data.status === 'ok') {
                     $('#dashboard-action-state').empty();
@@ -655,6 +962,42 @@
             });
         }
         $('#close-all-connections').click(function () { closeConnections(''); });
+        $('#close-visible-connections').click(function () {
+            if (closingVisible || connectionsLoading) { return; }
+            // Capture exactly the rendered page before opening the confirmation.
+            // Later searches, page changes and arrivals cannot expand this batch.
+            const ids = visibleConnectionIds();
+            if (!ids.length) { return; }
+            closingVisible = true;
+            updateConnectionActions();
+            BootstrapDialog.confirm({
+                type: BootstrapDialog.TYPE_WARNING,
+                title: {{ lang._('Close visible connections?') | json_encode }},
+                message: {{ lang._('Close %s connections shown on this page? Hidden rows, other pages and new connections are excluded. Applications may reconnect.') | json_encode }}.replace('%s', ids.length),
+                callback: function (confirmed) {
+                    if (!confirmed) {
+                        closingVisible = false;
+                        updateConnectionActions();
+                        return;
+                    }
+                    const progress = function (state) {
+                        $('#close-visible-state').text({{ lang._('Close requests completed: %s; failed or unconfirmed: %s.') | json_encode }}
+                            .replace('%s', state.completed + '/' + ids.length).replace('%s', state.failed));
+                    };
+                    progress({completed: 0, failed: 0});
+                    MihomoUI.runLimited(ids, 3, function (id, done) {
+                        ajaxCall('/api/mihomo/dashboard/close_connection', {id: id}, function (data, status) {
+                            done(status === 'success' && data && data.status === 'ok');
+                        });
+                    }, progress, function () {
+                        closingVisible = false;
+                        $('#grid-connections').bootgrid('reload');
+                        updateConnectionActions();
+                        overviewPoller.refresh();
+                    });
+                }
+            });
+        });
 
         /* ------------------------------------------------------------------ *
          * 流量图 + 轮询
@@ -741,11 +1084,15 @@
         const pollers = [overviewPoller, groupsPoller, servicePoller];
         pollers.forEach(poller => poller.refresh());
         document.addEventListener('visibilitychange', function () {
+            if (document.hidden && autoTestAttempted) { autoTestCancelled = true; }
             if (document.hidden) { trafficHistory.add(Date.now(), null, null, false); }
             else { lastMetadata = 0; }
             pollers.forEach(poller => poller.visibilityChanged());
         });
-        window.addEventListener('pagehide', () => pollers.forEach(poller => poller.stop()));
+        window.addEventListener('pagehide', function () {
+            autoTestCancelled = true;
+            pollers.forEach(poller => poller.stop());
+        });
     });
 </script>
 
@@ -829,6 +1176,9 @@
         <input type="checkbox" id="traffic-totals-bytes"> {{ lang._('Show totals in bytes') }}
     </label>
     <span>{{ lang._('Core version') }}: <span id="mihomo-version">—</span></span>
+    <span title="{{ lang._('Verified core process age in hours:minutes:seconds, sampled every 30 seconds. Hours may exceed 24.') }}">{{ lang._('Core uptime') }}: <span id="stat-uptime">—</span></span>
+    <span title="{{ lang._('Recorded after a verified service start or restart during this boot. Failed starts and file saves do not change it. External controller reloads are not tracked.') }}">{{ lang._('Last successful start / reload') }}: <span id="stat-last-reload">—</span></span>
+    <span title="{{ lang._('Runtime top-level rules; rule-provider contents are not expanded. Refreshed every 30 seconds while this page is visible.') }}">{{ lang._('Loaded routing rules') }}: <span id="stat-rules">—</span></span>
 </div></section></div>
 
 <div class="row">
@@ -868,6 +1218,18 @@
 
 <div class="row">
     <section class="col-xs-12">
+        <div class="content-box" style="padding:12px 14px;">
+            <h4>{{ lang._('Client traffic') }}</h4>
+            <p class="text-muted">{{ lang._('Top 10 source IPs by bytes transferred on currently active connections. Closed connections are excluded; this is not a usage history.') }}</p>
+            <div class="table-responsive" id="client-traffic">
+                <p class="text-muted">{{ lang._('Loading …') }}</p>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div class="row">
+    <section class="col-xs-12">
         <div class="content-box">
             <div style="padding: 12px 14px; ">
                 <i class="fa fa-sitemap text-muted"></i> <b>{{ lang._('Proxy Groups') }}</b>
@@ -898,6 +1260,13 @@
                 <textarea id="selection-export-text" class="form-control" rows="10" readonly spellcheck="false" aria-describedby="selection-export-help"></textarea>
                 <button type="button" id="selection-export-dismiss" class="btn btn-xs btn-default">{{ lang._('Dismiss') }}</button>
             </div>
+            <div class="checkbox" style="padding:0 12px;">
+                <label><input type="checkbox" id="auto-test-latency" aria-describedby="auto-test-help"> {{ lang._('Automatically test latency on overview load (experimental)') }}</label>
+                <p id="auto-test-help" class="help-block">{{ lang._('Off by default. Remembered for this tab. Tests each proxy once per visit, up to three at a time. Sends probe traffic; disabling or hiding the page stops queued tests. In-flight tests finish.') }}</p>
+                <button type="button" id="test-all-groups" class="btn btn-xs btn-default" disabled title="{{ lang._('Test all nodes in every displayed group, including collapsed groups') }}">
+                    <i class="fa fa-bolt" aria-hidden="true"></i> {{ lang._('Test all groups') }}
+                </button>
+            </div>
             <p id="proxy-test-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <p id="proxy-copy-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div id="proxy-copy-fallback" hidden style="padding:0 12px 12px;">
@@ -905,7 +1274,22 @@
                 <textarea id="proxy-copy-text" class="form-control" rows="3" readonly spellcheck="false"></textarea>
                 <button id="proxy-copy-dismiss" type="button" class="btn btn-xs btn-default">{{ lang._('Dismiss') }}</button>
             </div>
+            <div id="proxy-snapshots" style="padding:0 12px;">
+                <p class="text-muted">{{ lang._('Save manual Selector groups as named snapshots (up to 20). Stored only in this browser for this firewall address. Restore checks availability before changing live selections; configuration files and automatic groups are not saved.') }}</p>
+                <div class="form-inline">
+                    <label for="proxy-snapshot-name">{{ lang._('Snapshot name') }}</label>
+                    <input id="proxy-snapshot-name" type="text" maxlength="80" class="form-control" />
+                    <button id="proxy-snapshot-save" type="button" class="btn btn-default">{{ lang._('Save snapshot') }}</button>
+                    <label for="proxy-snapshot-list">{{ lang._('Saved snapshots') }}</label>
+                    <select id="proxy-snapshot-list" class="form-control"></select>
+                    <button id="proxy-snapshot-restore" type="button" class="btn btn-default">{{ lang._('Restore snapshot') }}</button>
+                    <button id="proxy-snapshot-delete" type="button" class="btn btn-default">{{ lang._('Delete snapshot') }}</button>
+                </div>
+                <p id="proxy-snapshot-state" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;"></p>
+            </div>
+            <p class="text-muted" style="padding:0 12px;">{{ lang._('Recent latency: up to 10 controller tests, oldest first. Each chart has its own scale; crosses mark timeouts. Hover for values. No extra tests are run.') }}</p>
             <p class="text-muted" style="padding:0 12px;">{{ lang._('Star groups to pin them first, or proxies to pin them first in each group. Favorites are saved in this browser; routing is unchanged.') }}</p>
+            <p class="text-muted" style="padding:0 12px;">{{ lang._('Resume automatic selection clears a manual override in a URLTest or Fallback group and returns control to its configured policy.') }}</p>
             <p id="proxy-favorites-state" class="text-muted" role="status" style="padding:0 12px;"></p>
             <div class="form-inline" style="padding:0 12px;">
                 <label for="proxy-filter">{{ lang._('Filter proxy names') }}</label>
@@ -920,7 +1304,20 @@
                 <button type="button" id="proxy-restore-all" class="btn btn-default" disabled>{{ lang._('Restore all proxies') }}</button>
                 <p id="proxy-hide-help" class="help-block">{{ lang._('Hiding changes only this page. Selected entries stay visible when they match the name filter. Routing and group latency tests are unchanged.') }}</p>
             </div>
-            <div style="padding: 12px;" id="proxy-groups">
+            <div style="padding:0 12px;">
+                <label><input type="checkbox" id="proxy-autoswitch"> {{ lang._('Automatically select the fastest proxy after a group test (experimental)') }}</label>
+                <p class="text-muted">{{ lang._('Off by default; enabled only for this page visit. Applies to Selector groups and fresh group tests. Direct, reject and nested groups are excluded. A submitted switch cannot be cancelled.') }}</p>
+                <p id="proxy-autoswitch-state" class="text-muted" role="status"></p>
+            </div>
+            <form id="proxy-note-editor" hidden style="padding:0 12px;">
+                <label for="proxy-note-text">{{ lang._('Local proxy note') }}: <span id="proxy-note-name" style="overflow-wrap:anywhere;"></span></label>
+                <input id="proxy-note-text" type="text" maxlength="160" class="form-control" aria-describedby="proxy-note-help" autocomplete="off">
+                <p id="proxy-note-help" class="text-muted">{{ lang._('Up to 160 characters. Save an empty note to remove it. Notes stay in this browser and are shared by exact proxy name across groups.') }}</p>
+                <button type="submit" class="btn btn-primary">{{ lang._('Save note') }}</button>
+                <button type="button" id="proxy-note-cancel" class="btn btn-default">{{ lang._('Cancel') }}</button>
+            </form>
+            <p id="proxy-note-state" class="text-muted" role="status" style="padding:0 12px;"></p>
+            <div style="padding: 12px;" id="proxy-groups" tabindex="-1">
                 <div class="text-muted">{{ lang._('Loading …') }}</div>
             </div>
         </div>
@@ -934,18 +1331,33 @@
                 <i class="fa fa-exchange text-muted"></i> <b>{{ lang._('Active Connections') }}</b>
                 <span class="text-muted" role="status">{{ lang._('Visible connections') }}: <span id="connection-visible-count">—</span></span>
                 <span class="pull-right">
+                    <button type="button" id="close-visible-connections" class="btn btn-xs btn-default" disabled>
+                        <i class="fa fa-times fa-fw"></i> {{ lang._('Close visible') }}
+                    </button>
                     <button type="button" id="close-all-connections" class="btn btn-xs btn-default">
                         <i class="fa fa-times-circle fa-fw"></i> {{ lang._('Close all') }}
                     </button>
                 </span>
             </div>
             <div style="padding: 12px;">
+                <div class="form-inline">
+                    <label for="connection-search-scope">{{ lang._('Search connections in') }}</label>
+                    <select id="connection-search-scope" class="form-control" aria-describedby="connection-search-help">
+                        <option value="all" selected>{{ lang._('All fields') }}</option>
+                        <option value="address">{{ lang._('Address') }}</option>
+                        <option value="host">{{ lang._('Host') }}</option>
+                        <option value="process">{{ lang._('Process') }}</option>
+                    </select>
+                </div>
+                <p id="connection-search-help" class="help-block">{{ lang._('Use the table search box. Address matches source or destination IP and port; Host includes sniffed names; Process matches name or path when reported by Mihomo. Close all still closes every connection.') }}</p>
+                <div id="close-visible-state" class="text-muted" role="status" aria-live="polite"></div>
                 <div class="table-responsive">
                 <table id="grid-connections" class="table table-condensed table-hover table-striped table-responsive" data-editDialog="">
                     <thead>
                         <tr>
                             <th data-column-id="host" data-type="string" data-formatter="addressformatter">{{ lang._('Host') }}</th>
                             <th data-column-id="source" data-width="11em" data-type="string" data-formatter="addressformatter">{{ lang._('Source') }}</th>
+                            <th data-column-id="process" data-type="string" data-formatter="processformatter">{{ lang._('Process') }}</th>
                             <th data-column-id="network" data-width="5em" data-type="string">{{ lang._('Network') }}</th>
                             <th data-column-id="type" data-width="5em" data-type="string">{{ lang._('Type') }}</th>
                             <th data-column-id="rule" data-width="10em" data-type="string">{{ lang._('Rule') }}</th>

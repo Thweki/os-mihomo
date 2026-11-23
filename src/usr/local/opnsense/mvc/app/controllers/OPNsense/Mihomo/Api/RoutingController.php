@@ -20,8 +20,10 @@ use OPNsense\Base\ApiMutableModelControllerBase;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config as CoreConfig;
 use OPNsense\Mihomo\Config;
+use OPNsense\Mihomo\RoutingStatus;
 use OPNsense\Mihomo\RequestParamsTrait;
 use OPNsense\Mihomo\WriteCoordinator;
+use OPNsense\Mihomo\NetworkConfig;
 use OPNsense\Mihomo\ActionResult;
 
 class RoutingController extends ApiMutableModelControllerBase
@@ -283,60 +285,24 @@ class RoutingController extends ApiMutableModelControllerBase
         $tunEnabled = Config::bool('tun.enable');
         $autoRoute = Config::bool('tun.auto-route');
 
-        /* OPNsense 侧是否已经存在策略路由（P12-2 才会创建，这里只做只读判断） */
-        $gatewayExists = false;
-        $ruleExists = false;
+        $tun = (string)(Config::scan()['tun.device'] ?? 'tun_mihomo');
+        $cfg = new \SimpleXMLElement('<opnsense/>');
+        $snapshot = [];
         try {
             $cfg = CoreConfig::getInstance()->object();
-            /* 网关：模型挂载点是 //OPNsense/Gateways */
-            if (isset($cfg->OPNsense->Gateways)) {
-                foreach ($cfg->OPNsense->Gateways->gateway_item as $item) {
-                    if ((string)$item->name === 'MIHOMO_TUN') {
-                        $gatewayExists = true;
-                    }
-                }
-            }
-            if (isset($cfg->filter->rule)) {
-                foreach ($cfg->filter->rule as $rule) {
-                    if (
-                        (string)$rule->gateway === 'MIHOMO_TUN'
-                        && stripos((string)$rule->descr, 'Mihomo policy routing') !== false
-                    ) {
-                        $ruleExists = true;
-                    }
-                }
-            }
+            $snapshot = json_decode((string)(new Backend())->configdRun('mihomo runtime-status'), true) ?: [];
         } catch (\Throwable $e) {
-            /* 只读判断失败不阻塞页面 */
+            // Missing observations must never be reported as active.
         }
-
-        $rows = [];
-        foreach ($this->collectRows(true) as $row) {
-            if ($row['source'] === '') {
-                $row['source'] = (string)($subnets[$row['interface']] ?? '');
-            }
-            if (!$tunEnabled) {
-                $row['state'] = 'inactive';
-                $row['note'] = gettext('TUN is disabled: traffic does not reach mihomo.');
-            } elseif ($row['firewall'] === 'auto' && !($gatewayExists && $ruleExists)) {
-                $row['state'] = 'pending';
-                $row['note'] = gettext('Waiting for the OPNsense side: interface, gateway and policy routing rule.');
-            } elseif ($row['firewall'] === 'manual') {
-                $row['state'] = 'manual';
-                $row['note'] = gettext('Manual: make sure the interface is policy routed into the TUN device.');
-            } else {
-                $row['state'] = 'active';
-                $row['note'] = gettext('Policy routing is in place.');
-            }
-            $rows[] = $row;
-        }
+        $rows = RoutingStatus::rows($cfg, is_array($snapshot) ? $snapshot : [], $tun, $tunEnabled,
+            $this->collectRows(true), $subnets);
 
         return [
             'status' => 'ok',
             'tun_enabled' => $tunEnabled,
             'auto_route' => $autoRoute,
-            'gateway' => $gatewayExists,
-            'firewall_rule' => $ruleExists,
+            'gateway' => RoutingStatus::gateway($cfg, $tun) !== null,
+            'firewall_rule' => RoutingStatus::configuredRules($cfg) !== [],
             'rows' => $rows,
         ];
     }
@@ -388,7 +354,11 @@ class RoutingController extends ApiMutableModelControllerBase
         }
         $this->throwReadOnly();
 
-        $payload = $this->netPayload();
+        try {
+            $payload = $this->netPayload($this->stringParam('version'));
+        } catch (\Throwable $e) {
+            return ['status' => 'failed', 'message' => $e->getMessage()];
+        }
         $interfaces = $payload['interfaces'];
 
         /* 顺序很重要（首绑实测报过「网关无效」）：
@@ -412,7 +382,9 @@ class RoutingController extends ApiMutableModelControllerBase
 
         /* ② 浮动规则 */
         try {
-            $messages = array_merge($messages, $this->syncFloatingRules($interfaces));
+            $rules = $this->syncFloatingRules($interfaces, (string)($r1['version'] ?? ''), $r1['backup'] ?? null);
+            $messages = array_merge($messages, $rules['messages']);
+            $payload['version'] = $rules['version'];
         } catch (\Throwable $e) {
             return [
                 'status' => 'failed',
@@ -425,8 +397,7 @@ class RoutingController extends ApiMutableModelControllerBase
         try {
             $r3 = $this->callNetScript($payload + ['verify_only' => true]);
         } catch (\Throwable $e) {
-            $result['message'] = $e->getMessage();
-            return $result;
+            $r3 = ['status' => 'failed', 'message' => $e->getMessage()];
         }
         $messages = array_merge($messages, $r3['messages'] ?? []);
 
@@ -441,15 +412,23 @@ class RoutingController extends ApiMutableModelControllerBase
 
         /* 自检没过：把刚写的规则撤掉，宁可"没绑定"也不要留下"看着绑了其实没生效" */
         try {
-            $messages = array_merge($messages, $this->syncFloatingRules([]));
+            $recovery = $this->syncFloatingRules([], $payload['version']);
+            $messages = array_merge($messages, $recovery['messages']);
+            $cleanup = $this->callNetScript([
+                'interfaces' => [], 'verify_only' => true, 'version' => $recovery['version'],
+            ]);
+            $messages = array_merge($messages, $cleanup['messages'] ?? []);
         } catch (\Throwable $e) {
-            /* 撤销失败也只能如实报告 */
+            $cleanup = ['status' => 'failed', 'message' => $e->getMessage()];
         }
         return [
             'status' => 'failed',
             'messages' => $messages,
+            'rollback' => $cleanup,
             'message' => trim((string)($r3['message'] ?? '')) . "\n"
-                . gettext('The firewall rules written by this attempt have been removed, so nothing is bound.'),
+                . (($cleanup['status'] ?? '') === 'ok'
+                    ? gettext('Firewall rules were removed and loaded PF bindings were verified as empty.')
+                    : gettext('Firewall cleanup was not confirmed: ') . ($cleanup['message'] ?? gettext('(no output)'))),
         ];
     }
 
@@ -459,100 +438,106 @@ class RoutingController extends ApiMutableModelControllerBase
      *   · 未绑定的接口：删除其规则
      * 规则用 description 标记（Mihomo local bypass (x) / Mihomo policy routing (x)）。
      */
-    private function syncFloatingRules(array $interfaces): array
+    private function syncFloatingRules(array $interfaces, string $version, ?string $backup = null): array
     {
-        $messages = [];
-        $model = new \OPNsense\Firewall\Filter();
-        $subnets = $this->bindableInterfaces();
+        $transaction = new NetworkConfig($version);
+        try {
+            $messages = [];
+            $model = new \OPNsense\Firewall\Filter();
+            $subnets = $this->bindableInterfaces();
 
-        /* 现有本插件规则：description → uuid 列表（同一描述出现多次视为重复，保留一个）
-         * 注意：描述里必须带**来源接口**，否则两个绑定接口会生成同名规则，
-         * 去重逻辑会把其中一条（本该保留的）删掉 —— 实测踩过。 */
-        $existing = [];
-        foreach ($model->rules->rule->iterateItems() as $uuid => $node) {
-            if (preg_match('/^Mihomo (bypass|policy) \(([^)]*)\)$/', (string)$node->description, $m)) {
-                $existing[$m[1] . '(' . $m[2] . ')'][] = $uuid;
+            /* 现有本插件规则：description → uuid 列表（同一描述出现多次视为重复，保留一个）
+             * 注意：描述里必须带**来源接口**，否则两个绑定接口会生成同名规则，
+             * 去重逻辑会把其中一条（本该保留的）删掉 —— 实测踩过。 */
+            $existing = [];
+            foreach ($model->rules->rule->iterateItems() as $uuid => $node) {
+                if (preg_match('/^Mihomo (bypass|policy) \(([^)]*)\)$/', (string)$node->description, $m)) {
+                    $existing[$m[1] . '(' . $m[2] . ')'][] = $uuid;
+                }
             }
-        }
-        $existingKey = [];
-        foreach ($existing as $key => $uuids) {
-            $existingKey[$key] = $uuids[0];
-        }
+            $existingKey = [];
+            foreach ($existing as $key => $uuids) {
+                $existingKey[$key] = $uuids[0];
+            }
 
-        /* 期望集合：绑定接口的内网直达 + 策略路由（键与 description 一致，便于比对）
-         * 键里必须同时含来源与目标，否则两个接口会撞名（见上方注释）。 */
-        $desired = [];
-        foreach ($interfaces as $iface) {
-            foreach (array_keys($subnets) as $destIface) {
-                if ($destIface === $iface) {
+            /* 期望集合：绑定接口的内网直达 + 策略路由（键与 description 一致，便于比对）
+             * 键里必须同时含来源与目标，否则两个接口会撞名（见上方注释）。 */
+            $desired = [];
+            foreach ($interfaces as $iface) {
+                foreach (array_keys($subnets) as $destIface) {
+                    if ($destIface === $iface) {
+                        continue;
+                    }
+                    $label = $iface . ' -> ' . $destIface;
+                    $desired['bypass(' . $label . ')'] = ['kind' => 'bypass', 'iface' => $iface, 'dest' => $destIface, 'label' => $label];
+                }
+                $desired['policy(' . $iface . ')'] = ['kind' => 'policy', 'iface' => $iface, 'dest' => '', 'label' => $iface];
+            }
+
+            /* 删除不再需要的规则 + 同名重复项 */
+            $removed = 0;
+            foreach ($existing as $key => $uuids) {
+                if (!isset($desired[$key])) {
+                    foreach ($uuids as $uuid) {
+                        $model->rules->rule->del($uuid);
+                        $removed++;
+                    }
+                } else {
+                    foreach (array_slice($uuids, 1) as $uuid) {
+                        $model->rules->rule->del($uuid);
+                        $removed++;
+                    }
+                }
+            }
+            if ($removed > 0) {
+                $messages[] = sprintf('firewall: %d obsolete/duplicate rules removed', $removed);
+            }
+
+            /* 添加缺失的（浮动规则：不设置 interface；sequence 留空由框架按浮动组递增分配，
+               保证「内网直达」排在「策略路由」之前） */
+            $added = 0;
+            foreach ($desired as $key => $spec) {
+                if (isset($existingKey[$key])) {
                     continue;
                 }
-                $label = $iface . ' -> ' . $destIface;
-                $desired['bypass(' . $label . ')'] = ['kind' => 'bypass', 'iface' => $iface, 'dest' => $destIface, 'label' => $label];
-            }
-            $desired['policy(' . $iface . ')'] = ['kind' => 'policy', 'iface' => $iface, 'dest' => '', 'label' => $iface];
-        }
-
-        /* 删除不再需要的规则 + 同名重复项 */
-        $removed = 0;
-        foreach ($existing as $key => $uuids) {
-            if (!isset($desired[$key])) {
-                foreach ($uuids as $uuid) {
-                    $model->rules->rule->del($uuid);
-                    $removed++;
+                $rule = $model->rules->rule->Add();
+                $rule->enabled = '1';
+                $rule->action = 'pass';
+                $rule->quick = '1';
+                $rule->ipprotocol = 'inet';
+                $rule->direction = 'in';
+                $rule->description = sprintf('Mihomo %s (%s)', $spec['kind'], $spec['label']);
+                if ($spec['kind'] === 'policy') {
+                    $rule->source_net = $spec['iface'];
+                    $rule->destination_net = 'any';
+                    $rule->gateway = 'MIHOMO_TUN';
+                } else {
+                    $rule->source_net = $spec['iface'];
+                    $rule->destination_net = $spec['dest'];
                 }
-            } else {
-                foreach (array_slice($uuids, 1) as $uuid) {
-                    $model->rules->rule->del($uuid);
-                    $removed++;
+                $added++;
+            }
+            if ($added > 0) {
+                $messages[] = sprintf('firewall: %d floating rules added (%s)', $added, implode(', ', $interfaces));
+            }
+            if ($added === 0 && $removed === 0 && count($existingKey) === count($desired)) {
+                $messages[] = 'firewall: floating rules already in place';
+            }
+
+            $validations = $model->performValidation();
+            foreach ($validations as $validation) {
+                if ($validation->getType() === 'error') {
+                    throw new \RuntimeException((string)$validation);
                 }
             }
-        }
-        if ($removed > 0) {
-            $messages[] = sprintf('firewall: %d obsolete/duplicate rules removed', $removed);
-        }
+            $model->serializeToConfig();
+            $version = $transaction->save();
+            $transaction->advanceBackup($backup, $version);
 
-        /* 添加缺失的（浮动规则：不设置 interface；sequence 留空由框架按浮动组递增分配，
-           保证「内网直达」排在「策略路由」之前） */
-        $added = 0;
-        foreach ($desired as $key => $spec) {
-            if (isset($existingKey[$key])) {
-                continue;
-            }
-            $rule = $model->rules->rule->Add();
-            $rule->enabled = '1';
-            $rule->action = 'pass';
-            $rule->quick = '1';
-            $rule->ipprotocol = 'inet';
-            $rule->direction = 'in';
-            $rule->description = sprintf('Mihomo %s (%s)', $spec['kind'], $spec['label']);
-            if ($spec['kind'] === 'policy') {
-                $rule->source_net = $spec['iface'];
-                $rule->destination_net = 'any';
-                $rule->gateway = 'MIHOMO_TUN';
-            } else {
-                $rule->source_net = $spec['iface'];
-                $rule->destination_net = $spec['dest'];
-            }
-            $added++;
+            return ['messages' => $messages, 'version' => $version];
+        } finally {
+            $transaction->close();
         }
-        if ($added > 0) {
-            $messages[] = sprintf('firewall: %d floating rules added (%s)', $added, implode(', ', $interfaces));
-        }
-        if ($added === 0 && $removed === 0 && count($existingKey) === count($desired)) {
-            $messages[] = 'firewall: floating rules already in place';
-        }
-
-        $validations = $model->performValidation();
-        foreach ($validations as $validation) {
-            if ($validation->getType() === 'error') {
-                throw new \RuntimeException((string)$validation);
-            }
-        }
-        $model->serializeToConfig();
-        \OPNsense\Core\Config::getInstance()->save();
-
-        return $messages;
     }
 
     /** 回滚最近一次网络侧改动 */
@@ -566,17 +551,22 @@ class RoutingController extends ApiMutableModelControllerBase
     }
 
     /** 需要自动策略路由的接口列表 */
-    private function netPayload(): array
+    private function netPayload(?string $version = null): array
     {
-        $interfaces = [];
-        foreach ($this->collectRows(true) as $row) {
-            if ($row['enabled'] === '0' || $row['firewall'] !== 'auto') {
-                continue;
+        $transaction = new NetworkConfig($version);
+        try {
+            $interfaces = [];
+            foreach ($this->collectRows(true) as $row) {
+                if ($row['enabled'] === '0' || $row['firewall'] !== 'auto') {
+                    continue;
+                }
+                $interfaces[$row['interface']] = true;
             }
-            $interfaces[$row['interface']] = true;
+            /* 网关地址留空 -> 由 policy_net.php 从 ifconfig 推断 */
+            return ['interfaces' => array_keys($interfaces), 'gateway' => '', 'version' => $transaction->version];
+        } finally {
+            $transaction->close();
         }
-        /* 网关地址留空 -> 由 policy_net.php 从 ifconfig 推断 */
-        return ['interfaces' => array_keys($interfaces), 'gateway' => ''];
     }
 
     private function writeStaging(array $payload): string

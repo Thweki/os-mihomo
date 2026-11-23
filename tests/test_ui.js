@@ -537,13 +537,16 @@ class DomNode {
     }
     focus(options) { assert.equal(options.preventScroll, true); this.ownerDocument.activeElement = this; }
 }
-const doc = {activeElement: null, createElement(tag) { return new DomNode(this, tag); }};
+const doc = {activeElement: null, createElement(tag) { return new DomNode(this, tag); },
+    createElementNS(namespace, tag) { assert.equal(namespace, 'http://www.w3.org/2000/svg'); return this.createElement(tag); }};
 const groupBox = doc.createElement('div');
 const names = ['name" data-unexpected="value', "single' quote", '<tag>&value', '001', '中文\\name', 'literal &gt; 😀\nnext\tline'];
 const encode = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 const groups = names.map(name => ({name: encode(name), now: encode(name), type: 'Selector', members: [{name: encode(name), type: 'test', selected: true, delay: 20}]}));
-const render = () => UI.renderProxyGroups(groupBox, groups, {testGroup: 'Test group', testNode: 'Test node', memberCount: 'Members: %s',
-    copyName: 'Copy proxy name', copySelection: 'Copy group selection'}, value => value + ' ms', () => 'label-success');
+const latencyText = value => value === null ? 'Not tested' : value <= 0 ? 'Timeout' : value + ' ms';
+const render = () => UI.renderProxyGroups(groupBox, groups, {
+    testGroup: 'Test group', testNode: 'Test node', memberCount: 'Members: %s', latencyHistory: 'Recent latency, oldest first', copyName: 'Copy proxy name', copySelection: 'Copy group selection'
+}, latencyText, () => 'label-success');
 render();
 const lists = groupBox.querySelectorAll('ul[data-group]');
 assert.deepEqual(lists.map(node => node.getAttribute('data-group')), names);
@@ -576,6 +579,27 @@ assert.equal(groupBox.querySelectorAll('button[data-copy-text]')[0].disabled, tr
 assert.equal(groupBox.querySelectorAll('button[data-copy-text]')[2].attrs['data-copy-text'],
     JSON.stringify(names[1]) + ': "new <selection> &gt;"\n', 'Polling updates the selection to copy');
 
+// Real renderer: bounded controller samples, independent scales, gaps and accessible values.
+assert.equal(groupBox.querySelectorAll('svg[role]')[0].attrs['aria-label'], 'Recent latency, oldest first: Not tested');
+groups[0].members[0].delay_history = [999, 888, 100, 200, 0, 50, 50, -1, null, 'bad', 25, 100];
+groups[1].members[0].delay_history = [500];
+groups[2].members[0].delay_history = [0, -1];
+groups[3].members[0].delay_history = [null, NaN, Infinity, '<script>'];
+render();
+const charts = groupBox.querySelectorAll('svg[role]');
+assert.equal(charts[0].attrs['aria-label'], 'Recent latency, oldest first: 100 ms → 200 ms → Timeout → 50 ms → 50 ms → Timeout → Not tested → Not tested → 25 ms → 100 ms');
+assert.deepEqual(charts[0].querySelectorAll('polyline[points]').map(line => line.attrs.points), ['4,12 12,4', '28,16 36,16', '68,18 76,12'], 'Lines never bridge failed or unknown samples');
+assert.equal(charts[0].querySelectorAll('circle[cx]').length, 6);
+assert.equal(charts[0].querySelectorAll('path[d]').length, 2, 'Timeouts have crosses, not zero latency dots');
+assert.equal(charts[1].querySelectorAll('circle[cx]')[0].attrs.cy, '4', 'Single samples are visible and scale independently');
+assert.equal(charts[2].querySelectorAll('circle[cx]').length, 0);
+assert.equal(charts[2].querySelectorAll('path[d]').length, 2);
+assert.equal(charts[3].querySelectorAll('path[d]')[0].attrs.d, 'M36 12h8');
+assert(!charts[3].attrs['aria-label'].includes('<script>'));
+assert.equal(groupBox.querySelectorAll('span[title]').find(node => node.children.includes(charts[0])).attrs.title, charts[0].attrs['aria-label']);
+assert.equal(groups[0].members[0].delay_history.length, 12, 'Rendering does not mutate API data');
+console.log('Latency sparklines: bounded samples, gaps, timeouts, scale and accessible values passed');
+
 // Counts describe direct entries, not recursively expanded or healthy proxies.
 const countBox = doc.createElement('div');
 const countGroups = [
@@ -595,6 +619,84 @@ assert.deepEqual(countBadges(countBox).map(node => node.attrs['data-member-count
 assert.equal(JSON.stringify(countGroups), originalCountGroups, 'Counting must not mutate API data');
 assert.equal(countBox.children[0].children[0].children[0].children[0].children[0].textContent, '<Group>& ');
 console.log('Group member counts: direct entries, empty/missing members, translated text and unchanged data passed');
+
+// Group warnings use all reported candidates, not selection, favorites or stale alive flags.
+const candidate = (name, type = 'Shadowsocks', delay = 0) => ({name: encode(name), type, delay});
+const emptyGroups = [
+    {name: 'Empty', members: []},
+    {name: 'Failed', members: [candidate('zero'), candidate('negative', 'Vmess', -1)]},
+    {name: 'Reject only', members: [candidate('block', 'Reject', 20), candidate('drop', 'RejectDrop')]},
+    {name: 'Healthy', members: [candidate('failed'), candidate('working', 'Trojan', 1)]},
+    {name: 'Direct', members: [candidate('custom direct', 'Direct')]},
+    {name: 'Unknown', members: [candidate('untested', 'Trojan', null)]},
+    {name: 'Missing'}, {name: 'Null', members: null},
+    {name: encode('<Nested>&'), members: [candidate('Empty', 'Selector', 10), candidate('Failed', 'URLTest', 10)]},
+    {name: 'Nested unknown', members: [candidate('Unknown', 'Selector', 0)]},
+    {name: 'Missing nested', members: [candidate('not reported', 'URLTest', 0)]},
+    {name: 'Missing node', members: [{name: 'absent', delay: 0, alive: false}]},
+    {name: 'Cycle A', members: [candidate('Cycle B', 'Selector')]},
+    {name: 'Cycle B', members: [candidate('Cycle A', 'Selector')]},
+    {name: 'Exit A', members: [candidate('Exit B', 'Selector')]},
+    {name: 'Exit B', members: [candidate('Exit A', 'Selector'), candidate('direct', 'Direct')]},
+    {name: 'Self', members: [candidate('Self', 'Selector')]},
+    {name: 'Shared', members: [candidate('Healthy', 'Selector'), candidate('Failed', 'Selector')]},
+    {name: 'Pass', members: [candidate('skip', 'Pass')]},
+    {name: 'Name is not type', members: [candidate('DIRECT', 'Trojan')]}
+];
+const warnedNames = ['Empty', 'Failed', 'Reject only', '<Nested>&', 'Cycle A', 'Cycle B', 'Self', 'Name is not type'];
+const originalEmptyGroups = JSON.stringify(emptyGroups);
+assert.deepEqual([...UI.emptyProxyGroups(emptyGroups)], warnedNames);
+assert.deepEqual([...UI.emptyProxyGroups([...emptyGroups].reverse())].sort(), [...warnedNames].sort(), 'Graph order cannot affect warnings');
+assert.equal(JSON.stringify(emptyGroups), originalEmptyGroups, 'Warnings must not mutate controller data');
+for (const delay of [undefined, null, '0', NaN, Infinity]) {
+    assert.equal(UI.emptyProxyGroups([{name: 'Unknown', members: [{name: 'node', type: 'Trojan', delay, alive: false}]}]).size, 0);
+}
+assert.equal(UI.emptyProxyGroups([{name: 'Failed', members: [{name: 'node', type: 'Trojan', delay: 0, alive: true}]}]).size, 1);
+for (const type of ['Direct', 'Pass', 'PassRule', 'Rematch', 'Dns', 'Compatible', 'Unknown', 'Selector', 'URLTest', 'Fallback', 'LoadBalance', 'Relay']) {
+    assert.equal(UI.emptyProxyGroups([{name: 'Context needed', members: [candidate('missing', type)]}]).size, 0,
+        type + ' cannot be classified as failed using latency alone');
+}
+// Long provider/group chains must not overflow the stack; cycles with exits propagate too.
+const deepGroups = Array.from({length: 12000}, (_, i) => ({name: String(i), members: [candidate(String(i + 1), 'Selector')]}));
+deepGroups.push({name: '12000', members: []});
+assert.equal(UI.emptyProxyGroups(deepGroups).size, 12001);
+deepGroups[12000].members.push(candidate('exit', 'Direct'));
+assert.equal(UI.emptyProxyGroups(deepGroups).size, 0);
+const warningBox = doc.createElement('div');
+const warningLabels = {memberCount: '成员数：%s', emptyGroup: '无可用代理', emptyGroupHint: '基于最近的延迟结果'};
+UI.renderProxyGroups(warningBox, emptyGroups, warningLabels, String, () => '', null, 'config', new Set(warnedNames));
+const warningBadges = box => box.querySelectorAll('span[data-empty-group]');
+assert.deepEqual(warningBadges(warningBox).map(node => node.attrs['data-empty-group']), warnedNames);
+warningBadges(warningBox).forEach(node => {
+    assert.equal(node.textContent, warningLabels.emptyGroup);
+    assert.equal(node.attrs.title, warningLabels.emptyGroupHint);
+    assert(node.attrs.class.includes('label-warning'), 'Warnings have both text and theme-aware emphasis');
+});
+warningBox.children[0].children.forEach(column => {
+    const card = column.children[0], name = card.children[1].attrs['data-group'];
+    if (warnedNames.includes(name)) {
+        assert.equal(card.children[1].attrs.hidden, '');
+        assert.equal(warningBadges(card.children[0]).length, 1, 'Warning remains in the visible header when collapsed');
+    }
+});
+console.log('Empty-group warnings: failures, unknowns, built-ins, nested groups, cycles, deep graphs and collapsed headers passed');
+
+// Browser timers reject a receiver other than their global object.
+const timerContext = vm.createContext({document: {hidden: false}});
+vm.runInContext([
+    'function setTimeout(callback, delay) { "use strict";',
+    '    if (this !== undefined && this !== globalThis) { throw new TypeError("Illegal invocation"); }',
+    '    return 1;',
+    '}',
+    'function clearTimeout(timer) { "use strict";',
+    '    if (this !== undefined && this !== globalThis) { throw new TypeError("Illegal invocation"); }',
+    '}'
+].join('\n'), timerContext);
+vm.runInContext(fs.readFileSync(require.resolve('../src/usr/local/www/js/mihomo/ui.js'), 'utf8'), timerContext);
+assert.doesNotThrow(() => vm.runInContext(
+    'const poller = new MihomoUI.Poller(done => done(true), 2000); poller.refresh(); poller.stop();',
+    timerContext
+));
 
 // Fake timers prove non-overlap, hidden pause/resume, exponential retry and recovery.
 let hidden = false, callback, calls = 0, scheduled = null;
@@ -793,7 +895,7 @@ const connectionContext = {
                 }
             };
         }
-        return {text() {}, tooltip() {}, off() { return this; }, on(event, callback) {
+        return {text() {}, tooltip() {}, change() {}, prop() { return this; }, each() { return this; }, off() { return this; }, on(event, callback) {
             if (selector === '.cmd-connection-details') { assert.equal(event, 'click'); detailClick = callback; }
         }};
     }
@@ -829,12 +931,69 @@ assert.equal(detailFields(dialogs[2])[13].textContent, 'example.invalid & litera
     'Each button keeps its own snapshot, independent of later rows or refreshes');
 console.log('Connection details: matched rule, destination, safe text, missing fields and per-row snapshots passed');
 
-const overviewFunction = indexView.match(/        function loadOverview\(done\) \{[\s\S]*?\n        \}/)[0];
+// Compile the complete page script too: isolated handler tests can miss broken
+// boundaries or duplicate declarations introduced when features are merged.
+new vm.Script(indexView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"'), {filename: 'index.volt'});
+// Run the actual connection-grid setup and change handler. The grid owns text
+// search and paging; we must retain its request fields when adding the scope.
+const scopeConnectionScript = indexView.match(/        \$\("#grid-connections"\)\.on\([\s\S]*?(?=        function closeConnections)/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+let connectionConfig, scopeChange, connectionScope = 'all', connectionReloads = 0;
+const scopeConnectionGrid = {
+    UIBootgrid(config) { connectionConfig = config; return this; },
+    on() { return this; },
+    bootgrid(command) { assert.equal(command, 'reload'); connectionReloads++; }
+};
+const processDoc = {createElement(tag) {
+    const node = new DomNode(this, tag);
+    // Inspect the DOM before serialization; DomNode rejects innerHTML writes.
+    Object.defineProperty(node, 'outerHTML', {get: () => JSON.stringify({tag, attrs: node.attrs, text: node.textContent})});
+    return node;
+}};
+vm.runInNewContext(scopeConnectionScript, {
+    connectionAddressCell() {},
+    $: selector => {
+        if (selector === '#grid-connections') { return scopeConnectionGrid; }
+        assert.equal(selector, '#connection-search-scope');
+        return {val: () => connectionScope, change: handler => { scopeChange = handler; }};
+    },
+    MihomoUI: UI, document: processDoc
+});
+assert.equal(connectionConfig.search, '/api/mihomo/dashboard/connections');
+assert(indexView.includes('<label for="connection-search-scope">'), 'Scope selector has a native accessible label');
+assert(indexView.includes('<option value="all" selected>'), 'Default scope preserves broad search');
+assert(indexView.includes('data-column-id="process" data-type="string" data-formatter="processformatter"'));
+const searchText = '<literal>& 中文 2001:db8::1';
+for (const scope of ['all', 'address', 'host', 'process']) {
+    connectionScope = scope;
+    const before = connectionReloads;
+    scopeChange();
+    assert.equal(connectionReloads, before + 1, 'Changing scope refreshes the current search');
+    const request = {current: 2, rowCount: 10, sort: {start: 'desc'}, searchPhrase: searchText};
+    assert.equal(connectionConfig.options.requestHandler(request), request);
+    assert.deepEqual(request, {current: 2, rowCount: 10, sort: {start: 'desc'}, searchPhrase: searchText, connectionScope: scope},
+        'Scope augments requests without losing search, pagination or sorting');
+}
+for (const [row, expected, path] of [
+    [{process: 'Browser &lt;&amp;&gt;', processPath: '/opt/应用/&lt;path&gt;'}, 'Browser <&>', '/opt/应用/<path>'],
+    [{processPath: '/opt/path-only'}, '/opt/path-only', '/opt/path-only'],
+    [{}, '—', ''],
+    [{process: 'literal &amp;gt;'}, 'literal &gt;', '']
+]) {
+    const rendered = JSON.parse(connectionConfig.options.formatters.processformatter({}, row));
+    assert.deepEqual(rendered, {tag: 'span', attrs: {title: path}, text: expected}, 'Process names and paths use text nodes with one decode');
+}
+console.log('Connection search scope requests, controls and safe process rendering: all checks passed');
+const overviewSource = indexView.match(/        function loadOverview\(done\) \{[\s\S]*?\n        \}/)[0];
+const overviewFunction = overviewSource
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 const overviewRequests = [];
 let now = 100000;
 const overviewContext = {
     Date: {now: () => now}, ajaxGet: (url, data, done) => overviewRequests.push({url, data, done}),
-    renderOverview: () => {}, drawTraffic: () => {}, trafficHistory: {add: () => {}}, $: () => ({text: () => {}})
+    renderOverview: () => {}, renderClients: () => {}, drawTraffic: () => {},
+    trafficHistory: {add: () => {}}, $: () => ({text: () => {}})
 };
 vm.runInNewContext('let lastMetadata = 0;\n' + overviewFunction + '\nloadOverview();', overviewContext);
 assert.equal(overviewRequests[0].data.metadata, 1);
@@ -890,7 +1049,7 @@ console.log('Traffic chart localized labels, gaps and formatter reuse: all check
 // Run the real totals control, render and request paths together. A display change
 // must use the latest response without adding requests or traffic-history samples.
 const totalsScript = indexView.slice(indexView.indexOf('        let latestTotals = null;'),
-    indexView.indexOf(overviewFunction) + overviewFunction.length)
+    indexView.indexOf(overviewSource) + overviewSource.length)
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 const totalControls = new Map(), totalRequests = [], totalHistory = new UI.TrafficHistory();
 let totalsNow = 100000, chartDraws = 0, historySaves = 0;
@@ -907,8 +1066,9 @@ function totalControl(selector) {
     return totalControls.get(selector);
 }
 const totalsContext = {
+    document: {getElementById: () => null},
     $: totalControl, Date: {now: () => totalsNow}, lastMetadata: 0, lastHistorySave: 0, processMemory: 1536,
-    MihomoUI: {...UI, formatTrafficTotal: (value, raw) => UI.formatTrafficTotal(value, raw, 'en-US')},
+    MihomoUI: {...UI, renderConnectionClients() {}, formatTrafficTotal: (value, raw) => UI.formatTrafficTotal(value, raw, 'en-US')},
     fmtBytes: value => UI.formatBytes(value, 'en-US'), fmtCount: String,
     fmtRate: value => UI.formatBytes(value, 'en-US') + '/s',
     trafficHistory: totalHistory, drawTraffic: () => chartDraws++,
@@ -1032,7 +1192,7 @@ testProxyCopy().catch(error => { console.error(error); process.exitCode = 1; });
 
 // Run the dashboard polling wiring and real overview renderer with controlled time.
 // Pausing affects automatic statistics reads, not other panels or explicit actions.
-const dashboardPollingScript = indexView.match(/        const overviewPoller =[\s\S]*?        window.addEventListener\('pagehide'[^\n]+/)[0];
+const dashboardPollingScript = indexView.match(/        const overviewPoller =[\s\S]*?(?=\n    \}\);\n<\/script>)/)[0];
 const overviewRenderScript = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0];
 const translate = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
     (_, label) => JSON.stringify(label));
@@ -1061,6 +1221,7 @@ function dashboardFixture() {
     const traffic = new UI.TrafficHistory();
     const context = vm.createContext({
         MihomoUI: {...UI, Poller: DashboardPoller}, document, $: element,
+        renderClients() {}, autoTestAttempted: false, autoTestCancelled: false,
         window: {addEventListener: (event, handler) => { pageEvents[event] = handler; }},
         Date: {now: () => time}, trafficHistory: traffic, processMemory: null, lastHistorySave: time, latestTotals: null, trafficTotals: new UI.TrafficTotals(), renderTrafficTotals: () => {},
         fmtCount: String, fmtBytes: String, fmtRate: String, drawTraffic: () => {},
@@ -1266,8 +1427,8 @@ function trafficPage() {
         return elements.get(selector);
     };
     const context = vm.createContext({
-        MihomoUI: {...UI, formatTrafficTotal: (value, raw) => UI.formatTrafficTotal(value, raw, 'en-US')},
-        $: element, document: {}, Date: {now: () => now},
+        MihomoUI: {...UI, renderConnectionClients() {}, formatTrafficTotal: (value, raw) => UI.formatTrafficTotal(value, raw, 'en-US')},
+        $: element, document: {getElementById: () => null}, Date: {now: () => now},
         fmtBytes: value => UI.formatBytes(value, 'en-US'), fmtCount: String,
         fmtRate: value => UI.formatBytes(value, 'en-US') + '/s',
         sessionStorage: {getItem() { throw new Error('Storage denied'); }, setItem() { throw new Error('Storage denied'); }},
@@ -1340,6 +1501,574 @@ for (const id of ['reset-traffic-totals', 'restore-traffic-totals']) {
     assert.match(indexView, new RegExp('<button type="button" id="' + id + '"[^>]* disabled'), 'Native keyboard-accessible controls start disabled');
 }
 console.log('Traffic totals: reset, restore, polling, failures, counter decreases, raw rates and page isolation passed');
+// Carry the reviewed network revision through the two distinct apply requests.
+const routingView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt'), 'utf8');
+const collectNetworkPlan = routingView.match(/        function collectPlan\(done\) \{[\s\S]*?\n        \}/)[0];
+const networkApplyHandler = routingView.match(/        \$\('#applyPolicyAct'\)\.click\(function \(\) \{[\s\S]*?\n        \}\);/)[0]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+const networkRequests = [], networkDialogs = [];
+let applyNetworkClick;
+const networkContext = {
+    $: selector => ({click: fn => { applyNetworkClick = fn; }, css() { return this; }, text() { return this; }}),
+    ajaxGet: (url, data, done) => networkRequests.push({url, data, done}),
+    ajaxCall: (url, data, done) => networkRequests.push({url, data, done}),
+    BootstrapDialog: {show: data => networkDialogs.push(data)},
+    planText: () => '', dialog: () => {}, decode: text => text, loadState: () => {}
+};
+vm.runInNewContext('let lastPlan;\n' + collectNetworkPlan + '\n' + networkApplyHandler, networkContext);
+applyNetworkClick();
+networkRequests[0].done({version: 'yaml-preview'}, 'success');
+networkRequests[1].done({status: 'ok', version: 'reviewed-network'}, 'success');
+networkDialogs[0].buttons[1].action({close: () => {}});
+assert.equal(networkRequests[2].data.version, 'yaml-preview');
+networkRequests[2].done({status: 'ok'});
+assert.equal(networkRequests[3].url, '/api/mihomo/routing/netapply');
+assert.equal(networkRequests[3].data.version, 'reviewed-network', 'Network apply uses the reviewed revision');
+applyNetworkClick();
+networkRequests[4].done({version: 'new-yaml-preview'}, 'success');
+networkRequests[5].done({status: 'failed', message: 'Configuration changed'}, 'success');
+assert.equal(networkDialogs.length, 1, 'A conflicting network plan cannot offer apply');
+console.log('Network plan/apply revision handoff and conflicting preview: all checks passed');
+// B7: render the real routing state labels, including disabled and unreadable PF.
+const stateRenderer = routingView.match(/function stateText\(row\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{\s*lang\._\('([^']+)'\)\s*\|\s*json_encode\s*\}\}/g, (_, value) => JSON.stringify(value));
+const renderState = vm.runInNewContext('(' + stateRenderer + ')');
+for (const [state, label] of Object.entries({active: 'PF rule observed', pending: 'Not confirmed',
+    disabled: 'Disabled', unknown: 'Unavailable', inactive: 'TUN off', manual: 'Manual'})) {
+    assert.equal(renderState({state}), label, 'Binding state must not imply verified traffic: ' + state);
+}
+console.log('B7 routing labels distinguish observed PF, pending, unavailable and disabled bindings: passed');
+// Run the subscription page with delayed saves. An acknowledgement belongs to
+// the submitted snapshot, even when the user has already typed the next edit.
+const subscriptionControls = new Map(), subscriptionReads = [], subscriptionWrites = [], subscriptionPollers = [];
+const subscriptionDocument = {addEventListener() {}};
+function subscriptionControl(selector) {
+    if (typeof selector === 'object') { return selector; }
+    if (!subscriptionControls.has(selector)) {
+        subscriptionControls.set(selector, {
+            value: '', handlers: {},
+            val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
+            prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+            on(event, fn) { this.handlers[event] = fn; return this; },
+            click(fn) { return this.on('click', fn); },
+            text() { return this; }, css() { return this; }, show() { return this; }
+        });
+    }
+    return subscriptionControls.get(selector);
+}
+vm.runInNewContext(subscriptionView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"'), {
+    document: subscriptionDocument, window: {addEventListener() {}},
+    $: selector => selector === subscriptionDocument ? {ready: fn => fn()} : subscriptionControl(selector),
+    ajaxGet: (url, data, done) => subscriptionReads.push({url, data, done}),
+    ajaxCall: (url, data, done) => subscriptionWrites.push({url, data, done}),
+    BootstrapDialog: {show() {}}, setTimeout() {},
+    MihomoUI: {...UI, Poller: class {
+        constructor(request) { subscriptionPollers.push(request); }
+        refresh() {} stop() {} visibilityChanged() {}
+    }}
+});
+const subscriptionUrl = subscriptionControl('[id="mihomo.subscription.url"]');
+const subscriptionSecret = subscriptionControl('[id="mihomo.subscription.secret"]');
+const subscriptionSave = subscriptionControl('#saveAct');
+const subscriptionRun = subscriptionControl('#runAct');
+const envFile = '/usr/local/etc/mihomo/sub/env';
+function editSubscription(url, secret) {
+    subscriptionUrl.val(url); subscriptionSecret.val(secret);
+    subscriptionControl('[id="mihomo.subscription.url"], [id="mihomo.subscription.secret"]').handlers['input change']();
+}
+function pollSubscription() {
+    subscriptionPollers[0]();
+    subscriptionReads.at(-1).done({status: 'ok', subscription: {state: 'idle'}}, 'success');
+}
+subscriptionReads[0].done({url: 'https://example.invalid/original', secret: 'example-original',
+    version: 'original', envFile, scriptAvailable: true}, 'success');
+pollSubscription();
+editSubscription('https://example.invalid/submitted', 'example-submitted');
+subscriptionSave.handlers.click.call(subscriptionSave);
+assert.equal(subscriptionWrites[0].data.version, 'original');
+editSubscription('https://example.invalid/newer', 'example-newer');
+const readsBeforeSave = subscriptionReads.length;
+subscriptionWrites[0].done({status: 'ok', versions: {[envFile]: 'saved-revision'}}, 'success');
+// Complete any reload the old implementation issued, reproducing the lost edit.
+if (subscriptionReads.length > readsBeforeSave) {
+    subscriptionReads.at(-1).done({url: 'https://example.invalid/submitted', secret: 'example-submitted',
+        version: 'saved-revision', envFile, scriptAvailable: true}, 'success');
+}
+assert.equal(subscriptionUrl.val(), 'https://example.invalid/newer', 'Save acknowledgement must preserve newer URL edits');
+assert.equal(subscriptionSecret.val(), 'example-newer', 'Save acknowledgement must preserve newer secret edits');
+assert.equal(subscriptionReads.length, readsBeforeSave, 'Save uses its committed revision without reloading another writer\'s state');
+assert.equal(subscriptionSave.disabled, false, 'Newer edits remain available to save');
+assert.equal(subscriptionRun.disabled, true, 'Unsaved edits prevent a subscription run');
+subscriptionSave.handlers.click.call(subscriptionSave);
+assert.equal(subscriptionWrites[1].data.version, 'saved-revision', 'Next save uses the acknowledged revision');
+pollSubscription();
+editSubscription('https://example.invalid/newer', 'example-newer');
+assert.equal(subscriptionSave.disabled, true, 'Polling and input events cannot enable a pending save');
+subscriptionSave.handlers.click.call(subscriptionSave);
+assert.equal(subscriptionWrites.length, 2, 'Only one save may be pending');
+subscriptionWrites[1].done({status: 'failed', code: 'conflict'}, 'success');
+assert.equal(subscriptionUrl.val(), 'https://example.invalid/newer', 'Conflicts preserve unsaved input');
+assert.equal(subscriptionSave.disabled, false);
+assert.equal(subscriptionRun.disabled, true);
+subscriptionSave.handlers.click.call(subscriptionSave);
+assert.equal(subscriptionWrites[2].data.version, 'saved-revision', 'Failure cannot advance the saved revision');
+subscriptionWrites[2].done(null, 'error');
+assert.equal(subscriptionSave.disabled, false, 'Transport failure permits retry');
+editSubscription(' https://example.invalid/final ', ' example-final ');
+subscriptionSave.handlers.click.call(subscriptionSave);
+subscriptionWrites[3].done({status: 'ok', versions: {[envFile]: 'final-revision'}}, 'success');
+assert.equal(subscriptionUrl.val(), 'https://example.invalid/final', 'Unchanged input reflects backend trimming');
+assert.equal(subscriptionSecret.val(), 'example-final');
+assert.equal(subscriptionSave.disabled, true, 'Acknowledged input is clean');
+assert.equal(subscriptionRun.disabled, false, 'Clean saved settings allow a subscription run');
+console.log('Subscription delayed saves, edit preservation, revision handoff and failures: all checks passed');
+// Comparison exports contain the complete observed snapshot, never arbitrary API fields.
+const comparisonTime = '2026-11-15T12:34:56.000Z';
+const comparisonData = {status: 'ok', runtime: false, content: 'excluded raw configuration', rows: [
+    {key: 'mode', label: '模式 &amp; &lt;mode&gt;', group: 'general', model: 'rule', file: 'global', runtime: '', state: 'differs', secret: false, runtime_only: false, extra: 'excluded row field'},
+    {key: 'tun.enable', model: 'true', file: 'true', runtime: '', state: 'match', managed: false},
+    {key: 'dns.enable', model: 'true', file: '(not set in the file)', runtime: '', state: 'missing'},
+    {key: 'mixed-port', model: '', file: '', runtime: '', state: 'na', runtime_only: true},
+    {key: 'secret', model: 'synthetic-model-value', file: 'synthetic-file-value', runtime: 'synthetic-runtime-value', state: 'differs'},
+    {key: 'future-sensitive-field', secret: true, model: 'synthetic-other-value'}
+]};
+const comparisonReport = UI.comparisonReport(comparisonData, comparisonTime);
+assert.equal(comparisonReport.schema_version, 1);
+assert.equal(comparisonReport.collected_at, comparisonTime);
+assert.equal(comparisonReport.runtime_available, false, 'Offline snapshots remain exportable');
+assert.equal(comparisonReport.rows.length, 6, 'Include matching, missing and runtime-only rows');
+assert.equal(comparisonReport.rows[0].label, '模式 & <mode>');
+assert.equal(comparisonReport.rows[0].file, 'global');
+assert.equal(comparisonReport.rows[1].managed, false);
+assert.equal(comparisonReport.rows[3].runtime_only, true);
+for (const row of comparisonReport.rows.slice(4)) {
+    assert.equal(row.secret, true);
+    assert.equal(row.model, null);
+    assert.equal(row.file, null);
+    assert.equal(row.runtime, null);
+}
+assert(!JSON.stringify(comparisonReport).includes('synthetic-'), 'Sensitive row values must be omitted');
+assert(!JSON.stringify(comparisonReport).includes('excluded'), 'Only explicit report fields are exported');
+assert.equal(comparisonData.rows[4].model, 'synthetic-model-value', 'Export must not mutate cached API data');
+comparisonData.rows[0].file = 'changed later';
+assert.equal(comparisonReport.rows[0].file, 'global', 'Export is a snapshot');
+assert.equal(UI.comparisonReport({...comparisonData, runtime: true}, comparisonTime).runtime_available, true);
+for (const invalid of [null, {}, {status: 'failed', rows: []}, {status: 'ok'}, {status: 'ok', rows: {}}]) {
+    assert.equal(UI.comparisonReport(invalid, comparisonTime), null, 'Failed/malformed responses cannot be exported');
+}
+assert.equal(UI.comparisonReport({status: 'ok', rows: [], runtime: false}, comparisonTime).rows.length, 0);
+
+// Run the real view's load/filter/download handlers with browser APIs at the boundary.
+const comparisonScript = settingsView.slice(settingsView.indexOf('        function loadCompare()'),
+    settingsView.indexOf("        if (window.location.hash === '#compare')"))
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+const exportControls = new Map(), exportRequests = [], downloads = [], exportBlobs = [], revoked = [], cleanup = [];
+function exportControl(selector) {
+    if (!exportControls.has(selector)) {
+        exportControls.set(selector, {
+            handlers: {}, disabled: false,
+            prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+            find() { return this; }, addClass() { return this; }, removeClass() { return this; }, html() { return this; },
+            click(fn) { this.handlers.click = fn; return this; }, change(fn) { this.handlers.change = fn; return this; },
+            on(event, fn) { this.handlers[event] = fn; return this; }
+        });
+    }
+    return exportControls.get(selector);
+}
+const exportContext = {
+    $: exportControl, MihomoUI: UI,
+    Date: class extends Date { constructor() { super(comparisonTime); } },
+    ajaxGet: (url, params, done) => exportRequests.push({url, done}),
+    Blob: class { constructor(parts, options) { this.parts = parts; this.type = options.type; } },
+    URL: {createObjectURL(blob) { exportBlobs.push(blob); return 'blob:comparison-' + exportBlobs.length; },
+        revokeObjectURL(url) { revoked.push(url); }},
+    document: {
+        body: {appendChild(link) { link.attached = true; }},
+        createElement(tag) { assert.equal(tag, 'a'); return {
+            click() { assert(this.attached); downloads.push(this); }, remove() { this.attached = false; }
+        }; }
+    },
+    setTimeout: fn => cleanup.push(fn)
+};
+vm.runInNewContext(`let compareExport = null, compareLoading = false, compareCache = null, compareCacheStatus = 'success';
+    function renderCompare(data, status) { compareCache = data; compareCacheStatus = status; }
+    ${comparisonScript}`, exportContext);
+const exportButton = exportControl('#compare-export');
+assert.match(settingsView, /id="compare-export"[^>]* disabled/, 'Download is disabled before the first read');
+exportButton.handlers.click();
+assert.equal(downloads.length, 0);
+exportControl('#compare-refresh').handlers.click();
+exportControl('#compareTab').handlers['shown.bs.tab']();
+assert.equal(exportRequests.length, 1, 'Overlapping reads do not replace a newer snapshot');
+assert.equal(exportRequests[0].url, '/api/mihomo/settings/inspect');
+assert.equal(exportButton.disabled, true);
+exportRequests[0].done(comparisonData, 'success');
+assert.equal(exportButton.disabled, false);
+exportControl('#compare-diff-only').checked = true;
+exportControl('#compare-diff-only').handlers.change();
+exportButton.handlers.click();
+assert.equal(exportRequests.length, 1, 'Export does not fetch raw YAML or refresh the snapshot');
+assert.equal(exportBlobs[0].type, 'application/json;charset=utf-8');
+const downloadedReport = JSON.parse(exportBlobs[0].parts.join(''));
+assert.equal(downloadedReport.rows.length, 6, 'Table filtering does not truncate the report');
+assert.equal(downloadedReport.collected_at, comparisonTime);
+assert.equal(downloads[0].download, 'mihomo-comparison-2026-11-15T12-34-56-000Z.json');
+assert.equal(downloads[0].attached, false);
+cleanup.forEach(fn => fn());
+assert.deepEqual(revoked, ['blob:comparison-1']);
+for (const [data, status] of [[comparisonData, 'error'], [{status: 'failed'}, 'success'], [null, 'success']]) {
+    exportControl('#compare-refresh').handlers.click();
+    assert.equal(exportButton.disabled, true);
+    exportButton.handlers.click();
+    exportRequests.at(-1).done(data, status);
+    assert.equal(exportButton.disabled, true);
+    exportButton.handlers.click();
+    assert.equal(downloads.length, 1, 'Pending/failed reads cannot export stale or error data');
+}
+exportControl('#compare-refresh').handlers.click();
+exportRequests.at(-1).done({...comparisonData, runtime: true}, 'success');
+assert.equal(exportButton.disabled, false, 'Successful refresh re-enables export');
+console.log('Comparison JSON schema, secret omission, snapshot download, filtering and read failures: all checks passed');
+
+// Run the overview's real proxy controls, request callbacks and lifecycle handlers.
+// Fake transport keeps probes pending so cancellation and concurrency are observable.
+const proxyScript = indexView.match(/        function renderGroups[\s\S]*?(?=        \/\* ---)/)[0];
+const lifecycleScript = indexView.slice(indexView.indexOf('        const overviewPoller ='), indexView.lastIndexOf('    });'));
+function autoTestPage(saved, storageBlocked = false) {
+    const elements = new Map(), reads = [], probes = [], events = {}, storage = new Map();
+    if (saved !== undefined) { storage.set('mihomo.autoTest.v1', saved); }
+    const pageDocument = {hidden: false, addEventListener: (name, fn) => { events[name] = fn; }, createTextNode: text => text};
+    function element(selector) {
+        if (!elements.has(selector)) {
+            elements.set(selector, {
+                checked: false, disabled: false, label: '', handlers: {},
+                click(handler) { this.handlers.click = handler; return this; },
+                empty() { this.label = ''; return this; },
+                prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+                on(event, selectorOrFn, fn) { this.handlers[fn ? event + ':' + selectorOrFn : event] = fn || selectorOrFn; return this; },
+                text(value) { this.label = value; return this; }, append(text) { this.label += text; return this; },
+                attr(key) { return this[key]; }
+            });
+        }
+        return elements.get(selector);
+    }
+    const context = vm.createContext({
+        MihomoUI: UI, document: pageDocument, window: {addEventListener: (name, fn) => { events[name] = fn; }},
+        $: selector => typeof selector === 'string' ? element(selector) : selector,
+        sessionStorage: {
+            getItem(key) { if (storageBlocked) { throw new Error('blocked'); } return storage.get(key); },
+            setItem(key, value) { if (storageBlocked) { throw new Error('blocked'); } storage.set(key, value); }
+        },
+        ajaxGet: (url, data, done) => reads.push({url, data, done}),
+        ajaxCall: (url, data, done) => probes.push({url, data, done}),
+        loadOverview: done => done(true), loadServiceState: done => done(true),
+        trafficHistory: {add: () => {}}, lastMetadata: 0, fmtCount: String, updateTestAll() {}
+    });
+    // The production Poller defaults live in its module scope; inject fake timers
+    // and visibility while retaining the actual non-overlapping poll behavior.
+    context.MihomoUI = {...UI, Poller: class extends UI.Poller {
+        constructor(request, interval) { super(request, interval, {
+            hidden: () => pageDocument.hidden, schedule: () => 1, cancel: () => {}
+        }); }
+    }};
+    const source = (proxyScript + '\nrenderGroups = () => {};\n' + lifecycleScript)
+        .replace(/\{\{[\s\S]*?\}\}/g, match => JSON.stringify(match.match(/lang\._\('([^']*)'\)/)[1]));
+    vm.runInContext(source, context);
+    return {
+        reads, probes, storage, element,
+        refresh() { vm.runInContext('groupsPoller.refresh();', context); },
+        reply(data, status = 'success') { assert(reads.length); reads.shift().done(data, status); },
+        toggle(enabled) { const input = element('#auto-test-latency'); input.checked = enabled; input.handlers.change.call(input); },
+        visibility(hidden) { pageDocument.hidden = hidden; events.visibilitychange(); },
+        leave() { events.pagehide(); },
+        manual(name) { element('#proxy-groups').handlers['click:.cmd-test'].call({attr: () => name}); }
+    };
+}
+const autoGroups = [
+    {name: 'outer', members: [
+        {name: 'nested', type: 'Selector'}, {name: 'DIRECT', type: 'Direct'},
+        {name: 'REJECT', type: 'Reject'}, {name: 'drop', type: 'RejectDrop'},
+        {name: 'PASS', type: 'Pass'}, {name: 'unknown', type: ''},
+        {name: 'dns', type: 'Dns'}, {name: 'empty group', type: 'URLTest'},
+        {name: 'fallback', type: 'Fallback'}, {name: 'balance', type: 'LoadBalance'},
+        {name: 'relay', type: 'Relay'}, {name: 'compat', type: 'Compatible'},
+        {name: 'a&amp;&lt;b&gt;', type: 'Shadowsocks'}]},
+    {name: 'nested', members: [{name: 'a&amp;&lt;b&gt;', type: 'Shadowsocks'},
+        ...Array.from({length: 7}, (_, i) => ({name: 'node' + i, type: 'Vmess'}))]}
+];
+const readyGroups = {ready: true, groups: autoGroups};
+assert.deepEqual(UI.automaticTestNames(autoGroups), ['a&<b>', ...Array.from({length: 7}, (_, i) => 'node' + i)]);
+assert.deepEqual(UI.automaticTestNames([{name: 'g', members: []}]), []);
+assert(!/checked/.test(indexView.match(/<input[^>]*id="auto-test-latency"[^>]*>/)[0]), 'HTML also defaults off');
+for (const saved of [undefined, '0', 'true', 'garbage']) {
+    const page = autoTestPage(saved);
+    assert.equal(page.element('#auto-test-latency').checked, false);
+    page.reply(readyGroups); page.refresh(); page.reply(readyGroups);
+    assert.equal(page.probes.length, 0, 'No opt-in means no automatic probes');
+    page.manual('node0');
+    assert.equal(page.probes.length, 1, 'Manual tests still work with the experiment off');
+}
+const blockedPage = autoTestPage('1', true);
+blockedPage.reply(readyGroups);
+assert.equal(blockedPage.probes.length, 0, 'Storage failures default off');
+blockedPage.toggle(true); blockedPage.reply(readyGroups);
+assert.equal(blockedPage.probes.length, 3, 'Explicit opt-in still works without storage');
+
+const autoPage = autoTestPage('1');
+assert.equal(autoPage.element('#auto-test-latency').checked, true);
+autoPage.reply(null, 'error');
+autoPage.refresh(); autoPage.reply({ready: false, groups: autoGroups});
+autoPage.refresh(); autoPage.reply({ready: true, groups: []});
+assert.equal(autoPage.probes.length, 0, 'Failed, unreachable and empty reads do not consume the one run');
+autoPage.refresh(); autoPage.reply(readyGroups);
+assert.equal(autoPage.probes.length, 3);
+autoPage.manual('extra'); autoPage.refresh();
+assert.equal(autoPage.probes.length, 3, 'Manual actions and polls cannot overlap the sweep');
+assert.equal(autoPage.reads.length, 0);
+for (let i = 0; i < 8; i++) {
+    assert.equal(autoPage.probes.length, Math.min(i + 3, 8), 'At most three requests are in flight');
+    assert.equal(autoPage.probes[i].url, '/api/mihomo/dashboard/test_delay');
+    autoPage.probes[i].done(i === 0 ? null : {status: 'ok'}, i === 0 ? 'error' : 'success');
+}
+assert.equal(new Set(autoPage.probes.map(probe => probe.data.name)).size, 8);
+assert.match(autoPage.element('#proxy-test-state').label, /8\/8.*Failed: 1/);
+autoPage.reply(readyGroups); autoPage.refresh(); autoPage.reply(readyGroups);
+autoPage.toggle(false); autoPage.toggle(true);
+assert.equal(autoPage.probes.length, 8, 'Completion refresh, polling and toggling cannot repeat the sweep');
+assert.equal(autoPage.reads.length, 0);
+
+for (const stop of ['disable', 'hide', 'leave']) {
+    const page = autoTestPage();
+    page.toggle(true); // While the initial read is still pending.
+    assert.equal(page.storage.get('mihomo.autoTest.v1'), '1');
+    page.reply(readyGroups);
+    assert.equal(page.probes.length, 3);
+    if (stop === 'disable') { page.toggle(false); assert.equal(page.storage.get('mihomo.autoTest.v1'), '0'); }
+    if (stop === 'hide') { page.visibility(true); page.visibility(false); }
+    if (stop === 'leave') { page.leave(); }
+    page.probes.forEach(probe => probe.done({status: 'ok'}, 'success'));
+    assert.equal(page.probes.length, 3, 'Stop discards queued probes: ' + stop);
+    assert.match(page.element('#proxy-test-state').label, /3\/8.*Automatic tests stopped/);
+    assert.equal(page.element('#proxy-groups .cmd-test, #proxy-groups .cmd-test-group').disabled, false);
+    while (page.reads.length) { page.reply(readyGroups); }
+    assert.equal(page.probes.length, 3);
+}
+const hiddenPage = autoTestPage('1');
+hiddenPage.visibility(true); hiddenPage.reply(readyGroups);
+assert.equal(hiddenPage.probes.length, 0, 'A response arriving in a hidden tab must not start probes');
+hiddenPage.visibility(false); hiddenPage.reply(readyGroups);
+assert.equal(hiddenPage.probes.length, 3, 'First visible successful read starts the sweep');
+const disabledBeforeRead = autoTestPage('1');
+disabledBeforeRead.toggle(false); disabledBeforeRead.reply(readyGroups);
+assert.equal(disabledBeforeRead.probes.length, 0, 'Check the current opt-in when the read completes');
+disabledBeforeRead.toggle(true); disabledBeforeRead.reply(readyGroups);
+assert.equal(disabledBeforeRead.probes.length, 3, 'Disabling before any probes does not consume the one run');
+const leftBeforeRead = autoTestPage('1');
+leftBeforeRead.leave(); leftBeforeRead.reply(readyGroups);
+assert.equal(leftBeforeRead.probes.length, 0, 'Late responses after navigation cannot start probes');
+console.log('Experimental automatic latency: default-off, storage, opt-in, deduplication, bounded concurrency, one run, recovery and cancellation passed');
+
+// Run the actual runtime-rules view: searching is over the complete snapshot,
+// not the visible page. The DOM fixture rejects dynamic HTML parsing.
+const rulesView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt'), 'utf8');
+assert(routingView.includes('href="#routing-rules"') && routingView.includes("partial('OPNsense/Mihomo/runtime_rules')"),
+    'Policy Routing exposes the runtime-rule explorer');
+const rulesScript = rulesView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, text) => JSON.stringify(text));
+const ruleControls = new Map(), ruleNodes = new Map(), ruleRequests = [];
+const ruleDocument = {
+    createElement(tag) { return new DomNode(this, tag); },
+    getElementById(id) {
+        if (!ruleNodes.has(id)) { ruleNodes.set(id, this.createElement(id === 'runtime-rule-type' ? 'select' : 'tbody')); }
+        return ruleNodes.get(id);
+    }
+};
+function ruleControl(selector) {
+    if (!ruleControls.has(selector)) {
+        ruleControls.set(selector, {value: '', label: '', handlers: {},
+            val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
+            text(value) { this.label = value; return this; },
+            prop(key, value) { this[key] = value; return this; },
+            on(event, fn) { this.handlers[event] = fn; return this; }
+        });
+    }
+    return ruleControls.get(selector);
+}
+vm.runInNewContext(rulesScript, {
+    document: ruleDocument, MihomoUI: UI,
+    $: selector => selector === ruleDocument ? {ready: fn => fn()} : ruleControl(selector),
+    ajaxGet: (url, params, done) => ruleRequests.push({url, params, done})
+});
+const ruleEvent = (id, event = 'click') => ruleControl('#runtime-rule-' + id).handlers[event]();
+const ruleCells = () => ruleDocument.getElementById('runtime-rule-rows').children.map(row => row.children.map(cell => cell.textContent));
+const ruleStatus = () => ruleControl('#runtime-rule-state').label;
+const activateRules = () => ruleControl('a[href="#routing-rules"]').handlers['shown.bs.tab']();
+assert.equal(ruleRequests.length, 0, 'Opening Policy Routing does not eagerly fetch all core rules');
+activateRules(); activateRules(); ruleEvent('refresh');
+assert.equal(ruleRequests.length, 1, 'Only one runtime rules request can be in flight');
+assert.equal(ruleRequests[0].url, '/api/mihomo/dashboard/rules');
+assert.equal(ruleControl('#runtime-rule-refresh').disabled, true);
+ruleRequests[0].done(null, 'error');
+assert.match(ruleStatus(), /unavailable/);
+assert.equal(ruleControl('#runtime-rule-refresh').disabled, false);
+activateRules();
+const ruleFixture = Array.from({length: 112}, (_, i) => ({position: i + 1, type: 'DomainSuffix',
+    payload: 'site-' + i + '.example.org', proxy: 'DIRECT'}));
+ruleFixture[75] = {position: 76, type: 'RuleSet', payload: '中文-provider', proxy: 'Proxy &lt;&amp;&gt;'};
+ruleFixture[111] = {position: 112, type: 'Match', payload: '', proxy: 'REJECT'};
+ruleRequests[1].done({ready: true, rows: ruleFixture}, 'success');
+assert.equal(ruleCells().length, 50);
+assert.equal(ruleCells()[0][0], '1');
+assert.equal(ruleControl('#runtime-rule-count').label, 'Showing 1–50 of 112 matches (112 loaded rules).');
+assert.equal(ruleDocument.getElementById('runtime-rule-type').children.length, 4, 'Rule types are unique');
+ruleEvent('next');
+assert.equal(ruleCells()[0][0], '51');
+assert.deepEqual(ruleCells()[25], ['76', 'RuleSet', '中文-provider', 'Proxy <&>'], 'Decode once and render proxy text safely');
+ruleEvent('next');
+assert.equal(ruleCells().length, 12);
+assert.equal(ruleControl('#runtime-rule-next').disabled, true);
+ruleEvent('prev');
+assert.equal(ruleCells()[0][0], '51');
+function searchRules(query) {
+    ruleControl('#runtime-rule-search').val(query); ruleEvent('search', 'input');
+}
+searchRules('  PROXY <&>  ');
+assert.deepEqual(ruleCells(), [['76', 'RuleSet', '中文-provider', 'Proxy <&>']], 'Search finds rows beyond the first page and matches decoded proxy targets');
+searchRules('中文'); assert.equal(ruleCells()[0][0], '76');
+searchRules('match'); assert.equal(ruleCells()[0][0], '112', 'Rule type is searchable');
+searchRules('site-9'); assert.equal(ruleCells().length, 11, 'Payload search covers all pages');
+ruleControl('#runtime-rule-type').val('Match'); ruleEvent('type', 'change');
+assert.equal(ruleCells()[0][0], 'No matching rules.', 'Text and exact type filters combine');
+assert.equal(ruleControl('#runtime-rule-count').label, 'Showing 0–0 of 0 matches (112 loaded rules).');
+searchRules(''); assert.deepEqual(ruleCells(), [['112', 'Match', '', 'REJECT']]);
+ruleEvent('clear');
+assert.equal(ruleControl('#runtime-rule-type').value, '');
+assert.equal(ruleCells()[0][0], '1');
+searchRules('.*'); assert.equal(ruleCells()[0][0], 'No matching rules.', 'Search treats regular-expression metacharacters literally');
+assert.equal(ruleRequests.length, 2, 'Filtering and paging issue no controller requests');
+activateRules(); assert.equal(ruleRequests.length, 2, 'Tab switches retain the snapshot');
+ruleEvent('clear'); ruleEvent('next'); ruleEvent('next'); ruleEvent('refresh');
+ruleRequests[2].done({ready: false, rows: []}, 'success');
+assert.match(ruleStatus(), /last successful snapshot/);
+assert.equal(ruleCells()[0][0], '101', 'Failure retains the last successful page with a stale warning');
+ruleEvent('refresh');
+ruleRequests[3].done({ready: true, rows: ruleFixture.slice(0, 2)}, 'success');
+assert.equal(ruleCells()[0][0], '1', 'Shrinking snapshots clamp the current page');
+assert.match(ruleStatus(), /Snapshot loaded/);
+ruleControl('#runtime-rule-type').val('DomainSuffix'); ruleEvent('type', 'change'); searchRules('site-1');
+ruleEvent('refresh'); ruleRequests[4].done({ready: true, rows: ruleFixture}, 'success');
+assert.equal(ruleControl('#runtime-rule-type').value, 'DomainSuffix');
+assert.equal(ruleControl('#runtime-rule-search').value, 'site-1', 'Refresh preserves filters');
+ruleEvent('refresh'); ruleRequests[5].done({ready: true, rows: []}, 'success');
+assert.equal(ruleControl('#runtime-rule-type').value, '', 'Removed types fall back to all types');
+assert.equal(ruleControl('#runtime-rule-count').label, 'Showing 0–0 of 0 matches (0 loaded rules).');
+assert.equal(ruleControl('#runtime-rule-prev').disabled, true);
+assert.equal(ruleControl('#runtime-rule-next').disabled, true);
+console.log('Runtime rule search, type filters, full-snapshot paging, safe text, lazy refresh and failures: all checks passed');
+const formatUptime = require('../src/usr/local/www/js/mihomo/ui.js').formatUptime;
+for (const [seconds, expected] of [[0, '00:00:00'], [59, '00:00:59'], [60, '00:01:00'],
+    [3599, '00:59:59'], [3600, '01:00:00'], [90061, '25:01:01'], [360000, '100:00:00']]) {
+    assert.equal(formatUptime(seconds), expected);
+}
+for (const value of [null, undefined, '', '60', -1, 1.5, NaN, Infinity]) {
+    assert.equal(formatUptime(value), null, 'Unknown uptime must not look like a newly started core');
+}
+const timingLabels = new Map(), timingHandlers = {}, timingDocument = {};
+const timingScript = indexView.slice(indexView.indexOf('        let processMemory = null;'),
+    indexView.indexOf('        let storedHistory = []'))
+    .replace(/\{\{[\s\S]*?\}\}/g, '"Unavailable"');
+const timingContext = {
+    document: timingDocument, Date, MihomoUI: {formatUptime}, fmtBytes: String,
+    $: selector => selector === timingDocument
+        ? {on: (event, handler) => { timingHandlers[event] = handler; }}
+        : {text: value => timingLabels.set(selector, value)}
+};
+vm.runInNewContext(timingScript, timingContext);
+const runtimeTiming = (seconds, lastReload = 1700000000) => timingHandlers['mihomo:runtime'](null,
+    {process: {rss: 1024, uptime_seconds: seconds}, last_reload_at: lastReload});
+runtimeTiming(90061);
+assert.equal(timingLabels.get('#stat-uptime'), '25:01:01');
+assert.equal(timingLabels.get('#stat-last-reload'), new Date(1700000000000).toLocaleString());
+runtimeTiming(0, 1700000060);
+assert.equal(timingLabels.get('#stat-uptime'), '00:00:00', 'Restart resets age without retaining the old uptime');
+assert.equal(timingLabels.get('#stat-last-reload'), new Date(1700000060000).toLocaleString());
+timingHandlers['mihomo:runtime'](null, {process: null, last_reload_at: 1700000060});
+assert.equal(timingLabels.get('#stat-uptime'), 'Unavailable', 'Stopped core has no age');
+assert.equal(timingLabels.get('#stat-last-reload'), new Date(1700000060000).toLocaleString(), 'Stopping retains last success');
+for (const value of [null, undefined, 0, -1, '1700000000', '<img src=x>', Number.MAX_SAFE_INTEGER]) {
+    timingHandlers['mihomo:runtime'](null, {process: null, last_reload_at: value});
+    assert.equal(timingLabels.get('#stat-uptime'), 'Unavailable');
+    assert.equal(timingLabels.get('#stat-last-reload'), 'Unavailable');
+}
+// Drive the shared runtime poll's real failure path and its overview event handler.
+const networkView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt'), 'utf8');
+const runtimeRefresh = networkView.match(/    function refresh\(done\) \{[\s\S]*?\n    \}/)[0]
+    .replace(/\{\{[\s\S]*?\}\}/g, '"translated"');
+for (const [data, status] of [[null, 'error'], [{status: 'unavailable'}, 'success']]) {
+    runtimeTiming(90);
+    vm.runInNewContext('let lastDns = 0, dnsPending = false;\n' + runtimeRefresh + '\nrefresh(done);', {
+        Date: {now: () => 0}, document: timingDocument,
+        $root: {find: () => ({prop: () => {}, text: () => {}})},
+        $: () => ({trigger: event => timingHandlers[event]()}),
+        ajaxGet: (url, params, done) => done(data, status), done: ok => assert.equal(!!ok, false)
+    });
+    assert.equal(timingLabels.get('#stat-uptime'), 'Unavailable', 'Failed polls must clear old age');
+    assert.equal(timingLabels.get('#stat-last-reload'), 'Unavailable');
+}
+runtimeTiming(120);
+assert.equal(timingLabels.get('#stat-uptime'), '00:02:00', 'Polling recovery restores timing');
+assert(indexView.includes('id="stat-uptime"') && indexView.includes('id="stat-last-reload"'));
+console.log('Core uptime, reload timestamps, stopped cores, failed polls and recovery: all checks passed');
+// Execute the real overview renderer and request callback for rule-count lifecycle.
+const ruleLabels = new Map();
+const ruleCountRequests = [];
+const ruleContext = {
+    renderClients() {}, renderTrafficTotals() {}, trafficTotals: new UI.TrafficTotals(), latestTotals: null,
+    Date: {now: () => now}, processMemory: null, lastHistorySave: now, lastMetadata: 0,
+    fmtCount: value => Number(value).toLocaleString('en-US'), fmtBytes: String,
+    trafficHistory: {add: () => ({down: null, up: null})}, drawTraffic: () => {},
+    ajaxGet: (url, data, done) => ruleCountRequests.push({data, done}),
+    $: selector => ({
+        text: value => ruleLabels.set(selector, value), data: () => false, val: () => {}
+    })
+};
+const overviewRenderer = indexView.match(/        function renderOverview\(data\) \{[\s\S]*?\n        \}/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInNewContext('function renderModeHint() {}\n' + overviewRenderer + '\n' + overviewFunction, ruleContext);
+const renderRuleCount = (runtime, alive = true) => {
+    ruleContext.data = {runtime: {ready: true, ...runtime}, controller: {alive}};
+    vm.runInNewContext('renderOverview(data);', ruleContext);
+    return ruleLabels.get('#stat-rules');
+};
+assert(indexView.includes('id="stat-rules"'), 'Overview has a visible rule count');
+assert.equal(renderRuleCount({ruleCount: 1234}), '1,234');
+assert.equal(renderRuleCount({}), '1,234', 'Fast polls retain the metadata count');
+assert.equal(renderRuleCount({ruleCount: 0}), '0', 'An empty rules list is a valid zero');
+for (const ruleCount of [null, -1, 1.5, '12', {}, NaN]) {
+    assert.equal(renderRuleCount({ruleCount}), 'Unavailable', 'Unknown or malformed counts must not appear as zero');
+}
+assert.equal(renderRuleCount({ruleCount: 2}), '2', 'A config reload updates the count');
+assert.equal(renderRuleCount({ready: false}), 'Unavailable', 'Lost runtime clears the cached count');
+assert.equal(renderRuleCount({ruleCount: 2}, false), 'Unavailable', 'Stopped controller clears the count');
+assert.equal(renderRuleCount({ruleCount: 4}), '4', 'Controller recovery restores the count');
+vm.runInNewContext('loadOverview();', ruleContext);
+ruleCountRequests.at(-1).done(null, 'error');
+assert.equal(ruleLabels.get('#stat-rules'), 'Unavailable', 'Transport failure clears the cached count');
+now += 2000;
+vm.runInNewContext('loadOverview();', ruleContext);
+assert.equal(ruleCountRequests.at(-1).data.metadata, 1, 'Recovery requests fresh metadata');
+ruleCountRequests.at(-1).done({runtime: {ready: true, ruleCount: 7}, controller: {alive: true}}, 'success');
+assert.equal(ruleLabels.get('#stat-rules'), '7');
+now += 2000;
+vm.runInNewContext('loadOverview();', ruleContext);
+assert.equal(ruleCountRequests.at(-1).data.metadata, 0);
+ruleCountRequests.at(-1).done({runtime: {ready: true}, controller: {alive: true}}, 'success');
+assert.equal(ruleLabels.get('#stat-rules'), '7');
+console.log('Overview rule counts: formatting, zero, unavailable, reload, fast polling and recovery passed');
 // Exercise the actual mode hint, overview renderer and mode-change handler together.
 const translateModeScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
     (_, label) => JSON.stringify(label));
@@ -1362,6 +2091,7 @@ const modeContext = {
     $: modeControl, Date: {now: () => 1000}, processMemory: null,
     fmtCount: String, fmtBytes: String, fmtRate: String,
     trafficHistory: {add: () => ({down: null, up: null})}, drawTraffic: () => {},
+    renderClients: () => {}, // Client rendering is exercised separately below.
     overviewPoller: {refresh: () => { modeRefreshes++; }},
     ajaxCall: (url, data, done) => modeWrites.push({url, data, done}),
     setTimeout: fn => modeTimeouts.push(fn), actionFailed: () => { modeFailures++; },
@@ -1417,9 +2147,26 @@ console.log('Mode hints: all modes, metadata gaps, unknown values, selection, fa
 const renderGroupsScript = indexView.match(/        let renderedGroups = null;[\s\S]*?(?=        let exportingSelections = false;)/)[0]
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 let groupAllocations = 0;
-const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }};
+const pollingDoc = {activeElement: null, createElement(tag) { groupAllocations++; return new DomNode(this, tag); }, createElementNS: doc.createElementNS};
 const pollingBox = pollingDoc.createElement('div');
+let noteHandler;
 let favoriteNotice = '', testsDisabled = false, favoriteHandler, nodeOrderHandler, collapseHandler, testGroupHandler;
+let selectionDisabled = false, selectionRefreshes = 0, selectionFailures = 0, clearedActions = 0;
+const selectionHandlers = {}, selectionRequests = [];
+let testAllDisabled = true, testAllHandler, testProgress = '';
+const noteControls = new Map();
+function noteControl(selector) {
+    if (!noteControls.has(selector)) {
+        const node = pollingDoc.createElement('input');
+        node.focus = () => { pollingDoc.activeElement = node; };
+        noteControls.set(selector, {0: node, value: '', label: '', hidden: true, handlers: {},
+            text(value) { this.label = value; return this; },
+            val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
+            prop(key, value) { this[key] = value; return this; },
+            on(event, handler) { this.handlers[event] = handler; return this; }});
+    }
+    return noteControls.get(selector);
+}
 const dashboardStorage = new Map();
 const dashboardFavorites = new UI.ProxyFavorites(() => ({
     getItem: key => dashboardStorage.get(key) || null,
@@ -1448,6 +2195,10 @@ const groupContext = vm.createContext({
         }
         if (selector instanceof DomNode) {
             return {attr: key => selector.getAttribute(key), closest: target => {
+                if (target === 'li') {
+                    const member = pollingBox.querySelectorAll('li[data-member]').find(node => node.contains(selector));
+                    return {attr: key => member.getAttribute(key)};
+                }
                 assert.equal(target, '.content-box');
                 const card = pollingBox.children[0].children.map(column => column.children[0]).find(node => node.contains(selector));
                 return {find: target => {
@@ -1458,26 +2209,55 @@ const groupContext = vm.createContext({
             }};
         }
         if (selector === '#proxy-favorites-state') { return {text: value => { favoriteNotice = value; }}; }
+        if (selector === '#dashboard-action-state') { return {empty: () => { clearedActions++; }}; }
+        if (selector === '#proxy-groups .cmd-select, #proxy-groups .cmd-reset-group') {
+            return {prop: (key, value) => { assert.equal(key, 'disabled'); selectionDisabled = value; }};
+        }
+        if (selector === '#test-all-groups') {
+            return {prop: (key, value) => { assert.equal(key, 'disabled'); testAllDisabled = value; },
+                on: (event, handler) => { assert.equal(event, 'click'); testAllHandler = handler; }};
+        }
+        if (selector === '#proxy-test-state') { return {text: value => { testProgress = value; }}; }
+        if (selector === '#proxy-groups .cmd-test') {
+            return {each: fn => pollingBox.querySelectorAll('button[data-name]')
+                .filter(node => node.attrs.class.includes(' cmd-test')).forEach(node => fn.call(node))};
+        }
+        if (selector.startsWith('#proxy-note-')) { return noteControl(selector); }
+        if (selector === '#proxy-autoswitch-state') { return {empty() {}}; }
+        if (selector === '#stop-proxy-tests') { return {prop() {}}; }
+        if (selector === '#proxy-health-summary') { return {text() {}}; }
         if (selector === '#proxy-groups .cmd-test, #proxy-groups .cmd-test-group') {
             return {prop: (key, value) => { assert.equal(key, 'disabled'); testsDisabled = value; }};
         }
         assert.equal(selector, '#proxy-groups');
         return {0: pollingBox, on: (event, target, handler) => {
             assert.equal(event, 'click');
-            if (target === '.cmd-collapse-group') { collapseHandler = handler; }
+            if (target === '.cmd-favorite') { favoriteHandler = handler; }
+            else if (target === '.cmd-collapse-group') { collapseHandler = handler; }
             else if (target === '.cmd-test-group') { testGroupHandler = handler; }
-            else { assert.equal(target, '.cmd-favorite'); favoriteHandler = handler; }
+            else if (target === '.cmd-proxy-note') { noteHandler = handler; }
+            else { selectionHandlers[target] = handler; }
         }, html: text => {
             const placeholder = pollingDoc.createElement('placeholder');
             placeholder.textContent = text;
             pollingBox.replaceChildren(placeholder);
         }};
     },
-    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false, nodeOrder: 'config',
+    MihomoUI: UI, favorites: dashboardFavorites, latestGroups: null, testing: false, selecting: false,
+    nodeOrder: 'config', snapshotBusy: false, groupsRevision: 0, cancelAutoSwitch() {},
+    ajaxCall: (url, params, done) => { selectionRequests.push({url, params, done}); },
+    groupsPoller: {refresh: () => { selectionRefreshes++; }},
+    actionFailed: () => { selectionFailures++; },
+    localStorage: {getItem: key => dashboardStorage.get(key) || null, setItem: (key, value) => dashboardStorage.set(key, value)},
     delayText: value => value + ' ms', delayClass: () => 'label-success'
 });
 const collapseStateScript = indexView.match(/        const collapsedGroups = new Set\(\);[^\n]*/)[0];
-vm.runInContext(collapseStateScript + '\n' + renderGroupsScript, groupContext);
+const noteStateScript = indexView.match(/        const proxyNotes = new MihomoUI.ProxyNotes\(\);/)[0];
+// Inject storage explicitly because UI constructors run in Node's context.
+groupContext.MihomoUI = {...UI, ProxyNotes: class extends UI.ProxyNotes {
+    constructor() { super(() => groupContext.localStorage); }
+}};
+vm.runInContext(collapseStateScript + '\n' + noteStateScript + '\n' + renderGroupsScript, groupContext);
 const groupResponse = {ready: true, groups: [{name: 'Group', type: 'Selector', members: [
     {name: 'First', type: 'test', selected: true, delay: 20},
     {name: 'Second', type: 'test', selected: false, delay: 30}
@@ -1499,6 +2279,8 @@ assert.equal(pollingBox.children[0], firstRow);
 assert.equal(pollingDoc.activeElement, focusedButton);
 assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 123);
 for (const change of [
+    () => { groupResponse.groups[0].members[0].delay_history = [10, 20]; },
+    () => { groupResponse.groups[0].members[0].delay_history = [30, 20]; },
     () => { groupResponse.groups[0].members[0].delay = 40; },
     () => { groupResponse.groups[0].members[0].selected = false; groupResponse.groups[0].members[1].selected = true; },
     () => { groupResponse.groups[0].members.reverse(); },
@@ -1554,9 +2336,9 @@ assert.deepEqual(JSON.parse(UI.exportSelections([], capturedAt)), {capturedAt, g
 // is available: the read-only textarea must be sufficient to copy the report.
 const exportScript = indexView.match(/        let exportingSelections = false;[\s\S]*?(?=        let copying = false;)/)[0]
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
-const exportControls = new Map(), exportRequests = [];
-function exportControl(selector) {
-    if (!exportControls.has(selector)) {
+const selectionExportControlsFixture2 = new Map(), exportRequestsFixture3 = [];
+function selectionExportControl(selector) {
+    if (!selectionExportControlsFixture2.has(selector)) {
         const item = {value: '', label: '', handlers: {}, hidden: true, disabled: false, focused: false, selected: false,
             prop(key, value) { this[key] = value; return this; },
             val(value) { this.value = value; return this; },
@@ -1565,27 +2347,27 @@ function exportControl(selector) {
             on(event, handler) { this.handlers[event] = handler; return this; },
             focus() { this.focused = true; }, select() { this.selected = true; }};
         item[0] = item;
-        exportControls.set(selector, item);
+        selectionExportControlsFixture2.set(selector, item);
     }
-    return exportControls.get(selector);
+    return selectionExportControlsFixture2.get(selector);
 }
 vm.runInNewContext(exportScript, {
-    $: exportControl, MihomoUI: UI,
-    ajaxGet: (url, params, done) => exportRequests.push({url, params, done})
+    $: selectionExportControl, MihomoUI: UI,
+    ajaxGet: (url, params, done) => exportRequestsFixture3.push({url, params, done})
 });
-const exportButton = exportControl('#export-selections');
-const exportField = exportControl('#selection-export-text');
-const exportPanel = exportControl('#selection-export-panel');
-const exportState = exportControl('#selection-export-state');
-const exportClick = () => exportButton.handlers.click();
-assert.equal(exportRequests.length, 0, 'Export is strictly on demand');
+const exportButtonFixture4 = selectionExportControl('#export-selections');
+const exportField = selectionExportControl('#selection-export-text');
+const exportPanel = selectionExportControl('#selection-export-panel');
+const exportState = selectionExportControl('#selection-export-state');
+const exportClick = () => exportButtonFixture4.handlers.click();
+assert.equal(exportRequestsFixture3.length, 0, 'Export is strictly on demand');
 exportClick(); exportClick();
-assert.equal(exportRequests.length, 1, 'Repeated clicks must not overlap requests');
-assert.equal(exportRequests[0].url, '/api/mihomo/dashboard/proxies');
-assert.equal(Object.keys(exportRequests[0].params).length, 0);
-assert.equal(exportButton.disabled, true);
-exportRequests[0].done({ready: true, groups: selectionGroups}, 'success');
-assert.equal(exportButton.disabled, false);
+assert.equal(exportRequestsFixture3.length, 1, 'Repeated clicks must not overlap requests');
+assert.equal(exportRequestsFixture3[0].url, '/api/mihomo/dashboard/proxies');
+assert.equal(Object.keys(exportRequestsFixture3[0].params).length, 0);
+assert.equal(exportButtonFixture4.disabled, true);
+exportRequestsFixture3[0].done({ready: true, groups: selectionGroups}, 'success');
+assert.equal(exportButtonFixture4.disabled, false);
 assert.equal(exportPanel.hidden, false);
 assert(exportField.focused && exportField.selected, 'The snippet is ready for manual copy');
 const exportedReport = JSON.parse(exportField.value);
@@ -1597,30 +2379,280 @@ assert.equal(exportField.value.includes('changed since export'), false, 'A repor
 exportClick();
 assert.equal(exportField.value, '', 'A new read clears the previous report');
 assert.equal(exportPanel.hidden, true);
-exportRequests.at(-1).done({ready: true, groups: selectionGroups}, 'success');
+exportRequestsFixture3.at(-1).done({ready: true, groups: selectionGroups}, 'success');
 assert.equal(JSON.parse(exportField.value).groups[0].selected, 'changed since export', 'Each export reads fresh selections');
-exportControl('#selection-export-dismiss').handlers.click();
+selectionExportControl('#selection-export-dismiss').handlers.click();
 assert.equal(exportPanel.hidden, true);
 assert.equal(exportField.value, '');
 assert.equal(exportState.label, '');
-assert.equal(exportButton.focused, true);
+assert.equal(exportButtonFixture4.focused, true);
 for (const [data, status] of [
     [null, 'error'], [{ready: false, groups: selectionGroups}, 'success'],
     [{ready: true, groups: selectionGroups}, 'error'], [{ready: true}, 'success']
 ]) {
     exportClick();
-    exportRequests.at(-1).done(data, status);
-    assert.equal(exportButton.disabled, false, 'A failed read permits retry');
+    exportRequestsFixture3.at(-1).done(data, status);
+    assert.equal(exportButtonFixture4.disabled, false, 'A failed read permits retry');
     assert.equal(exportPanel.hidden, true);
     assert.equal(exportField.value, '', 'Never offer stale data after a failed export');
     assert.equal(exportState.label, 'Could not read current selections. Try exporting again.');
 }
 exportClick();
-exportRequests.at(-1).done({ready: true, groups: []}, 'success');
+exportRequestsFixture3.at(-1).done({ready: true, groups: []}, 'success');
 assert.equal(exportState.label, 'No proxy groups are defined in the configuration.');
 assert.equal(exportPanel.hidden, true);
 assert.match(indexView, /<textarea[^>]*id="selection-export-text"[^>]* readonly[^>]*aria-describedby="selection-export-help"/);
 console.log('Selection export: exact names, all group types, safe fields, fresh reads, manual copy, retry and empty results passed');
+// Named snapshots retain only exact Selector selections, across page instances.
+function memoryStorage() {
+    const values = new Map();
+    return {getItem: key => values.has(key) ? values.get(key) : null, setItem: (key, value) => values.set(key, value)};
+}
+const snapshotStorage = memoryStorage();
+const snapshots = new UI.ProxySnapshots(snapshotStorage);
+const snapshotName = '<Work> & "中文"';
+const snapshotGroups = [
+    {name: encode('__proto__'), type: 'Selector', now: encode('literal &gt; <node>'), members: [{name: encode('literal &gt; <node>')}, {name: 'other'}], secret: 'never-store-this'},
+    {name: encode('中文 / "group"'), type: 'Selector', now: 'DIRECT', members: [{name: 'DIRECT'}, {name: 'other'}]},
+    {name: 'Auto', type: 'URLTest', now: 'fast', members: [{name: 'fast'}]},
+    {name: 'Fallback', type: 'Fallback', now: 'fast', members: [{name: 'fast'}]}
+];
+assert.equal(snapshots.save(' ' + snapshotName + ' ', snapshotGroups), snapshotName);
+const savedSnapshot = new UI.ProxySnapshots(snapshotStorage).read()[0];
+assert.deepEqual(savedSnapshot, {name: snapshotName, selections: [
+    {group: '__proto__', member: 'literal &gt; <node>'}, {group: '中文 / "group"', member: 'DIRECT'}
+]});
+assert(!snapshotStorage.getItem(snapshots.key).includes('never-store-this'));
+assert(!snapshotStorage.getItem(snapshots.key).includes('URLTest'));
+assert.throws(() => snapshots.save(snapshotName, snapshotGroups), /duplicate/);
+assert.throws(() => snapshots.save(' ', snapshotGroups), /name/);
+assert.throws(() => snapshots.save('x'.repeat(81), snapshotGroups), /name/);
+assert.throws(() => snapshots.save('auto only', snapshotGroups.slice(2)), /empty/);
+assert.throws(() => snapshots.save('bad current', [{...snapshotGroups[0], now: 'gone'}]), /groups/);
+assert.throws(() => snapshots.save('malformed', [{}]), /groups/);
+assert.throws(() => snapshots.save('ambiguous', [snapshotGroups[0], snapshotGroups[0]]), /groups/);
+assert.deepEqual(UI.planProxySnapshot(savedSnapshot, snapshotGroups), {changes: [], missing: []});
+const changedGroups = snapshotGroups.map(group => ({...group, now: 'other'}));
+assert.deepEqual(UI.planProxySnapshot(savedSnapshot, changedGroups).changes, [
+    {group: '__proto__', member: 'literal &gt; <node>', previous: 'other'},
+    {group: '中文 / "group"', member: 'DIRECT', previous: 'other'}
+]);
+for (const groups of [changedGroups.slice(1), [{...changedGroups[0], type: 'URLTest'}, ...changedGroups.slice(1)],
+    [{...changedGroups[0], members: [{name: 'other'}]}, ...changedGroups.slice(1)]]) {
+    assert.deepEqual(UI.planProxySnapshot(savedSnapshot, groups).missing, ['__proto__']);
+}
+for (let i = 1; i < 20; i++) { snapshots.save(String(i), snapshotGroups); }
+assert.throws(() => snapshots.save('overflow', snapshotGroups), /limit/);
+snapshots.remove('1'); snapshots.save('replacement', snapshotGroups);
+assert.equal(snapshots.read().length, 20);
+const beforeStorageFailure = snapshots.read();
+const originalSet = snapshotStorage.setItem;
+snapshotStorage.setItem = () => { throw new Error('quota'); };
+assert.throws(() => snapshots.remove(snapshotName), /quota/);
+assert.deepEqual(snapshots.read(), beforeStorageFailure, 'Failed storage writes retain saved snapshots');
+snapshotStorage.setItem = originalSet;
+for (const invalid of ['{', 'null', '[]', '{"version":2,"snapshots":[]}',
+    JSON.stringify({version: 1, snapshots: [{name: 'bad', selections: []}]}),
+    JSON.stringify({version: 1, snapshots: [savedSnapshot, savedSnapshot]})]) {
+    const broken = memoryStorage(); broken.setItem(snapshots.key, invalid);
+    assert.throws(() => new UI.ProxySnapshots(broken).read());
+}
+console.log('Proxy snapshots: persistence, exact names, selectors, validation, limits and storage failures passed');
+
+// Execute actual overview controls, requests, locks and restore sequencing.
+const snapshotScript = indexView.slice(indexView.indexOf('        let testing = false;'), indexView.indexOf('        /*', indexView.indexOf('        function loadGroups(done)')))
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+assert(snapshotScript.includes('proxy-snapshot-restore'), 'The overview must wire snapshot controls');
+function snapshotPage(storage = memoryStorage()) {
+    const items = new Map(), gets = [], posts = [], confirms = [];
+    const document = {hidden: false, addEventListener() {}, createElement: tag => new DomNode(document, tag), getElementById: id => item('#' + id)[0]};
+    function item(selector) {
+        if (typeof selector !== 'string') { return selector; }
+        if (!items.has(selector)) {
+            items.set(selector, {0: document.createElement('select'), value: '', label: '', handlers: {}, disabled: false,
+                val(value) { if (value === undefined) { return this.value; } this.value = value; return this; },
+                text(value) { if (value === undefined) { return this.label; } this.label = value; return this; }, empty() { this.label = ''; return this; },
+                prop(key, value) { this[key] = value; return this; },
+                on(event, selector, fn) { this.handlers[fn ? selector : event] = fn || selector; return this; }});
+        }
+        return items.get(selector);
+    }
+    const page = {item, gets, posts, confirms, refreshes: 0, renders: 0, confirm: true};
+    const context = vm.createContext({document, $: item, MihomoUI: UI, fmtCount: String, updateTestAll() {},
+        window: {addEventListener() {}, get localStorage() { if (!storage) { throw new Error('denied'); } return storage; },
+            confirm: text => { confirms.push(text); return page.confirm; }},
+        ajaxGet: (url, data, done) => gets.push({url, data, done}),
+        ajaxCall: (url, data, done) => posts.push({url, data, done}),
+        groupsPoller: {refresh: () => { page.refreshes++; }}, renderGroups: () => { page.renders++; }, actionFailed: () => {}
+    });
+    vm.runInContext(snapshotScript, context);
+    page.click = action => item('#proxy-snapshot-' + action).handlers.click();
+    page.read = groups => gets.at(-1).done({ready: true, groups}, 'success');
+    page.poll = () => vm.runInContext('loadGroups(() => {});', context);
+    page.state = () => item('#proxy-snapshot-state').label;
+    page.store = new UI.ProxySnapshots(storage);
+    page.context = context;
+    return page;
+}
+const page = snapshotPage();
+assert.equal(page.gets.length + page.posts.length, 0, 'Loading never saves or restores automatically');
+page.item('#proxy-snapshot-name').val(snapshotName);
+page.click('save'); page.click('save');
+assert.equal(page.gets.length, 1, 'Save fetches once and rejects overlapping actions');
+page.read(snapshotGroups);
+assert.equal(page.store.read()[0].name, snapshotName);
+assert.equal(page.item('#proxy-snapshot-list')[0].children[1].textContent, snapshotName, 'Snapshot labels are literal text');
+assert.equal(page.posts.length, 0);
+page.poll(); const stalePoll = page.gets.at(-1);
+page.click('restore');
+stalePoll.done({ready: true, groups: snapshotGroups}, 'success');
+assert.equal(page.renders, 0, 'Old polls cannot render across snapshot operations');
+page.read(changedGroups);
+assert.equal(page.confirms.length, 1);
+assert(page.confirms[0].includes('literal &gt; <node>'));
+assert.equal(page.posts.length, 1, 'Restore issues one selection at a time');
+assert.equal(page.posts[0].url, '/api/mihomo/dashboard/select_proxy');
+assert.deepEqual({...page.posts[0].data}, {group: '__proto__', member: 'literal &gt; <node>'});
+const readsWhileBusy = page.gets.length;
+page.click('save'); page.click('delete'); page.click('restore'); page.poll();
+page.item('#proxy-groups').handlers['.cmd-select'].call({closest: () => ({attr: () => ''})});
+assert.equal(page.gets.length, readsWhileBusy);
+assert.equal(page.posts.length, 1, 'Manual selections cannot interleave with restore');
+page.posts[0].done({status: 'ok'}, 'success');
+assert.equal(page.posts.length, 2);
+page.posts[1].done(null, 'error');
+assert(page.state().includes('1/2'));
+assert(page.state().includes('unconfirmed'));
+assert.equal(page.store.read().length, 1, 'Partial restore does not mutate the snapshot');
+assert(page.refreshes >= 2, 'Completion refreshes current selections');
+page.click('restore'); page.read(changedGroups);
+page.posts[2].done({status: 'failed'}, 'success');
+assert.equal(page.posts.length, 3, 'A rejected write stops the remaining queue');
+assert(page.state().includes('0/2'));
+page.click('restore'); page.read([{...changedGroups[0], now: snapshotGroups[0].now}, ...changedGroups.slice(1)]);
+assert.equal(page.posts.length, 4, 'Already active selections are skipped on retry');
+page.posts[3].done({status: 'ok'}, 'success');
+assert(page.state().includes('1/1'));
+for (const groups of [changedGroups.slice(1), [{...changedGroups[0], type: 'Fallback'}, ...changedGroups.slice(1)],
+    [{...changedGroups[0], members: []}, ...changedGroups.slice(1)]]) {
+    page.click('restore'); page.read(groups);
+    assert(page.state().includes('Restore blocked'));
+    assert.equal(page.posts.length, 4, 'Any incompatible saved selection blocks all writes');
+}
+page.click('restore'); page.read(snapshotGroups);
+assert(page.state().includes('already active'));
+page.confirm = false; page.click('restore'); page.read(changedGroups);
+assert(page.state().includes('cancelled'));
+assert.equal(page.posts.length, 4);
+for (const action of ['save', 'restore']) {
+    page.click(action); page.gets.at(-1).done({ready: false}, 'success');
+    assert(page.state().includes('No changes'));
+    page.click(action); page.gets.at(-1).done(null, 'error');
+    assert(page.state().includes('No changes'));
+}
+const manualButton = {prop() {}, closest: () => ({attr: name => name === 'data-group' ? '__proto__' : 'other'})};
+page.item('#proxy-groups').handlers['.cmd-select'].call(manualButton);
+const readsBeforeSelection = page.gets.length;
+page.click('save'); page.click('restore');
+assert.equal(page.gets.length, readsBeforeSelection, 'Snapshots wait for pending manual selections');
+page.posts.at(-1).done({status: 'ok'}, 'success');
+page.click('delete');
+assert.equal(page.store.read().length, 0);
+const deniedPage = snapshotPage(null);
+assert(deniedPage.state().includes('storage'));
+deniedPage.item('#proxy-snapshot-name').val('Denied'); deniedPage.click('save'); deniedPage.read(snapshotGroups);
+assert(deniedPage.state().includes('storage'));
+assert.equal(deniedPage.posts.length, 0);
+const fullStorage = memoryStorage();
+fullStorage.setItem = () => { throw new Error('quota'); };
+const quotaPage = snapshotPage(fullStorage);
+quotaPage.item('#proxy-snapshot-name').val('Full'); quotaPage.click('save'); quotaPage.read(snapshotGroups);
+assert(quotaPage.state().includes('storage'));
+assert.equal(quotaPage.store.read().length, 0);
+console.log('Proxy snapshot controls: fresh reads, preview/cancel, sequential writes, partial failure, compatibility and request races passed');
+// Client traffic uses the overview snapshot, never the paged connection grid.
+// Run the real load/render path to cover failures, unchanged polls and recovery.
+const clientScript = indexView.match(/        let renderedClients;[\s\S]*?(?=        \/\* -)/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+const clientBox = doc.createElement('div'), clientRequests = [], clientPollResults = [];
+const clientContext = vm.createContext({
+    trafficTotals: new UI.TrafficTotals(), latestTotals: null, renderTrafficTotals() {},
+    document: {getElementById: id => { assert.equal(id, 'client-traffic'); return clientBox; }},
+    $: () => ({text() {}, val() {}, data() { return false; }}),
+    MihomoUI: UI, lastMetadata: 0, lastHistorySave: 0, processMemory: null,
+    fmtCount: String, fmtBytes: UI.formatBytes, fmtRate: String,
+    trafficHistory: {add: () => ({down: null, up: null}), samples: []},
+    drawTraffic() {}, renderModeHint() {}, // Mode hints are exercised separately above.
+    sessionStorage: {setItem() {}},
+    ajaxGet: (url, params, done) => clientRequests.push({url, params, done}),
+    done: ok => clientPollResults.push(ok)
+});
+vm.runInContext(clientScript, clientContext);
+function pollClients(data, status = 'success') {
+    vm.runInContext('loadOverview(done);', clientContext);
+    assert.equal(clientRequests.at(-1).url, '/api/mihomo/dashboard/overview');
+    clientRequests.at(-1).done(data, status);
+}
+const clientResponse = {controller: {alive: true}, runtime: {ready: true, clients: {total: 14, rows: [
+    {source: '2001:db8::1', connections: 2, download: 1536, upload: 1024},
+    {source: '', connections: 1, download: 0, upload: 0},
+    {source: '&lt;img src=x onerror=alert(1)&gt;&amp;amp;', connections: 1, download: 0, upload: 0}
+]}}};
+const clientRows = () => clientBox.children[0].children[2].children.map(row => row.children.map(cell => cell.textContent));
+pollClients(clientResponse);
+assert.equal(clientBox.children[0].tagName, 'table');
+assert.equal(clientBox.children[0].children[0].textContent, 'Clients shown: 3 / 14');
+assert.deepEqual(clientRows(), [
+    ['2001:db8::1', '2', UI.formatBytes(1536), UI.formatBytes(1024)],
+    ['Unknown source', '1', UI.formatBytes(0), UI.formatBytes(0)],
+    ['<img src=x onerror=alert(1)>&amp;', '1', UI.formatBytes(0), UI.formatBytes(0)]
+]);
+assert.equal(clientBox.children[0].children[1].children[0].children[0].attrs.scope, 'col');
+assert.equal(clientBox.children[0].children[2].children[0].children[0].attrs.scope, 'row');
+const retainedClientTable = clientBox.children[0];
+pollClients(JSON.parse(JSON.stringify(clientResponse)));
+assert.equal(clientBox.children[0], retainedClientTable, 'Identical client summaries retain table nodes');
+clientResponse.runtime.clients.rows[0].download = 2048;
+pollClients(clientResponse);
+assert.notEqual(clientBox.children[0], retainedClientTable);
+assert.equal(clientRows()[0][2], UI.formatBytes(2048));
+for (const unavailable of [null, {runtime: {ready: false}}, {runtime: {ready: true}, controller: {alive: false}}]) {
+    pollClients(unavailable);
+    assert.equal(clientBox.children[0].tagName, 'p');
+    assert.equal(clientBox.children[0].textContent, 'Client traffic is unavailable.', 'Failures cannot leave unmarked stale client totals');
+    pollClients(clientResponse);
+    assert.equal(clientBox.children[0].tagName, 'table', 'The same snapshot reappears after recovery');
+}
+pollClients(clientResponse, 'error');
+assert.equal(clientBox.children[0].textContent, 'Client traffic is unavailable.');
+assert.equal(clientPollResults.at(-1), false);
+pollClients({controller: {alive: true}, runtime: {ready: true, clients: {rows: [], total: 0}}});
+assert.equal(clientBox.children[0].textContent, 'No active connections.');
+assert.equal(clientPollResults.at(-1), true);
+pollClients(clientResponse);
+assert.equal(clientBox.children[0].tagName, 'table');
+console.log('Client traffic rendering, active-only totals, unavailable/empty states and overview polling: all checks passed');
+const failedResponse = {ready: true, groups: [{name: encode('<Failed>&'), members: [candidate('node')]}]};
+pollGroups(failedResponse);
+assert.equal(warningBadges(pollingBox)[0].textContent, 'No usable proxies');
+const warnedRow = pollingBox.children[0];
+pollGroups(failedResponse);
+assert.equal(pollingBox.children[0], warnedRow, 'Unchanged warnings do not redraw');
+failedResponse.groups[0].members[0].delay = 12;
+pollGroups(failedResponse);
+assert.equal(warningBadges(pollingBox).length, 0, 'Successful latest test removes the warning');
+failedResponse.groups[0].members[0].delay = 0;
+pollGroups(failedResponse);
+assert.equal(warningBadges(pollingBox).length, 1);
+pollGroups({ready: false});
+assert.equal(warningBadges(pollingBox).length, 0, 'Unavailable controller must not be reported as an empty group');
+pollGroups(failedResponse);
+assert.equal(warningBadges(pollingBox).length, 1, 'Recovery restores the current warning');
+pollGroups({ready: true, groups: []});
+assert.equal(warningBadges(pollingBox).length, 0);
+pollGroups();
+console.log('Empty-group dashboard warnings update on failure, successful tests and controller recovery');
+
 // Favorites store exact decoded names, independently for groups and proxies.
 let savedFavorites = null;
 const favoriteStorage = {
@@ -1845,6 +2877,197 @@ assert.deepEqual(displayedMembers()[0], ['Node 1', 'Node 10'], 'Use refreshed re
 orderBy('name-desc');
 console.log('Last delay sorting: stable, favorites-first, display-only, polling, focus and recovery passed');
 
+// Automatic switching uses only fresh results and never selects direct/reject or
+// a nested policy group. Equal delays keep the current selection.
+const autoGroup = {name: 'Group &amp; &lt;one&gt;', type: 'Selector', members: [
+    {name: 'slow', type: 'Shadowsocks', selected: true, delay: 1},
+    {name: 'fast &amp; &lt;two&gt;', type: 'Trojan', selected: false, delay: 999}
+]};
+const freshDelays = new Map([['slow', 100], ['fast & <two>', 20]]);
+assert.equal(UI.fastestProxy(autoGroup, freshDelays), 'fast & <two>');
+assert.equal(UI.fastestProxy(autoGroup, new Map()), null, 'Cached history cannot nominate a winner');
+assert.equal(UI.fastestProxy(autoGroup, new Map([['slow', 20], ['fast & <two>', 20]])), null);
+for (const invalid of [null, undefined, -1, 0, NaN, Infinity, '10']) {
+    assert.equal(UI.fastestProxy(autoGroup, new Map([['fast & <two>', invalid]])), null);
+}
+assert.equal(UI.fastestProxy(autoGroup, new Map([['slow', -1], ['fast & <two>', 20]])), 'fast & <two>');
+for (const type of ['URLTest', 'Fallback', 'LoadBalance', 'Relay', 'Direct', 'Reject', 'RejectDrop', 'Pass', 'Compatible', 'Selector']) {
+    const group = {...autoGroup, members: [{name: 'alias', type, selected: false}]};
+    assert.equal(UI.fastestProxy(group, new Map([['alias', 1]])), null, type + ' must not be selected');
+    if (type !== 'Selector') { assert.equal(UI.fastestProxy({...autoGroup, type}, freshDelays), null); }
+}
+const reversedTie = {...autoGroup, members: [...autoGroup.members].reverse()};
+assert.equal(UI.fastestProxy(reversedTie, new Map([['slow', 20], ['fast & <two>', 20]])), null);
+
+// Execute the actual dashboard event handlers and async callbacks, with controlled
+// API responses so races are deterministic and do not require an appliance.
+const autoScript = indexView.slice(indexView.indexOf('        let testing = false'),
+    indexView.indexOf('        /* ------------------------------------------------------------------ *', indexView.indexOf('        let testing = false')))
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+function autoHarness() {
+    const nodes = new Map(), calls = [], gets = [], events = {}, errors = [];
+    let refreshes = 0;
+    function node(selector) {
+        if (typeof selector !== 'string') { return selector; }
+        if (!nodes.has(selector)) {
+            nodes.set(selector, {checked: true, handlers: {}, label: '',
+                prop(key, value) { if (value === undefined) { return this[key]; } this[key] = value; return this; },
+                on(event, delegate, handler) { this.handlers[handler ? delegate : event] = handler || delegate; return this; },
+                text(value) { this.label = value; return this; }, empty() { this.label = ''; return this; }});
+        }
+        return nodes.get(selector);
+    }
+    const context = vm.createContext({MihomoUI: UI, latestGroups: {ready: true, groups: [autoGroup]}, favorites: null, nodeOrder: 'config', updateTestAll() {}, $: node,
+        document: {hidden: false, addEventListener: (event, handler) => { events[event] = handler; }},
+        window: {addEventListener: (event, handler) => { events[event] = handler; }},
+        ajaxCall: (url, params, done) => calls.push({url, params, done}),
+        ajaxGet: (url, params, done) => gets.push({url, params, done}),
+        groupsPoller: {refresh: () => { refreshes++; }}, actionFailed: result => errors.push(result)});
+    vm.runInContext(autoScript, context);
+    const toggle = enabled => { node('#proxy-autoswitch').checked = enabled; node('#proxy-autoswitch').handlers.change(); };
+    const start = (groupName = 'Group & <one>') => {
+        context.testGroupName = groupName;
+        vm.runInContext('testNodes(["slow", "fast & <two>"], testGroupName);', context);
+    };
+    const completeTests = () => calls.filter(call => call.url.endsWith('test_delay'))
+        .forEach(call => call.done({status: 'ok', delay: freshDelays.get(call.params.name)}, 'success'));
+    const validate = (groups = [autoGroup], status = 'success', ready = true) => gets.at(-1).done({ready, groups}, status);
+    const writes = () => calls.filter(call => call.url.endsWith('select_proxy'));
+    const manual = () => node('#proxy-groups').handlers['.cmd-select'].call({closest: () => ({attr: key => key === 'data-group' ? 'Group & <one>' : 'slow'})});
+    return {node, calls, gets, events, context, errors, toggle, start, completeTests, validate, writes, manual, refreshes: () => refreshes};
+}
+assert(!/id="proxy-autoswitch"[^>]*\bchecked\b/.test(indexView), 'HTML must default off');
+let auto = autoHarness();
+assert.equal(auto.node('#proxy-autoswitch').checked, false, 'Even restored browser form state defaults off');
+auto.start(); auto.completeTests();
+assert.equal(auto.gets.length, 0); assert.equal(auto.writes().length, 0); assert.equal(auto.refreshes(), 1);
+auto = autoHarness(); auto.toggle(true); auto.start(); auto.start();
+assert.equal(auto.calls.length, 2, 'Repeated clicks cannot overlap a test run');
+auto.completeTests();
+assert.equal(auto.gets.length, 1); assert.equal(auto.writes().length, 0, 'Revalidate before writing');
+auto.start(); assert.equal(auto.calls.length, 2, 'Validation remains part of the busy operation');
+auto.validate();
+assert.equal(auto.writes().length, 1);
+assert.deepEqual(JSON.parse(JSON.stringify(auto.writes()[0].params)), {group: 'Group & <one>', member: 'fast & <two>'});
+auto.manual(); auto.start(); assert.equal(auto.writes().length, 1, 'No competing writes while automatic selection is in flight');
+auto.writes()[0].done({status: 'ok'}, 'success');
+assert(auto.node('#proxy-autoswitch-state').label.includes('Group & <one> → fast & <two>'));
+assert.equal(auto.refreshes(), 1);
+assert.equal(auto.node('#proxy-groups .cmd-select').disabled, false);
+
+for (const cancel of [
+    h => { h.toggle(false); h.toggle(true); },
+    h => { h.context.document.hidden = true; h.events.visibilitychange(); h.context.document.hidden = false; },
+    h => h.events.pagehide(),
+    h => { h.manual(); h.writes()[0].done({status: 'ok'}, 'success'); }
+]) {
+    for (const duringValidation of [false, true]) {
+        const h = autoHarness(); h.toggle(true); h.start();
+        if (duringValidation) { h.completeTests(); }
+        cancel(h);
+        if (duringValidation) { h.validate(); } else { h.completeTests(); }
+        assert(h.writes().every(call => call.params.member === 'slow'), 'Cancellation must suppress the automatic write');
+        assert(h.node('#proxy-autoswitch-state').label.includes('skipped'));
+    }
+}
+for (const response of [
+    [], [{...autoGroup, type: 'URLTest'}],
+    [{...autoGroup, members: autoGroup.members.slice(0, 1)}],
+    [{...autoGroup, members: autoGroup.members.map(member => ({...member, selected: !member.selected}))}]
+]) {
+    const h = autoHarness(); h.toggle(true); h.start(); h.completeTests(); h.validate(response);
+    assert.equal(h.writes().length, 0, 'Changed group state must cancel');
+    assert.equal(h.refreshes(), 1);
+}
+for (const [status, ready] of [['error', true], ['success', false]]) {
+    const h = autoHarness(); h.toggle(true); h.start(); h.completeTests(); h.validate([autoGroup], status, ready);
+    assert.equal(h.writes().length, 0);
+}
+auto = autoHarness(); auto.toggle(true); auto.start();
+auto.calls.forEach(call => call.done({status: 'failed', delay: 10}, 'success'));
+assert.equal(auto.gets.length, 0); assert.equal(auto.writes().length, 0, 'No winner on failed probes');
+auto = autoHarness(); auto.start(); auto.toggle(true); auto.completeTests();
+assert.equal(auto.gets.length, 0, 'Opting in mid-run cannot authorize a switch');
+auto = autoHarness(); auto.toggle(true); auto.start(null); auto.completeTests();
+assert.equal(auto.gets.length, 0, 'Individual node tests never switch groups');
+auto = autoHarness(); auto.toggle(true);
+auto.context.latestGroups = {ready: true, groups: [{...autoGroup, type: 'URLTest'}]};
+auto.start(); auto.completeTests(); assert.equal(auto.gets.length, 0);
+auto = autoHarness(); auto.toggle(true); auto.start(); auto.completeTests(); auto.validate();
+auto.writes()[0].done({status: 'failed'}, 'success');
+assert.equal(auto.errors.length, 1); assert.equal(auto.refreshes(), 1);
+assert.equal(auto.writes().length, 1, 'Failed writes are reported without retry');
+assert.equal(auto.node('#proxy-autoswitch-state').label, '', 'Failed writes must not claim a switch');
+// Real delegated group button carries the group name, not just the test names.
+auto = autoHarness(); auto.toggle(true);
+auto.node('#proxy-groups').handlers['.cmd-test-group'].call({
+    attr: () => 'Group & <one>',
+    closest: () => ({find: () => ({each: callback => ['slow', 'fast & <two>', 'slow'].forEach(name => callback.call({attr: () => name}))})})
+});
+assert.equal(auto.calls.length, 2, 'Group probes are deduplicated');
+auto.completeTests(); auto.validate(); assert.equal(auto.writes().length, 1);
+console.log('Experimental automatic switching: default-off, fresh minimum, exclusions, ties, cancellation, revalidation and failures passed');
+
+// An explicit reset clears a core override; sorting/favorites never supply a target member.
+const resetName = ' 中文 /?%#" <tag> &gt; ';
+const resetResponse = {ready: true, groups: [
+    {name: encode(resetName), type: 'URLTest', canReset: true, members: [{name: 'First'}, {name: 'Pinned', selected: true}]},
+    {name: 'Fallback', type: 'Fallback', canReset: true, members: [{name: 'Pinned', selected: true}]},
+    {name: 'Automatic', type: 'URLTest', canReset: false, members: [{name: 'First', selected: true}]},
+    {name: 'Selector', type: 'Selector', canReset: false, members: [{name: 'First', selected: true}]},
+    {name: 'Legacy', type: 'URLTest', members: [{name: 'First', selected: true}]}
+]};
+pollGroups(resetResponse);
+const resetButtons = () => pollingBox.querySelectorAll('button[data-group]').filter(node => node.attrs.class.includes('cmd-reset-group'));
+const selectButtons = () => pollingBox.querySelectorAll('button[data-focus-key]').filter(node => node.attrs.class.includes('cmd-select'));
+assert.deepEqual(resetButtons().map(node => node.attrs['data-group']), [resetName, 'Fallback']);
+assert.equal(resetButtons()[0].attrs['aria-label'], 'Resume automatic selection: ' + resetName);
+assert.equal(resetButtons()[0].attrs.type, 'button');
+assert.equal(resetButtons()[0].textContent, 'Resume automatic selection');
+assert(!Object.hasOwn(resetButtons()[0].attrs, 'data-unexpected'));
+const resetActionScript = indexView.match(/        function changeSelection\(action, params\) \{[\s\S]*?(?=\n        function loadGroups)/)[0];
+vm.runInContext(resetActionScript, groupContext);
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+assert.equal(selectionRequests.length, 1);
+assert.equal(selectionRequests[0].url, '/api/mihomo/dashboard/reset_proxy');
+assert.deepEqual(JSON.parse(JSON.stringify(selectionRequests[0].params)), {group: resetName});
+assert(selectionDisabled);
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+selectionHandlers['.cmd-select'].call(selectButtons()[0]);
+assert.equal(selectionRequests.length, 1, 'Pending reset blocks repeated resets and competing manual selection');
+resetResponse.groups[0].members[0].delay = 10;
+selectionDisabled = false;
+pollGroups(resetResponse);
+assert(selectionDisabled, 'A polling redraw keeps selection controls disabled while reset is pending');
+const beforeResetSelection = selectedNames();
+selectionRequests[0].done({status: 'failed', message: 'Core rejected reset'}, 'success');
+assert(!selectionDisabled);
+assert.equal(selectionFailures, 1);
+assert.equal(selectionRefreshes, 0);
+assert.deepEqual(selectedNames(), beforeResetSelection, 'Failed reset never fabricates a selection');
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+selectionRequests[1].done(null, 'error');
+assert.equal(selectionFailures, 2, 'Transport failure is visible and retryable');
+assert(!selectionDisabled);
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+selectionRequests[2].done({status: 'ok'}, 'success');
+assert.equal(selectionRefreshes, 1, 'Successful reset fetches the core-selected member');
+assert.equal(clearedActions, 1);
+assert(!selectionDisabled);
+assert.deepEqual(selectedNames(), beforeResetSelection, 'Reset does not guess the first or fastest member');
+resetResponse.groups[0].canReset = false;
+pollGroups(resetResponse);
+assert.deepEqual(resetButtons().map(node => node.attrs['data-group']), ['Fallback'], 'Cleared overrides disappear after refresh');
+selectionHandlers['.cmd-select'].call(selectButtons().find(button => pollingBox.querySelectorAll('li[data-member]')
+    .some(node => node.attrs['data-member'] === 'First' && node.contains(button))));
+assert.equal(selectionRequests[3].url, '/api/mihomo/dashboard/select_proxy');
+assert.deepEqual(JSON.parse(JSON.stringify(selectionRequests[3].params)), {group: resetName, member: 'First'});
+selectionHandlers['.cmd-reset-group'].call(resetButtons()[0]);
+assert.equal(selectionRequests.length, 4, 'Pending manual selection also blocks reset');
+selectionRequests[3].done({status: 'ok'}, 'success');
+assert.equal(selectionRefreshes, 2);
+console.log('Automatic selection reset: eligibility, safe names, pending redraws, failures, retry and refresh passed');
+
 // Exercise the real collapse handler and renderer. No API or storage is available
 // to this handler: folding cards must be a purely local display operation.
 const collapseClickScript = indexView.match(/        \$\('#proxy-groups'\)\.on\('click', '\.cmd-collapse-group',[\s\S]*?\n        \}\);/)[0];
@@ -1942,7 +3165,7 @@ const wholeGroup = pollingBox.querySelectorAll('button[data-group]').find(button
 nodeOrderHandler.call({value: 'name-asc'});
 dashboardFavorites.toggle('proxies', 'Other');
 testGroupHandler.call(wholeGroup);
-assert.deepEqual(foldedTestNames, ['Other', 'literal &gt;', 'ZA [a.*]', 'ZA & Zurich', '中文节点'],
+assert.deepEqual(foldedTestNames, ['Other', ...['literal &gt;', 'ZA [a.*]', 'ZA & Zurich', '中文节点'].sort(new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'}).compare)],
     'Filtered groups still probe every exact name in prior natural/favorite order');
 for (const mode of ['delay-asc', 'delay-desc']) {
     nodeOrderHandler.call({value: mode});
@@ -2007,6 +3230,9 @@ vm.runInNewContext(countFunction + connectionScript, {
             return {text: value => { visibleConnectionCount = value; }};
         }
         if (selector === '[data-toggle="tooltip"]') { return {tooltip: () => {}}; }
+        if (selector === '#grid-connections tbody .cmd-close-connection') { return {each() {}}; }
+        if (selector.startsWith('#close-')) { return {prop() {}, on() {}}; }
+        if (selector === '#connection-search-scope') { return {change() {}}; }
         assert(['.cmd-close-connection', '.cmd-connection-details'].includes(selector));
         return {off() { return this; }, on() { return this; }};
     }
@@ -2060,9 +3286,9 @@ for (const rule of [null, {}, {source: '', destination: 'any'}, {source: 'any'},
 
 // Execute the shared view, including rendering, clipboard promises and refreshes.
 // The fixture never parses dynamic HTML and never talks to a real clipboard/API.
-const networkView = fs.readFileSync(require('node:path').join(__dirname,
+const networkViewFixture5 = fs.readFileSync(require('node:path').join(__dirname,
     '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt'), 'utf8');
-const networkScript = networkView.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
+const networkScript = networkViewFixture5.match(/<script>\s*([\s\S]*?)<\/script>/)[1]
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label))
     .replace(/\{\{ network_id \| json_encode \}\}/g, '"test-network"');
 class NetworkNode {
@@ -2119,7 +3345,7 @@ async function testRuleCopy() {
     assert(first.markup.includes('type="button"'), 'Native buttons support keyboard activation');
     assert.equal(first.attrs['aria-label'], 'Copy match: ' + match);
     assert.equal(nodes.get('.network-details-body').children[0].children[3].label, '! 192.0.2.0/24 port = { 80, 443 }');
-    assert(networkView.includes('class="network-copy-state text-muted" role="status" aria-live="polite"'));
+    assert(networkViewFixture5.includes('class="network-copy-state text-muted" role="status" aria-live="polite"'));
     let finishCopy;
     clipboard.writeText = value => { copied.push(value); return new Promise(resolve => { finishCopy = resolve; }); };
     const pending = first.handler.call(first);
@@ -2313,6 +3539,7 @@ const summaryHandler = indexView.match(/        function loadGroups\(done\) \{[\
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, msg) => JSON.stringify(msg));
 let summaryStatus = 'Loading …', summaryWrites = 0, groupWrites = 0, summaryRequests = 0, saidDone;
 const summaryContext = vm.createContext({
+    selecting: false, snapshotBusy: false, groupsRevision: 0, autoTestEnabled: false, updateTestAll() {},
     testing: false, MihomoUI: UI, fmtCount: String,
     ajaxGet(path, args, done) {
         assert.equal(path, '/api/mihomo/dashboard/proxies');
@@ -2364,6 +3591,7 @@ console.log('Proxy latency summary: deduplication, unknown values, failed reads,
 // Hide is only a projection of the existing full snapshot and exact display names.
 {
     const hiddenDoc = {activeElement: null, createElement(tag) { return new DomNode(this, tag); }};
+    hiddenDoc.createElementNS = (_, tag) => hiddenDoc.createElement(tag);
     const hiddenBox = hiddenDoc.createElement('div');
     const exactHiddenName = 'Alpha &gt; <visible> 中文"';
     const fixtureNode = (name, selected = false, delay = 20) =>
@@ -2391,6 +3619,7 @@ console.log('Proxy latency summary: deduplication, unknown values, failed reads,
     };
     let hiddenProbes, hiddenNetwork = 0;
     const hiddenVM = vm.createContext({
+        proxyNotes: null, selecting: false,
         $: selector => {
             if (selector === '#proxy-groups') {
                 return {0: hiddenBox, on: (event, target, handler) => { assert.equal(event, 'click'); hideHandlers.set(target, handler); },
@@ -2469,6 +3698,7 @@ function probeControl(selector) {
     if (typeof selector !== 'string') { return selector; }
     if (!probeControls.has(selector)) {
         probeControls.set(selector, {disabled: true, label: '',
+            empty() { this.label = ''; return this; },
             prop(key, value) { this[key] = value; return this; },
             text(value) { this.label = value; return this; },
             on(event, handler) { assert.equal(event, 'click'); this.click = handler; return this; }});
@@ -2476,6 +3706,8 @@ function probeControl(selector) {
     return probeControls.get(selector);
 }
 const probeContext = vm.createContext({
+    selecting: false, snapshotBusy: false, autoSwitchGeneration: 0, $autoSwitch: {prop: () => false},
+    updateTestAll() {}, cancelAutoSwitch() {},
     $: probeControl, MihomoUI: UI,
     ajaxCall: (url, data, done) => {
         assert.equal(url, '/api/mihomo/dashboard/test_delay');
@@ -2483,7 +3715,7 @@ const probeContext = vm.createContext({
     },
     groupsPoller: {refresh() { probeRefreshes++; }}
 });
-const probeScript = indexView.match(/        function testNodes\(names\) \{[\s\S]*?(?=        \$\('#proxy-groups'\)\.on\('click', '\.cmd-test',)/)[0]
+const probeScript = indexView.match(/        function testNodes\(names(?:,[^)]*)?\) \{[\s\S]*?(?=        \$\('#proxy-groups'\)\.on\('click', '\.cmd-test',)/)[0]
     .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
 vm.runInContext('let testing = false; let latencyBatch = null;\n' + probeScript, probeContext);
 const stopProbes = probeControl('#stop-proxy-tests');
@@ -2531,3 +3763,350 @@ probeRequests[5].done(null, 'timeout');
 assert.equal(probeStatus.label, 'Latency tests: 1/1 · Failed: 1 · Skipped: 0 · Tests stopped.');
 assert.equal(probeRefreshes, 3);
 console.log('Latency test stopping: queued work, active drain, counts, failures, duplicates, restart and dashboard controls passed');
+
+// Run the real connection controls against rendered-page and delayed-request fixtures.
+// Rows outside the current page/search never enter the DOM selection.
+const connectionView = fs.readFileSync(require('node:path').join(__dirname,
+    '../src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt'), 'utf8');
+const visibleConnectionScript = connectionView.slice(connectionView.indexOf('        let closingVisible'),
+    connectionView.indexOf('        gTrafficChart ='))
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+assert(visibleConnectionScript.includes('close-visible-connections'), 'The visible-close feature must be present');
+assert.match(connectionView, /id="close-visible-connections"[^>]* disabled>/, 'Disabled before the first load');
+const connectionControls = new Map(), closeRequests = [], confirmations = [];
+let pageButtons = [], reloads = 0, overviewRefreshes = 0, failures = 0, gridOptions;
+class ConnectionControl {
+    constructor(id) { this.id = id; this.handlers = {}; this.disabled = false; this.label = ''; }
+    on(event, handler) { this.handlers[event] = handler; return this; }
+    off(event) { delete this.handlers[event]; return this; }
+    click(handler) { return this.on('click', handler); }
+    change(handler) { return this.on('change', handler); }
+    prop(key, value) { this[key] = value; return this; }
+    attr(key) { assert.equal(key, 'data-id'); return this.id; }
+    text(value) { this.label = value; return this; }
+    empty() { this.label = ''; return this; }
+    tooltip() { return this; }
+    UIBootgrid(options) { gridOptions = options; return this; }
+    bootgrid(action) {
+        if (action === 'getCurrentRows') { return pageButtons; }
+        assert.equal(action, 'reload'); reloads++;
+        this.handlers['load.rs.jquery.bootgrid']();
+        return this;
+    }
+}
+function connectionControl(selector) {
+    if (selector instanceof ConnectionControl) { return selector; }
+    if (selector === '#grid-connections tbody .cmd-close-connection') {
+        return {each(fn) { pageButtons.forEach(button => fn.call(button)); }};
+    }
+    if (selector === '.cmd-close-connection' || selector === '#close-all-connections, #grid-connections .cmd-close-connection') {
+        const nodes = selector.startsWith('#close-all') ? [connectionControl('#close-all-connections'), ...pageButtons] : pageButtons;
+        return {
+            prop(key, value) { nodes.forEach(node => node.prop(key, value)); return this; },
+            off(event) { nodes.forEach(node => node.off(event)); return this; },
+            on(event, fn) { nodes.forEach(node => node.on(event, fn)); return this; }
+        };
+    }
+    if (!connectionControls.has(selector)) { connectionControls.set(selector, new ConnectionControl()); }
+    return connectionControls.get(selector);
+}
+vm.runInNewContext(visibleConnectionScript, {
+    connectionsReady: false, fmtCount: String, connectionAddressCell() {},
+    $: connectionControl, MihomoUI: UI, fmtBytes: UI.formatBytes,
+    BootstrapDialog: {TYPE_WARNING: 'warning', confirm: options => confirmations.push(options)},
+    ajaxCall: (url, data, done) => closeRequests.push({url, data, done}),
+    overviewPoller: {refresh: () => overviewRefreshes++}, actionFailed: () => failures++
+});
+const connectionGridFixture6 = connectionControl('#grid-connections');
+const visibleClose = connectionControl('#close-visible-connections');
+const allClose = connectionControl('#close-all-connections');
+function loadConnectionPage(ids) {
+    connectionGridFixture6.handlers['load.rs.jquery.bootgrid']();
+    assert.equal(visibleClose.disabled, true);
+    pageButtons = ids.map(id => new ConnectionControl(id));
+    connectionGridFixture6.handlers['loaded.rs.jquery.bootgrid']();
+}
+const clickVisible = () => visibleClose.handlers.click();
+clickVisible();
+assert.equal(confirmations.length, 0, 'No action before loading');
+loadConnectionPage([]); clickVisible();
+loadConnectionPage(['', ' \t ', '\0', '\0 \0', undefined, null]); clickVisible();
+assert.equal(visibleClose.disabled, true);
+assert.equal(confirmations.length, 0, 'Empty/invalid IDs must never invoke close-all');
+loadConnectionPage(['one']); clickVisible();
+assert.equal(allClose.disabled, true, 'Other close controls are disabled during confirmation');
+confirmations.at(-1).callback(false);
+assert.equal(closeRequests.length, 0, 'Cancellation sends no requests');
+assert.equal(visibleClose.disabled, false);
+assert.equal(allClose.disabled, false);
+
+const targets = ['one', 'two', 'three', 'four', 'five'];
+loadConnectionPage([...targets, 'one', '', '  ', undefined]);
+clickVisible();
+assert(confirmations.at(-1).message.includes('Close 5 connections'), 'Confirmation counts unique valid IDs');
+clickVisible(); allClose.handlers.click(); pageButtons[0].handlers.click.call(pageButtons[0]);
+assert.equal(confirmations.length, 2, 'Repeated clicks cannot open a second batch');
+assert.equal(closeRequests.length, 0, 'No writes before confirmation, including other close controls');
+// Search/page changes and new arrivals while the modal is open must not alter its snapshot.
+loadConnectionPage(['other-page', 'new-arrival']);
+assert.equal(visibleClose.disabled, true);
+assert(pageButtons.every(button => button.disabled));
+confirmations.at(-1).callback(true);
+assert.equal(closeRequests.length, 3, 'Bounded concurrency starts three requests');
+assert.equal(connectionControl('#close-visible-state').label, 'Close requests completed: 0/5; failed or unconfirmed: 0.');
+closeRequests[1].done({status: 'failed'}, 'success'); // Already gone or controller failure.
+assert.equal(closeRequests.length, 4, 'A failed request frees its slot');
+closeRequests[0].done(null, 'error');
+assert.equal(closeRequests.length, 5);
+loadConnectionPage(['yet-another-page']);
+assert.equal(visibleClose.disabled, true, 'Loaded events cannot re-enable an active batch');
+closeRequests[2].done({status: 'ok'}, 'success');
+closeRequests[3].done({status: 'ok'}, 'success');
+assert.equal(reloads, 0, 'Do not reload for each result');
+closeRequests[4].done({status: 'ok'}, 'success');
+assert.deepEqual(closeRequests.map(request => request.data.id), targets,
+    'Only the original visible page is closed, once per ID');
+assert(closeRequests.every(request => request.url === '/api/mihomo/dashboard/close_connection' && request.data.id.trim() !== ''));
+assert.equal(connectionControl('#close-visible-state').label, 'Close requests completed: 5/5; failed or unconfirmed: 2.');
+assert.equal(reloads, 1); assert.equal(overviewRefreshes, 1);
+assert.equal(visibleClose.disabled, true, 'Wait for the refreshed table before allowing another batch');
+loadConnectionPage([]);
+assert.equal(visibleClose.disabled, true);
+loadConnectionPage(['remaining']);
+assert.equal(visibleClose.disabled, false, 'Controls recover after partial failure');
+pageButtons[0].handlers.click.call(pageButtons[0]);
+assert.equal(closeRequests.at(-1).data.id, 'remaining', 'Existing single-close still works');
+closeRequests.at(-1).done({status: 'ok'}, 'success');
+loadConnectionPage(['remaining']);
+allClose.handlers.click();
+assert.equal(closeRequests.at(-1).data.id, '', 'Only explicit Close all uses the empty ID');
+closeRequests.at(-1).done({status: 'failed'}, 'success');
+assert.equal(failures, 1);
+assert.equal(gridOptions.search, '/api/mihomo/dashboard/connections');
+console.log('Close visible: page snapshot, confirmation/cancel, empty IDs, deduplication, bounded requests, partial failure and recovery passed');
+
+// Run the actual manual batch action and existing bounded queue against the
+// rendered cards. No selection/mode endpoint is allowed by this fixture.
+const translateScript = script => script.replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g,
+    (_, label) => JSON.stringify(label));
+const allClickScript = indexView.match(/        \$\('#test-all-groups'\)\.on\('click',[\s\S]*?\n        \}\);/)[0];
+const testNodesScript = indexView.match(/        function testNodes\(names(?:,[^)]*)?\) \{[\s\S]*?\n        \}/)[0];
+const loadGroupsScript = indexView.match(/        function loadGroups\(done\) \{[\s\S]*?\n        \}/)[0];
+const probes = [], groupReads = [];
+Object.assign(groupContext, {$autoSwitch: {prop: () => false}, autoSwitchGeneration: 0, autoTestEnabled: false});
+let batchRefreshes = 0;
+groupContext.ajaxCall = (url, params, done) => {
+    assert.equal(url, '/api/mihomo/dashboard/test_delay');
+    probes.push({name: params.name, done});
+};
+groupContext.ajaxGet = (url, params, done) => {
+    assert.equal(url, '/api/mihomo/dashboard/proxies');
+    groupReads.push(done);
+};
+groupContext.groupsPoller = {refresh: () => { batchRefreshes++; }};
+vm.runInContext(translateScript(testNodesScript + allClickScript + loadGroupsScript), groupContext);
+assert.match(indexView, /<button[^>]*type="button"[^>]*id="test-all-groups"[^>]*disabled/,
+    'Native keyboard-accessible control starts disabled before groups load');
+for (const response of [{ready: false}, {ready: true, groups: []},
+    {ready: true, groups: [{name: 'Empty', members: []}, {name: 'Missing members'}]}]) {
+    pollGroups(response);
+    assert.equal(testAllDisabled, true);
+    testAllHandler();
+    assert.equal(probes.length, 0);
+}
+orderBy('config');
+const batchNames = [...names, '__proto__', 'literal &gt;'];
+const batchResponse = {ready: true, groups: [
+    {name: foldNames[1], members: batchNames.map(name => ({name: encode(name), selected: true}))},
+    {name: 'Shared', members: [{name: encode(batchNames[0])}, {name: encode(batchNames[1])}]}
+]};
+const originalBatch = JSON.stringify(batchResponse);
+pollGroups(batchResponse);
+assert.equal(testAllDisabled, false);
+assert.equal(probes.length, 0, 'Loading groups never starts a batch automatically');
+assert.equal(groupList(foldNames[1]).getAttribute('hidden'), '', 'Collapsed groups participate');
+testAllHandler();
+assert.equal(probes.length, 3, 'At most three probes start concurrently');
+assert.equal(testProgress, `Latency tests: 0/${batchNames.length} · Failed: 0`);
+assert.equal(testAllDisabled, true);
+assert.equal(testsDisabled, true);
+testAllHandler();
+vm.runInContext("testNodes(['overlapping single/group test']);", groupContext);
+assert.equal(probes.length, 3, 'Repeat clicks and per-group tests cannot overlap the batch');
+vm.runInContext('loadGroups(function () {});', groupContext);
+assert.equal(groupReads.length, 0, 'Polling does not interrupt a running batch');
+fold(foldNames[1]);
+assert.equal(testAllDisabled, true, 'Redraws retain the disabled batch control');
+assert.equal(testsDisabled, true);
+probes[1].done(null, 'error');
+assert.equal(probes.length, 4, 'A failure releases a queue slot');
+probes[1].done({status: 'ok'}, 'success');
+assert.equal(probes.length, 4, 'Repeated callbacks do not advance the queue');
+probes[0].done({status: 'error'}, 'success');
+probes[2].done({status: 'ok'}, 'success');
+for (let i = 3; i < batchNames.length; i++) { probes[i].done({status: 'ok'}, 'success'); }
+assert.deepEqual(probes.map(probe => probe.name), batchNames, 'Exact decoded names are deduplicated across cards');
+assert.equal(testProgress, `Latency tests: ${batchNames.length}/${batchNames.length} · Failed: 2`);
+assert.equal(batchRefreshes, 1, 'Refresh results once after all probes settle');
+assert.equal(testAllDisabled, false);
+assert.equal(testsDisabled, false);
+assert.equal(JSON.stringify(batchResponse), originalBatch, 'Selections and API data remain unchanged');
+vm.runInContext('loadGroups(function () {});', groupContext);
+groupReads.pop()(null, 'error');
+assert.equal(testAllDisabled, true, 'Failed reads disable batch probes of stale cards');
+testAllHandler();
+assert.equal(probes.length, batchNames.length);
+vm.runInContext('loadGroups(function () {});', groupContext);
+groupReads.pop()(batchResponse, 'success');
+assert.equal(testAllDisabled, false, 'An unchanged successful recovery re-enables the action');
+testAllHandler();
+assert.equal(probes.length, batchNames.length + 3, 'Completed batches can be retried');
+for (let i = batchNames.length; i < batchNames.length * 2; i++) { probes[i].done({status: 'ok'}, 'success'); }
+assert.equal(testProgress, `Latency tests: ${batchNames.length}/${batchNames.length} · Failed: 0`, 'Retry resets aggregate progress');
+assert.equal(batchRefreshes, 2);
+console.log('Test all groups: manual-only, empty/unavailable states, collapsed/shared nodes, exact names, bounded concurrency, overlap prevention, progress, failures and recovery passed');
+
+// Notes persist literal, exact names and plain text, not HTML or decoded entities.
+let savedNotes = null, noteWrites = 0;
+const noteStorage = {
+    getItem(key) { assert.equal(key, 'mihomo.proxy-notes.v1'); return savedNotes; },
+    setItem(key, value) { assert.equal(key, 'mihomo.proxy-notes.v1'); noteWrites++; savedNotes = value; }
+};
+const notes = new UI.ProxyNotes(() => noteStorage);
+const noteNames = [...names, '__proto__', 'constructor', 'literal &gt;', 'Literal &gt;'];
+const literalNote = '<img src=x onerror=alert(1)> &amp; 中文 📝';
+for (const name of noteNames) {
+    assert.equal(notes.get(name), '');
+    assert.equal(notes.set(name, literalNote), 'saved');
+}
+let reloadedNotes = new UI.ProxyNotes(() => noteStorage);
+assert(noteNames.every(name => reloadedNotes.get(name) === literalNote));
+assert.equal(reloadedNotes.get('literal >'), '', 'Do not decode local names twice');
+assert.equal(reloadedNotes.set('literal &gt;', ' edited '), 'saved');
+assert.equal(reloadedNotes.get('literal &gt;'), 'edited');
+assert.equal(reloadedNotes.get('Literal &gt;'), literalNote, 'Names are case-sensitive');
+assert.equal(reloadedNotes.set('__proto__', '  '), 'saved');
+assert.equal(new UI.ProxyNotes(() => noteStorage).get('__proto__'), '', 'Empty notes remove persisted entries');
+assert.equal(reloadedNotes.set('boundary', '中'.repeat(160)), 'saved');
+const beforeInvalid = noteWrites;
+for (const value of ['x'.repeat(161), null, 42, {}]) {
+    assert.equal(reloadedNotes.set('boundary', value), 'invalid');
+}
+assert.equal(noteWrites, beforeInvalid, 'Invalid edits must not overwrite storage');
+assert.equal(reloadedNotes.get('boundary'), '中'.repeat(160));
+for (const corrupt of ['{', 'null', '42', '{}', '[null,3,{},["wrong",4],[3,"wrong"],["long","' + 'x'.repeat(161) + '"],["valid","ok"]]']) {
+    savedNotes = corrupt;
+    const recovered = new UI.ProxyNotes(() => noteStorage);
+    assert.equal(recovered.get('wrong'), '');
+    assert.equal(recovered.get('long'), '');
+    assert.equal(recovered.get('valid'), corrupt.includes('valid') ? 'ok' : '');
+    assert.equal(recovered.set('new', 'note'), 'saved');
+}
+for (const unavailable of [
+    () => { throw new Error('Storage blocked'); },
+    () => ({getItem() { return null; }, setItem() { throw new Error('Quota exceeded'); }})
+]) {
+    const temporary = new UI.ProxyNotes(unavailable);
+    assert.equal(temporary.set('temporary', 'note'), 'temporary');
+    assert.equal(temporary.get('temporary'), 'note');
+    assert.equal(temporary.set('temporary', ''), 'temporary');
+    assert.equal(temporary.get('temporary'), '');
+}
+console.log('Proxy notes: persistence, exact names, Unicode, removal, length limits, corrupt and unavailable storage passed');
+
+// Execute the actual editor handlers and render path; no network helpers exist.
+const noteEditorScript = indexView.match(/        let noteName = null, noteFocusKey = null;[\s\S]*?        \$\('#proxy-note-cancel'\)\.on\('click', closeNoteEditor\);/)[0]
+    .replace(/\{\{ lang\._\('([^']*)'\) \| json_encode \}\}/g, (_, label) => JSON.stringify(label));
+vm.runInContext(noteEditorScript, groupContext);
+assert(indexView.includes('id="proxy-note-editor" hidden'));
+assert(indexView.includes('maxlength="160"'));
+assert(indexView.includes('aria-describedby="proxy-note-help"'));
+const noteResponse = {ready: true, groups: [
+    {name: 'Notes A', members: [{name: encode(specialName), selected: true}, {name: 'Other'}]},
+    {name: 'Notes B', members: [{name: encode(specialName)}]}
+]};
+const originalNoteResponse = JSON.stringify(noteResponse);
+const noteButtons = () => pollingBox.querySelectorAll('button[data-name]').filter(node => node.attrs.class.includes('cmd-proxy-note'));
+const noteTexts = () => pollingBox.querySelectorAll('small[data-proxy-note]');
+function editNote(name, occurrence = 0) {
+    const button = noteButtons().filter(node => node.attrs['data-name'] === name)[occurrence];
+    assert.equal(button.attrs.type, 'button');
+    assert.equal(button.attrs['aria-label'], 'Edit local note: ' + name);
+    pollingDoc.activeElement = button;
+    noteHandler.call(button);
+    assert.equal(noteControl('#proxy-note-name').label, name);
+    assert.equal(noteControl('#proxy-note-editor').hidden, false);
+    assert.equal(pollingDoc.activeElement, noteControl('#proxy-note-text')[0]);
+    return button.attrs['data-focus-key'];
+}
+function saveNote(value) {
+    noteControl('#proxy-note-text').val(value);
+    let prevented = false;
+    noteControl('#proxy-note-editor').handlers.submit({preventDefault() { prevented = true; }});
+    assert(prevented, 'Notes never submit a form to the server');
+}
+pollGroups(noteResponse);
+assert.equal(noteTexts().length, 0);
+const noteFocus = editNote(specialName);
+noteControl('#proxy-note-text').val('unsaved draft');
+noteResponse.groups[0].members[0].delay = 32;
+pollGroups(noteResponse);
+assert.equal(noteControl('#proxy-note-text').value, 'unsaved draft', 'Changed polls preserve drafts');
+assert.equal(pollingDoc.activeElement, noteControl('#proxy-note-text')[0]);
+const noteSelections = selectedNames(), noteOrder = displayedMembers();
+const noteList = pollingBox.querySelectorAll('ul[data-group]')[0];
+noteList.scrollTop = 67;
+saveNote(literalNote);
+assert.equal(noteControl('#proxy-note-editor').hidden, true);
+assert.equal(noteControl('#proxy-note-state').label, 'Local note saved.');
+assert.equal(pollingDoc.activeElement.attrs['data-focus-key'], noteFocus, 'Save returns focus to the edit control');
+assert.equal(pollingBox.querySelectorAll('ul[data-group]')[0].scrollTop, 67);
+assert.deepEqual(noteTexts().map(node => node.textContent), [literalNote, literalNote], 'Shared proxies show the same literal note');
+assert.equal(new UI.ProxyNotes(() => groupContext.localStorage).get(specialName), literalNote);
+assert.deepEqual(selectedNames(), noteSelections);
+assert.deepEqual(displayedMembers(), noteOrder);
+const notedRow = pollingBox.children[0];
+pollGroups(noteResponse);
+assert.equal(pollingBox.children[0], notedRow, 'Notes preserve the unchanged-poll optimization');
+editNote(specialName, 1);
+assert.equal(noteControl('#proxy-note-text').value, literalNote);
+noteControl('#proxy-note-text').val('discard');
+noteControl('#proxy-note-cancel').handlers.click();
+assert.deepEqual(noteTexts().map(node => node.textContent), [literalNote, literalNote]);
+assert.equal(noteControl('#proxy-note-editor').hidden, true);
+editNote(specialName);
+saveNote('x'.repeat(161));
+assert.equal(noteControl('#proxy-note-editor').hidden, false);
+assert(noteControl('#proxy-note-state').label.includes('160'));
+assert.equal(noteControl('#proxy-note-text').value.length, 161, 'Invalid drafts remain editable');
+assert.deepEqual(noteTexts().map(node => node.textContent), [literalNote, literalNote]);
+groupContext.testing = true;
+saveNote('changed');
+assert.equal(testsDisabled, true, 'Saving during latency tests retains disabled probe controls');
+groupContext.testing = false;
+for (const unavailable of [{ready: false}, {ready: true, groups: []}]) {
+    editNote(specialName);
+    pollGroups(unavailable);
+    saveNote('offline edit');
+    assert.equal(pollingDoc.activeElement, pollingBox, 'Missing row returns focus to the groups container');
+    pollGroups(noteResponse);
+    assert.deepEqual(noteTexts().map(node => node.textContent), ['offline edit', 'offline edit']);
+}
+editNote(specialName);
+saveNote('');
+assert.equal(noteTexts().length, 0);
+assert.equal(new UI.ProxyNotes(() => groupContext.localStorage).get(specialName), '');
+// Failed persistence remains visible and honest, including failure to delete.
+groupContext.localStorage.setItem = () => { throw new Error('Quota exceeded'); };
+editNote(specialName);
+saveNote('temporary');
+assert(noteControl('#proxy-note-state').label.includes('only for this page visit'));
+assert.deepEqual(noteTexts().map(node => node.textContent), ['temporary', 'temporary']);
+editNote(specialName);
+saveNote('');
+assert.equal(noteTexts().length, 0);
+assert(noteControl('#proxy-note-state').label.includes('only for this page visit'));
+// Only the test's deliberate latency update changed its API fixture.
+noteResponse.groups[0].members[0].delay = undefined;
+assert.equal(JSON.stringify(noteResponse), originalNoteResponse);
+console.log('Proxy note editor: shared rows, literal rendering, drafts across polls, save/cancel/remove, focus, recovery and no API calls passed');

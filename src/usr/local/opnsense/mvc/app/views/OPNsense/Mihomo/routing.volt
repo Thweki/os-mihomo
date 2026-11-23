@@ -11,11 +11,15 @@
 <script src="{{ cache_safe('/js/mihomo/ui.js') }}"></script>
 <ul class="nav nav-tabs" id="routing-tabs" role="tablist">
     <li class="active"><a href="#routing-current" data-toggle="tab">{{ lang._('Current forwarding') }}</a></li>
+    <li><a href="#routing-rules" data-toggle="tab">{{ lang._('Runtime rules') }}</a></li>
     <li><a href="#routing-configuration" data-toggle="tab">{{ lang._('Policy configuration') }}</a></li>
 </ul>
 <div class="tab-content">
     <div id="routing-current" class="tab-pane active">
         {{ partial('OPNsense/Mihomo/network_status', ['network_id':'routing-network']) }}
+    </div>
+    <div id="routing-rules" class="tab-pane">
+        {{ partial('OPNsense/Mihomo/runtime_rules') }}
     </div>
     <div id="routing-configuration" class="tab-pane">
 
@@ -42,11 +46,13 @@
         /* 绑定状态：只说人话 */
         function stateText(row) {
             if (row.state === 'active') {
-                return ({{ lang._('in effect') | json_encode }});
+                return ({{ lang._('PF rule observed') | json_encode }});
             }
             if (row.state === 'pending') {
-                return ({{ lang._('apply to take effect') | json_encode }});
+                return ({{ lang._('Not confirmed') | json_encode }});
             }
+            if (row.state === 'disabled') { return ({{ lang._('Disabled') | json_encode }}); }
+            if (row.state === 'unknown') { return ({{ lang._('Unavailable') | json_encode }}); }
             if (row.state === 'inactive') {
                 return ({{ lang._('TUN off') | json_encode }});
             }
@@ -101,11 +107,12 @@
                     return;
                 }
                 ajaxGet('/api/mihomo/routing/netplan', {}, function (net, s2) {
-                    if (s2 !== 'success') {
+                    if (s2 !== 'success' || net.status !== 'ok') {
                         return;
                     }
                     lastPlan = {
                         version: preview.version,
+                        networkVersion: net.version,
                         rules: preview.rules || [],
                         warnings: preview.warnings || [],
                         changes: net.changes || [],
@@ -167,7 +174,7 @@
                                         dialog(({{ lang._('Apply failed') | json_encode }}), decode(r1['message'] || ''), BootstrapDialog.TYPE_DANGER);
                                         return;
                                     }
-                                    ajaxCall('/api/mihomo/routing/netapply', {}, function (r2) {
+                                    ajaxCall('/api/mihomo/routing/netapply', {version: lastPlan.networkVersion}, function (r2) {
                                         const out = [];
                                         out.push('[mihomo]');
                                         (r1['messages'] || []).forEach(function (m) { out.push('  ' + m); });

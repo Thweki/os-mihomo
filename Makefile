@@ -17,13 +17,13 @@ package:
 repo: package
 	PKG_NAME="$(PKG_NAME)" VERSION="$(VERSION)" REPO_NAME="$(REPO_NAME)" sh scripts/make_repo.sh
 
-# 单文件安装（会执行包内 +POST_INSTALL）
+# 在测试设备上安装本地构建的包（会执行包钩子）。
 install: package
-	pkg add -f "dist/$(PKG_NAME).pkg"
+	pkg add "./dist/$(PKG_NAME).pkg"
 
-# 经由本地仓库安装：走 pkg install，等价于插件管理器的安装路径
-install-repo: repo
-	pkg install -y "$(PKG_NAME)"
+# 管理员命令行入口，要求已配置受信的软件源。
+install-repo:
+	pkg install -r "$(REPO_NAME)" "$(PKG_NAME)"
 
 clean:
 	rm -rf work/freebsd-pkg dist/repo

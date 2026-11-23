@@ -9,13 +9,28 @@ import subprocess
 ROOT = Path(__file__).resolve().parent.parent
 FILES = {'.gitattributes', '.gitignore', '.github/workflows/ci.yml', '.github/dependabot.yml',
          'README.md', 'README.US.md', 'Makefile', 'build.sh', 'docs/ci-cd.md',
+         'docs/install.md', 'docs/install.en.md', 'docs/usage.md', 'docs/usage.en.md',
          'scripts/ci_build.sh', 'scripts/make_repo.sh', 'scripts/deploy.sh', 'scripts/rollback.sh',
          'tests/test_patch.php', 'tests/test_ui.js', 'tests/test_runtime.php', 'tools/build_locales.py',
          'tools/extract_strings.py', 'tools/mo_editor.py', 'tools/validate.py',
          'tools/check_publication.py', 'tools/reproducible_archive.py',
          'tools/build_provenance.py', 'tests/test_writes.php', 'tests/test_build.py',
          'tests/test_repository.sh', 'tests/test_api.php', 'tests/test_subscription.py',
-         'tests/test_packaging.py', 'tests/test_validate.py'}
+         'tests/test_packaging.py', 'tests/test_validate.py',
+         'docs/audit-b7.md',
+         'tests/fixtures/network/api.php',
+         'tests/fixtures/network/config.inc',
+         'tests/fixtures/routing/fresh.xml',
+         'tests/fixtures/routing/legacy.pf',
+         'tests/fixtures/routing/legacy.xml',
+         'tests/fixtures/routing/native.pf',
+         'tests/fixtures/routing/native.xml',
+         'tests/test_network.php',
+         'tests/test_network_api.php',
+         'tests/test_network_apply.php',
+         'tests/test_routing_status.php',
+         'tests/test_service.py',
+ }
 ROOTS = ('src/', 'locales/', 'packaging/freebsd/')
 
 # These exact images were visually reviewed after local privacy blurring.
