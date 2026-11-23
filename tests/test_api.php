@@ -26,7 +26,7 @@ namespace OPNsense\Mihomo {
     }
     class BootSettingsProbe {
         public static int $calls = 0;
-        public static bool $reject = true;
+        public static bool $reject = false;
     }
     function is_readable(string $path): bool {
         if ($path === '/etc/rc.conf.d/mihomo') {
@@ -499,6 +499,8 @@ namespace {
     }
     expect(\OPNsense\Core\Backend::$calls === 0, 'Read-only calls never reach configd');
 
+    \OPNsense\Mihomo\BootSettingsProbe::$calls = 0;
+    \OPNsense\Mihomo\BootSettingsProbe::$reject = true;
     // Exercise real Apply selection and patching with locked TUN siblings. The
     // always-written device/stack already match, but must still fail safely.
     $flow = "log-level: info\ntun: {enable: true, device: tun_mihomo, stack: gvisor, auto-route: false}\n";
@@ -550,9 +552,8 @@ namespace {
     } finally {
         \OPNsense\Mihomo\Config::setFileOverride(null);
         unlink($flowFile);
+        \OPNsense\Mihomo\BootSettingsProbe::$reject = false;
     }
-    // Safety report fixtures use the real class with boot settings disabled.
-    \OPNsense\Mihomo\BootSettingsProbe::$reject = false;
     echo "Settings Apply flow mappings: fixed TUN fields reject without writes\n";
 
     foreach (['Config', 'Safety'] as $name) {

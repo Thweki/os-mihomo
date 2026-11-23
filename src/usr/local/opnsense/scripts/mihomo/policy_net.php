@@ -45,7 +45,7 @@ require_once dirname(__DIR__, 2) . '/mvc/app/models/OPNsense/Mihomo/NetworkApply
 
 use OPNsense\Mihomo\NetworkApply;
 
-require_once '/usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/RoutingStatus.php';
+require_once dirname(__DIR__, 2) . '/mvc/app/models/OPNsense/Mihomo/RoutingStatus.php';
 
 $CONFIG_FILE = '/conf/config.xml';
 $BACKUP_GLOB = '/conf/config.xml.mihomo-bak.*';

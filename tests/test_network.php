@@ -30,7 +30,8 @@ function finishNetwork(array $child): string
     $out = stream_get_contents($pipes[1]);
     $err = stream_get_contents($pipes[2]);
     fclose($pipes[1]); fclose($pipes[2]);
-    checkNetwork(proc_close($process) === 0 && $err === '', 'fixture subprocess completed');
+    $code = proc_close($process);
+    checkNetwork($code === 0 && $err === '', 'fixture subprocess completed' . ($err === '' ? '' : ' - ' . trim($err)));
     return $out;
 }
 function waitForPluginLock(string $path): void
@@ -165,7 +166,10 @@ try {
         $source = file_get_contents($scripts . '/' . $name);
         $source = str_replace("require_once 'config.inc';", 'require_once ' . var_export(__DIR__ . '/fixtures/network/config.inc', true) . ';', $source);
         $source = str_replace("__DIR__ . '/write_common.php'", var_export($scripts . '/write_common.php', true), $source);
-        $source = str_replace("dirname(__DIR__, 2) . '/mvc/app/models/OPNsense/Mihomo/NetworkConfig.php'", var_export($models . '/NetworkConfig.php', true), $source);
+        foreach (['NetworkConfig', 'NetworkApply', 'RoutingStatus', 'RuntimeStatus'] as $model) {
+            $source = str_replace("dirname(__DIR__, 2) . '/mvc/app/models/OPNsense/Mihomo/{$model}.php'",
+                var_export($models . '/' . $model . '.php', true), $source);
+        }
         $source = str_replace(['/conf/config.xml', '/var/db/os-mihomo'], [$path, $dir . '/state'], $source);
         // Constructor injection stays test-only, never exposed via worker arguments/environment.
         $source = str_replace('new NetworkConfig(', 'fixtureTransaction(', $source);
@@ -176,7 +180,8 @@ try {
     }
     mkdir($dir . '/bin');
     foreach (['ifconfig', 'configctl', 'pfctl'] as $name) {
-        file_put_contents($dir . '/bin/' . $name, "#!/bin/sh\nexit 0\n");
+        $response = $name === 'configctl' ? "echo OK\n" : '';
+        file_put_contents($dir . '/bin/' . $name, "#!/bin/sh\n" . $response . "exit 0\n");
         chmod($dir . '/bin/' . $name, 0700);
     }
     putenv('PATH=' . $dir . '/bin:' . getenv('PATH'));
