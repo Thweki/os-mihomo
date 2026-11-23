@@ -48,6 +48,10 @@ namespace {
     use OPNsense\Core\Backend;
     use OPNsense\Core\Config as CoreConfig;
 
+    if (!function_exists('gettext')) {
+        function gettext(string $message): string { return $message; }
+    }
+
     $app = dirname(__DIR__) . '/src/usr/local/opnsense/mvc/app/';
     foreach (['RuntimeStatus', 'RoutingStatus', 'Safety', 'RequestParamsTrait'] as $name) {
         require $app . 'models/OPNsense/Mihomo/' . $name . '.php';
