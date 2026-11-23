@@ -20,6 +20,12 @@
         return rawBytes ? value.toLocaleString(locale || undefined, {maximumFractionDigits: 0}) + ' B'
             : formatBytes(value, locale);
     }
+    // Total hours (not a clock time) remain unbounded across multiple days.
+    function formatUptime(seconds) {
+        if (!Number.isSafeInteger(seconds) || seconds < 0) { return null; }
+        return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+            .map(value => String(value).padStart(2, '0')).join(':');
+    }
     // Internal OPNsense API responses use htmlspecialchars(..., ENT_NOQUOTES).
     // Decode exactly one layer, preserving entities that are literal file data.
     function decodeApiText(value) {
@@ -149,6 +155,90 @@
         }
         return totals;
     }
+    function comparisonReport(data, collectedAt) {
+        if (!data || data.status !== 'ok' || !Array.isArray(data.rows)) { return null; }
+        return {
+            schema_version: 1,
+            collected_at: collectedAt,
+            runtime_available: data.runtime === true,
+            rows: data.rows.map(row => {
+                const secret = row.secret === true || row.key === 'secret';
+                // Select fields explicitly; never serialize the whole API response.
+                return {
+                    key: decodeApiText(row.key), label: decodeApiText(row.label),
+                    group: decodeApiText(row.group), state: row.state,
+                    managed: typeof row.managed === 'boolean' ? row.managed : null,
+                    runtime_only: row.runtime_only === true, secret,
+                    model: secret ? null : decodeApiText(row.model),
+                    file: secret ? null : decodeApiText(row.file),
+                    runtime: secret ? null : decodeApiText(row.runtime)
+                };
+            })
+        };
+    }
+    // Browser-local, per-origin selections only; never retain controller metadata.
+    class ProxySnapshots {
+        constructor(storage) { this.storage = storage; this.key = 'mihomo.proxySnapshots.v1'; }
+        read() {
+            const raw = this.storage.getItem(this.key);
+            if (raw === null) { return []; }
+            const data = JSON.parse(raw);
+            const text = value => typeof value === 'string' && value.length > 0;
+            if (!data || data.version !== 1 || !Array.isArray(data.snapshots) || data.snapshots.length > 20
+                || data.snapshots.some(item => !item || !text(item.name) || item.name.length > 80
+                    || !Array.isArray(item.selections) || !item.selections.length
+                    || item.selections.some(pair => !pair || !text(pair.group) || !text(pair.member))
+                    || new Set(item.selections.map(pair => pair.group)).size !== item.selections.length)
+                || new Set(data.snapshots.map(item => item.name)).size !== data.snapshots.length) {
+                throw new Error('storage');
+            }
+            return data.snapshots.map(item => ({name: item.name,
+                selections: item.selections.map(pair => ({group: pair.group, member: pair.member}))}));
+        }
+        save(name, groups) {
+            name = name.trim();
+            if (!name || name.length > 80) { throw new Error('name'); }
+            const snapshots = this.read();
+            if (snapshots.some(item => item.name === name)) { throw new Error('duplicate'); }
+            if (snapshots.length >= 20) { throw new Error('limit'); }
+            const selections = snapshotGroups(groups).filter(group => group.type === 'Selector').map(group => {
+                if (!group.now || !group.members.includes(group.now)) { throw new Error('groups'); }
+                return {group: group.name, member: group.now};
+            });
+            if (!selections.length) { throw new Error('empty'); }
+            snapshots.push({name, selections});
+            this.storage.setItem(this.key, JSON.stringify({version: 1, snapshots}));
+            return name;
+        }
+        remove(name) {
+            const snapshots = this.read().filter(item => item.name !== name);
+            this.storage.setItem(this.key, JSON.stringify({version: 1, snapshots}));
+        }
+    }
+    function snapshotGroups(groups) {
+        if (!Array.isArray(groups)) { throw new Error('groups'); }
+        const result = groups.map(group => {
+            if (!group || typeof group.name !== 'string' || !group.name || typeof group.type !== 'string'
+                || typeof group.now !== 'string' || !Array.isArray(group.members)
+                || group.members.some(member => !member || typeof member.name !== 'string' || !member.name)) {
+                throw new Error('groups');
+            }
+            return {name: decodeApiText(group.name), type: group.type, now: decodeApiText(group.now),
+                members: group.members.map(member => decodeApiText(member.name))};
+        });
+        if (new Set(result.map(group => group.name)).size !== result.length) { throw new Error('groups'); }
+        return result;
+    }
+    function planProxySnapshot(snapshot, groups) {
+        const current = new Map(snapshotGroups(groups).map(group => [group.name, group]));
+        const changes = [], missing = [];
+        snapshot.selections.forEach(pair => {
+            const group = current.get(pair.group);
+            if (!group || group.type !== 'Selector' || !group.members.includes(pair.member)) { missing.push(pair.group); }
+            else if (group.now !== pair.member) { changes.push({group: pair.group, member: pair.member, previous: group.now}); }
+        });
+        return {changes, missing};
+    }
     class TrafficHistory {
         constructor(saved) {
             this.samples = [];
@@ -197,8 +287,8 @@
             this.interval = interval;
             this.options = options || {};
             this.hidden = this.options.hidden || (() => document.hidden);
-            this.schedule = this.options.schedule || setTimeout;
-            this.cancel = this.options.cancel || clearTimeout;
+            this.schedule = this.options.schedule || ((callback, delay) => setTimeout(callback, delay));
+            this.cancel = this.options.cancel || (timer => clearTimeout(timer));
             this.timer = null;
             this.pending = false;
             this.failures = 0;
@@ -235,12 +325,16 @@
         }
         stop() { this.stopped = true; this.cancel(this.timer); }
     }
-    function runLimited(items, limit, worker, progress, done) {
+    function runLimited(items, limit, worker, progress, done, shouldContinue) {
         let next = 0, active = 0, completed = 0, failed = 0;
         let cancelled = false, finished = false;
         const state = () => ({completed, total: items.length, failed, cancelled, skipped: cancelled ? items.length - next : 0});
         function pump() {
             if (finished) { return; }
+            if (!cancelled && shouldContinue && !shouldContinue()) {
+                cancelled = true;
+                progress(state());
+            }
             if (active === 0 && (cancelled || completed === items.length)) {
                 finished = true; done(state()); return;
             }
@@ -264,6 +358,40 @@
             progress(state());
             pump();
         }};
+    }
+    // Probe concrete members once, excluding nested groups and built-in actions.
+    function automaticTestNames(groups) {
+        const groupNames = new Set(groups.map(group => decodeApiText(group.name)));
+        const names = new Set();
+        groups.forEach(group => (group.members || []).forEach(member => {
+            const name = decodeApiText(member.name);
+            const type = String(member.type || '').toLowerCase().replace(/[-_ ]/g, '');
+            if (name && type && !groupNames.has(name)
+                && !/^(direct|reject|rejectdrop|pass|compatible|dns|selector|urltest|fallback|loadbalance|relay)$/.test(type)) {
+                names.add(name);
+            }
+        }));
+        return Array.from(names);
+    }
+    // Only this test run's successful measurements can nominate a proxy.
+    function fastestProxy(group, delays) {
+        if (!group || group.type !== 'Selector') { return null; }
+        const excluded = new Set(['direct', 'reject', 'rejectdrop', 'pass', 'compatible', 'selector', 'urltest', 'fallback', 'loadbalance', 'relay']);
+        let best = null, bestDelay = Infinity;
+        (group.members || []).forEach(member => {
+            const name = decodeApiText(member.name), delay = delays.get(name);
+            if (excluded.has(String(member.type).toLowerCase().replace(/[-_]/g, ''))
+                || ['DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', 'COMPATIBLE'].includes(name)
+                || !Number.isFinite(delay) || delay <= 0) { return; }
+            if (delay < bestDelay || delay === bestDelay && member.selected) {
+                best = member; bestDelay = delay;
+            }
+        });
+        return best && !best.selected ? decodeApiText(best.name) : null;
+    }
+    function proxyGroupSignature(group) {
+        return group && JSON.stringify([group.name, group.type,
+            (group.members || []).map(member => [member.name, member.type, !!member.selected])]);
     }
     // Browser-local display preferences; names are decoded once at the API boundary.
     class ProxyFavorites {
@@ -296,12 +424,108 @@
             return starred.concat(rest);
         }
     }
+    // Notes use exact decoded names, including names shared by multiple groups.
+    class ProxyNotes {
+        constructor(storage) {
+            this.storage = storage || (() => localStorage);
+            this.notes = new Map();
+            try {
+                const saved = JSON.parse(this.storage().getItem('mihomo.proxy-notes.v1'));
+                if (Array.isArray(saved)) {
+                    saved.forEach(entry => {
+                        if (Array.isArray(entry) && entry.length === 2 && typeof entry[0] === 'string'
+                            && typeof entry[1] === 'string' && entry[1].trim() && entry[1].length <= 160) {
+                            this.notes.set(entry[0], entry[1]);
+                        }
+                    });
+                }
+            } catch (error) { /* Invalid or unavailable storage starts with no notes. */ }
+        }
+        get(name) { return this.notes.get(name) || ''; }
+        set(name, text) {
+            if (typeof name !== 'string' || typeof text !== 'string' || text.length > 160) { return 'invalid'; }
+            text = text.trim();
+            if (text) { this.notes.set(name, text); }
+            else { this.notes.delete(name); }
+            try {
+                this.storage().setItem('mihomo.proxy-notes.v1', JSON.stringify([...this.notes]));
+                return 'saved';
+            } catch (error) { return 'temporary'; } // Keep edits for this visit, including removals.
+        }
+    }
     // Every dynamic value reaches textContent/setAttribute, never HTML parsing.
     function element(doc, tag, attrs, text) {
         const node = doc.createElement(tag);
         Object.keys(attrs || {}).forEach(key => node.setAttribute(key, String(attrs[key])));
         if (text !== undefined) { node.textContent = String(text); }
         return node;
+    }
+    // A warning needs evidence: untested/missing results are possible exits, not failures.
+    // Propagate those exits backwards through the group graph, without recursion.
+    function emptyProxyGroups(groups) {
+        const byName = new Map(groups.map(group => [decodeApiText(group.name), group]));
+        const parents = new Map(), possible = new Set(), queue = [];
+        function mark(name) {
+            if (!possible.has(name)) { possible.add(name); queue.push(name); }
+        }
+        byName.forEach((group, name) => {
+            if (!Array.isArray(group.members)) { mark(name); return; }
+            group.members.forEach(member => {
+                const target = decodeApiText(member.name);
+                if (byName.has(target)) {
+                    if (!parents.has(target)) { parents.set(target, []); }
+                    parents.get(target).push(name);
+                    return;
+                }
+                const type = decodeApiText(member.type).toLowerCase();
+                if (type === 'reject' || type === 'rejectdrop') { return; }
+                if (!type || ['direct', 'pass', 'passrule', 'rematch', 'dns', 'compatible', 'unknown',
+                    'selector', 'urltest', 'fallback', 'loadbalance', 'relay'].includes(type)
+                    || typeof member.delay !== 'number' || !Number.isFinite(member.delay) || member.delay > 0) {
+                    mark(name);
+                }
+            });
+        });
+        for (let i = 0; i < queue.length; i++) {
+            (parents.get(queue[i]) || []).forEach(mark);
+        }
+        return new Set(Array.from(byName.keys()).filter(name => !possible.has(name)));
+    }
+    function latencySparkline(doc, history, label, delayText) {
+        const samples = Array.isArray(history) ? history.slice(-10).map(value =>
+            typeof value === 'number' && Number.isFinite(value) ? value : null) : [];
+        const description = label + ': ' + (samples.length ? samples.map(delayText).join(' → ') : delayText(null));
+        const wrapper = element(doc, 'span', {title: description, style: 'display:inline-flex;flex:0 0 80px'});
+        const svg = (tag, attrs) => {
+            const node = doc.createElementNS('http://www.w3.org/2000/svg', tag);
+            Object.keys(attrs).forEach(key => node.setAttribute(key, String(attrs[key])));
+            return node;
+        };
+        const chart = svg('svg', {width: 80, height: 24, viewBox: '0 0 80 24', role: 'img', 'aria-label': description});
+        const maximum = Math.max(1, ...samples.filter(value => value > 0));
+        let points = [];
+        const flush = () => {
+            if (points.length > 1) { chart.appendChild(svg('polyline', {points: points.join(' '), fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5})); }
+            points = [];
+        };
+        samples.forEach((value, index) => {
+            const x = 4 + index * 8;
+            if (value === null || value <= 0) {
+                flush();
+                // Crosses distinguish failed tests from fast responses; unknown samples are gaps.
+                if (value !== null) { chart.appendChild(svg('path', {d: 'M' + (x - 2) + ' 18l4 4m0 -4l-4 4', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5})); }
+                return;
+            }
+            const y = 20 - value / maximum * 16;
+            points.push(x + ',' + y);
+            chart.appendChild(svg('circle', {cx: x, cy: y, r: 1.5, fill: 'currentColor'}));
+        });
+        flush();
+        if (!samples.length || samples.every(value => value === null)) {
+            chart.appendChild(svg('path', {d: 'M36 12h8', stroke: 'currentColor'}));
+        }
+        wrapper.appendChild(chart);
+        return wrapper;
     }
     function normalizeProxyQuery(query) {
         return query.trim().toLowerCase();
@@ -347,7 +571,7 @@
         return [...new Set(orderProxyMembers(members, favorites, ...proxyOrder(nodeOrder))
             .map(member => decodeApiText(member.name)))];
     }
-    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, nodeOrder = 'config', collapsedGroups, visibility) {
+    function renderProxyGroups(container, groups, labels, delayText, delayClass, favorites, nodeOrder = 'config', collapsedGroups, visibility, notes) {
         const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
         const [direction, collator] = proxyOrder(nodeOrder);
         const delayDirection = nodeOrder === 'delay-asc' ? 1 : nodeOrder === 'delay-desc' ? -1 : 0;
@@ -365,6 +589,7 @@
         const active = doc.activeElement;
         const focusKey = active && container.contains(active) ? active.getAttribute('data-focus-key') : null;
         const row = el('div', {class: 'row'});
+        const emptyGroups = emptyProxyGroups(groups);
         (favorites ? favorites.order(groups, 'groups') : groups).forEach((group, index) => {
             const name = decodeApiText(group.name);
             const members = group.members || [];
@@ -378,6 +603,11 @@
             header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-info'}, decodeApiText(group.type)));
             header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-default',
                 style: 'margin-left:6px', 'data-member-count': members.length}, labels.memberCount.replace('%s', members.length)));
+            if (emptyGroups.has(name)) {
+                header.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm label-warning',
+                    style: 'margin-left:6px;white-space:normal', 'data-empty-group': name,
+                    title: labels.emptyGroupHint}, labels.emptyGroup));
+            }
             if (collapsedGroups) {
                 const label = collapsed ? labels.expandGroup : labels.collapseGroup;
                 const toggle = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-collapse-group',
@@ -399,6 +629,12 @@
             copySelection.disabled = !current;
             copySelection.appendChild(el('i', {class: 'fa fa-copy fa-fw', 'aria-hidden': 'true'}));
             header.appendChild(copySelection);
+            if (group.canReset === true) {
+                const reset = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-reset-group pull-right',
+                    'data-group': name, 'data-focus-key': JSON.stringify(['reset', name]),
+                    'aria-label': labels.resetGroup + ': ' + name, title: labels.resetGroup}, labels.resetGroup);
+                header.appendChild(reset);
+            }
             const list = el('ul', {id: listId, class: 'list-group', 'data-group': name, 'aria-label': name,
                 style: 'margin-bottom:0;flex:1 1 auto;overflow-y:auto'});
             // Collapsing changes only presentation; tests use the full group snapshot.
@@ -418,6 +654,19 @@
                 select.appendChild(el('span', {}, ' ' + memberName + ' '));
                 select.appendChild(el('small', {class: 'text-muted'}, decodeApiText(member.type)));
                 item.appendChild(select);
+                item.appendChild(latencySparkline(doc, member.delay_history, labels.latencyHistory, delayText));
+                if (notes) {
+                    const note = notes.get(memberName);
+                    if (note) {
+                        select.appendChild(el('small', {'data-proxy-note': memberName,
+                            style: 'display:block;white-space:pre-wrap;overflow-wrap:anywhere'}, note));
+                    }
+                    const edit = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-proxy-note',
+                        'data-name': memberName, 'data-focus-key': JSON.stringify(['note', name, memberName]),
+                        'aria-label': labels.editNote + ': ' + memberName, title: labels.editNote});
+                    edit.appendChild(el('i', {class: 'fa fa-pencil fa-fw', 'aria-hidden': 'true'}));
+                    item.appendChild(edit);
+                }
                 item.appendChild(el('span', {class: 'label label-opnsense label-opnsense-sm ' + delayClass(member.delay)}, delayText(member.delay)));
                 const testMember = el('button', {type: 'button', class: 'btn btn-xs btn-default cmd-test', 'data-name': memberName,
                     'data-focus-key': JSON.stringify(['test', name, memberName]), 'aria-label': labels.testNode + ': ' + memberName, title: labels.testNode});
@@ -456,6 +705,30 @@
             if (replacement) { replacement.focus({preventScroll: true}); }
         }
     }
+    function renderConnectionClients(container, summary, labels) {
+        const doc = container.ownerDocument, el = (tag, attrs, text) => element(doc, tag, attrs, text);
+        if (!summary || !summary.rows.length) {
+            container.replaceChildren(el('p', {class: 'text-muted'}, summary ? labels.empty : labels.unavailable));
+            return;
+        }
+        const table = el('table', {class: 'table table-condensed table-striped'});
+        table.appendChild(el('caption', {}, labels.shown + ': ' + summary.rows.length + ' / ' + summary.total));
+        const head = el('thead'), headings = el('tr');
+        [labels.source, labels.connections, labels.download, labels.upload].forEach(label => {
+            headings.appendChild(el('th', {scope: 'col'}, label));
+        });
+        head.appendChild(headings); table.appendChild(head);
+        const body = el('tbody');
+        summary.rows.forEach(client => {
+            const row = el('tr');
+            row.appendChild(el('th', {scope: 'row'}, decodeApiText(client.source) || labels.unknown));
+            row.appendChild(el('td', {}, Number(client.connections).toLocaleString()));
+            row.appendChild(el('td', {}, formatBytes(client.download)));
+            row.appendChild(el('td', {}, formatBytes(client.upload)));
+            body.appendChild(row);
+        });
+        table.appendChild(body); container.replaceChildren(table);
+    }
     function theme(container) {
         const probe = document.createElement('div');
         probe.setAttribute('aria-hidden', 'true');
@@ -469,5 +742,5 @@
         probe.remove();
         return {text, down, up, grid: border};
     }
-    return {formatBytes, formatTrafficTotal, TrafficTotals, TrafficHistory, summarizeProxyLatency, theme, decodeApiText, exportSelections, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, normalizeProxyQuery, filterProxyGroups, fullProxyGroupTestNames, renderProxyGroups, ProxyFavorites};
+    return {formatBytes, formatTrafficTotal, TrafficTotals, TrafficHistory, summarizeProxyLatency, theme, decodeApiText, exportSelections, logLevel, filterLogLines, ruleMatchText, copyText, Poller, runLimited, element, normalizeProxyQuery, filterProxyGroups, fullProxyGroupTestNames, renderProxyGroups, ProxyFavorites, comparisonReport, automaticTestNames, ProxySnapshots, planProxySnapshot, fastestProxy, proxyGroupSignature, renderConnectionClients, formatUptime, emptyProxyGroups, ProxyNotes};
 }));

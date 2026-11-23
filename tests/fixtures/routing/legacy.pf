@@ -1,0 +1,1 @@
+pass in quick on vtnet1 route-to (tun_mihomo 198.18.0.2) inet from 192.0.2.0/24 to any keep state label "Mihomo policy routing (lan)"

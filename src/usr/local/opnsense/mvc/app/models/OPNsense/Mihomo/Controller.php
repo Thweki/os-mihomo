@@ -133,6 +133,19 @@ class Controller
         return $result['ok'] && is_array($result['data']) ? $result['data'] : null;
     }
 
+    /** 运行态顶层规则数；不展开规则集合，读取失败时返回 null。 */
+    public static function ruleCount(): ?int
+    {
+        $result = self::get('/rules', 3);
+        if (!$result['ok']) {
+            return null;
+        }
+        // Preserve JSON object/array types: {"rules":{}} is not an empty list.
+        $data = json_decode($result['raw']);
+        $rules = is_object($data) ? ($data->rules ?? null) : null;
+        return is_array($rules) ? count($rules) : null;
+    }
+
     /**
      * 代理列表，整理成「组 + 成员」结构，附带最近一次延迟。
      *
@@ -150,15 +163,16 @@ class Controller
         // A shared node's history only needs to be read once per response, even if untested.
         $delays = [];
         foreach ($proxies as $name => $node) {
-            if (empty($node['all'])) {
+            if (!is_array($node['all'] ?? null)) {
                 continue;   /* 非分组节点 */
             }
             $members = [];
             foreach ($node['all'] as $member) {
                 $memberNode = $proxies[$member] ?? [];
+                $history = is_array($memberNode['history'] ?? null) ? $memberNode['history'] : [];
                 if (!array_key_exists($member, $delays)) {
                     $delays[$member] = null;
-                    foreach (array_reverse($memberNode['history'] ?? []) as $hist) {
+                    foreach (array_reverse($history) as $hist) {
                         if (isset($hist['delay'])) {
                             $delays[$member] = (int)$hist['delay'];
                             break;
@@ -170,6 +184,11 @@ class Controller
                     'name' => $member,
                     'type' => (string)($memberNode['type'] ?? ''),
                     'delay' => $delay,
+                    // Controller measurements, oldest first; never synthesize samples from polls.
+                    'delay_history' => array_map(static function ($sample) {
+                        $value = is_array($sample) ? ($sample['delay'] ?? null) : null;
+                        return (is_int($value) || is_float($value)) && is_finite((float)$value) ? $value : null;
+                    }, array_slice($history, -10)),
                     'selected' => ($member === ($node['now'] ?? null)),
                     'alive' => $delay !== null && $delay > 0,
                 ];
@@ -178,6 +197,8 @@ class Controller
                 'name' => (string)$name,
                 'type' => (string)($node['type'] ?? ''),
                 'now' => (string)($node['now'] ?? ''),
+                'canReset' => in_array($node['type'] ?? '', ['URLTest', 'Fallback'], true)
+                    && is_string($node['fixed'] ?? null) && $node['fixed'] !== '',
                 'members' => $members,
             ];
         }
@@ -189,6 +210,22 @@ class Controller
     public static function selectProxy(string $group, string $member): array
     {
         return self::put('/proxies/' . rawurlencode($group), ['name' => $member]);
+    }
+
+    /** Clear a manual override and let the core resume its configured group policy. */
+    public static function resetProxy(string $group): array
+    {
+        $path = '/proxies/' . rawurlencode($group);
+        $result = self::get($path);
+        if (!$result['ok']) {
+            return $result;
+        }
+        // DELETE is not a reset-to-default operation for Selector groups.
+        if (!is_array($result['data'])
+            || !in_array($result['data']['type'] ?? '', ['URLTest', 'Fallback'], true)) {
+            return ['ok' => false, 'error' => gettext('Only URLTest and Fallback groups can resume automatic selection.')];
+        }
+        return self::delete($path);
     }
 
     /** 单节点延迟测速（毫秒；0/负数表示失败） */
@@ -220,6 +257,36 @@ class Controller
         ];
     }
 
+    /** Top clients by transferred bytes on active connections, before any grid paging/filtering. */
+    public static function connectionClients(array $connections): array
+    {
+        $clients = [];
+        foreach ($connections as $connection) {
+            if (!is_array($connection)) {
+                continue;
+            }
+            $metadata = is_array($connection['metadata'] ?? null) ? $connection['metadata'] : [];
+            $source = $metadata['sourceIP'] ?? '';
+            // Canonicalize IPv6 spellings; missing/invalid addresses share an unknown bucket.
+            $source = is_string($source) && filter_var($source, FILTER_VALIDATE_IP)
+                ? inet_ntop(inet_pton($source)) : '';
+            if (!isset($clients[$source])) {
+                $clients[$source] = ['source' => $source, 'connections' => 0, 'download' => 0, 'upload' => 0];
+            }
+            $clients[$source]['connections']++;
+            foreach (['download', 'upload'] as $direction) {
+                $bytes = $connection[$direction] ?? 0;
+                $clients[$source][$direction] += is_numeric($bytes) ? max(0, (int)$bytes) : 0;
+            }
+        }
+        $clients = array_values($clients);
+        usort($clients, static function ($a, $b) {
+            return (($b['download'] + $b['upload']) <=> ($a['download'] + $a['upload']))
+                ?: strcmp($a['source'], $b['source']);
+        });
+        return ['rows' => array_slice($clients, 0, 10), 'total' => count($clients)];
+    }
+
     /**
      * 连接列表 → 前端表格行（含流量格式化所需的原始字节数）。
      * 处理 mihomo 的 metadata 字段差异（host / destinationIP / sniffHost）。
@@ -244,6 +311,9 @@ class Controller
                 // Only expose validated, bare copy values. Keep display/search fields unchanged.
                 'sourceIP' => self::bareConnectionIp($meta['sourceIP'] ?? null),
                 'destinationIP' => self::bareConnectionIp($meta['destinationIP'] ?? null),
+                'sniffHost' => (string)($meta['sniffHost'] ?? ''),
+                'process' => (string)($meta['process'] ?? ''),
+                'processPath' => (string)($meta['processPath'] ?? ''),
                 'source' => (string)($meta['sourceIP'] ?? '') . (isset($meta['sourcePort']) ? ':' . $meta['sourcePort'] : ''),
                 'destination' => (string)($meta['destinationIP'] ?? '') . (isset($meta['destinationPort']) ? ':' . $meta['destinationPort'] : ''),
                 'network' => strtoupper((string)($meta['network'] ?? '')),
@@ -263,6 +333,32 @@ class Controller
     private static function bareConnectionIp(mixed $value): string
     {
         return is_string($value) && filter_var($value, FILTER_VALIDATE_IP) !== false ? $value : '';
+    }
+
+    /** Read-only top-level rules in controller order; never return the raw response. */
+    public static function ruleRows(): array
+    {
+        $result = self::get('/rules');
+        $rules = $result['data']['rules'] ?? null;
+        $unavailable = ['ready' => false, 'rows' => []];
+        if (!$result['ok'] || !is_array($rules) || !array_is_list($rules)) {
+            return $unavailable;
+        }
+        $rows = [];
+        foreach ($rules as $index => $rule) {
+            // Reject incomplete snapshots rather than silently changing rule order.
+            if (!is_array($rule) || !is_string($rule['type'] ?? null)
+                || !is_string($rule['payload'] ?? null) || !is_string($rule['proxy'] ?? null)) {
+                return $unavailable;
+            }
+            $rows[] = [
+                'position' => $index + 1,
+                'type' => $rule['type'],
+                'payload' => $rule['payload'],
+                'proxy' => $rule['proxy'],
+            ];
+        }
+        return ['ready' => true, 'rows' => $rows];
     }
 
     /** 关闭单条连接（id 为空时关闭全部） */

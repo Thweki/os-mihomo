@@ -2163,3 +2163,339 @@ msgstr ""
 #: src/usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/index.volt
 msgid "Includes all reported groups. Automatic selections may change; null means no single selection was reported. Group and node names are included."
 msgstr ""
+
+msgid "%s: %s Traffic matching these rules may lose Internet access while mihomo is stopped. Rule presence does not verify reachability."
+msgstr ""
+
+msgid "A group name is required."
+msgstr ""
+
+msgid "A matching PF rule is loaded. Rule order and core policies still affect traffic; reachability is not verified."
+msgstr ""
+
+msgid "All fields"
+msgstr ""
+
+msgid "All rule types"
+msgstr ""
+
+msgid "All saved selections are already active."
+msgstr ""
+
+msgid "Automatic selection resumed for \"%s\"."
+msgstr ""
+
+msgid "Automatic switch skipped: cancelled, changed group, failed read, or no faster responding proxy."
+msgstr ""
+
+msgid "Automatic tests stopped; reload to run again."
+msgstr ""
+
+msgid "Automatically select the fastest proxy after a group test (experimental)"
+msgstr ""
+
+msgid "Automatically selected"
+msgstr ""
+
+msgid "Choose a snapshot"
+msgstr ""
+
+msgid "Clear filters"
+msgstr ""
+
+msgid "Client traffic"
+msgstr ""
+
+msgid "Client traffic is unavailable."
+msgstr ""
+
+msgid "Clients shown"
+msgstr ""
+
+msgid "Close %s connections shown on this page? Hidden rows, other pages and new connections are excluded. Applications may reconnect."
+msgstr ""
+
+msgid "Close connection"
+msgstr ""
+
+msgid "Close requests completed: %s; failed or unconfirmed: %s."
+msgstr ""
+
+msgid "Close visible"
+msgstr ""
+
+msgid "Close visible connections?"
+msgstr ""
+
+msgid "Core counters decreased; showing core totals."
+msgstr ""
+
+msgid "Core totals"
+msgstr ""
+
+msgid "Core uptime"
+msgstr ""
+
+msgid "Could not read current selections. No changes were made."
+msgstr ""
+
+msgid "Delete snapshot"
+msgstr ""
+
+msgid "Direct: traffic handled by Mihomo connects without a proxy."
+msgstr ""
+
+msgid "Dismiss"
+msgstr ""
+
+msgid "Edit local note"
+msgstr ""
+
+msgid "Enter a snapshot name of 1 to 80 characters."
+msgstr ""
+
+msgid "Export comparison (JSON)"
+msgstr ""
+
+msgid "Failed"
+msgstr ""
+
+msgid "Favorites stay first. Name order uses natural numbers and ignores case. Resets on page reload."
+msgstr ""
+
+msgid "Firewall cleanup was not confirmed:"
+msgstr ""
+
+msgid "Firewall rules were removed and loaded PF bindings were verified as empty."
+msgstr ""
+
+msgid "Global: traffic handled by Mihomo uses the GLOBAL group selection."
+msgstr ""
+
+msgid "Last successful start / reload"
+msgstr ""
+
+msgid "Latency tests"
+msgstr ""
+
+msgid "Loaded routing rules"
+msgstr ""
+
+msgid "Local note saved."
+msgstr ""
+
+msgid "Local proxy note"
+msgstr ""
+
+msgid "Matching TUN forwarding rules were observed in PF."
+msgstr ""
+
+msgid "Next"
+msgstr ""
+
+msgid "No active connections."
+msgstr ""
+
+msgid "No complete loaded PF rule was confirmed for this binding."
+msgstr ""
+
+msgid "No forwarding candidate in the reported members and latest latency results, including nested groups. Untested or missing results are unknown; DIRECT is usable. This is not a live connectivity check."
+msgstr ""
+
+msgid "No manual Selector groups are available to save."
+msgstr ""
+
+msgid "No matching TUN forwarding rule was observed in PF."
+msgstr ""
+
+msgid "No matching rules."
+msgstr ""
+
+msgid "No usable proxies"
+msgstr ""
+
+msgid "Note changes could not be saved in this browser. They will last only for this page visit."
+msgstr ""
+
+msgid "Off by default; enabled only for this page visit. Applies to Selector groups and fresh group tests. Direct, reject and nested groups are excluded. A submitted switch cannot be cancelled."
+msgstr ""
+
+msgid "Only URLTest and Fallback groups can resume automatic selection."
+msgstr ""
+
+msgid "PF rule observed"
+msgstr ""
+
+msgid "Policy routing is configured"
+msgstr ""
+
+msgid "Position"
+msgstr ""
+
+msgid "Previous"
+msgstr ""
+
+msgid "Process"
+msgstr ""
+
+msgid "Proxy target"
+msgstr ""
+
+msgid "Reading current selections…"
+msgstr ""
+
+msgid "Recent latency, oldest first"
+msgstr ""
+
+msgid "Recent latency: up to 10 controller tests, oldest first. Each chart has its own scale; crosses mark timeouts. Hover for values. No extra tests are run."
+msgstr ""
+
+msgid "Recorded after a verified service start or restart during this boot. Failed starts and file saves do not change it. External controller reloads are not tracked."
+msgstr ""
+
+msgid "Reset displayed totals"
+msgstr ""
+
+msgid "Reset displayed totals from the latest sample. Reloading restores core totals."
+msgstr ""
+
+msgid "Restore blocked: missing groups, members or changed group types. No changes were made."
+msgstr ""
+
+msgid "Restore cancelled. No changes were made."
+msgstr ""
+
+msgid "Restore snapshot"
+msgstr ""
+
+msgid "Restore stopped; this selection is unconfirmed. Earlier changes remain active. Check current groups before retrying:"
+msgstr ""
+
+msgid "Restore these selections? This changes live routing. Other groups are left as they are."
+msgstr ""
+
+msgid "Resume automatic selection"
+msgstr ""
+
+msgid "Resume automatic selection clears a manual override in a URLTest or Fallback group and returns control to its configured policy."
+msgstr ""
+
+msgid "Rule type"
+msgstr ""
+
+msgid "Rule-based: Mihomo follows matching rules to route or block traffic."
+msgstr ""
+
+msgid "Runtime rules"
+msgstr ""
+
+msgid "Runtime rules are unavailable. Check the service and controller, then refresh."
+msgstr ""
+
+msgid "Runtime rules could not be refreshed. Showing the last successful snapshot."
+msgstr ""
+
+msgid "Runtime top-level rules; rule-provider contents are not expanded. Refreshed every 30 seconds while this page is visible."
+msgstr ""
+
+msgid "Save manual Selector groups as named snapshots (up to 20). Stored only in this browser for this firewall address. Restore checks availability before changing live selections; configuration files and automatic groups are not saved."
+msgstr ""
+
+msgid "Save note"
+msgstr ""
+
+msgid "Save snapshot"
+msgstr ""
+
+msgid "Saved snapshots"
+msgstr ""
+
+msgid "Search connections in"
+msgstr ""
+
+msgid "Search runtime rules"
+msgstr ""
+
+msgid "Search the loaded top-level Mihomo rules by type, value or proxy target. Position preserves controller order. This is a text search, not a routing simulation; rule-set contents are not expanded."
+msgstr ""
+
+msgid "Selections applied"
+msgstr ""
+
+msgid "Settings partly applied"
+msgstr ""
+
+msgid "Show core totals"
+msgstr ""
+
+msgid "Showing %s–%s of %s matches (%s loaded rules)."
+msgstr ""
+
+msgid "Since reset (this page)"
+msgstr ""
+
+msgid "Snapshot deleted."
+msgstr ""
+
+msgid "Snapshot loaded. Refresh to read the current runtime rules."
+msgstr ""
+
+msgid "Snapshot name"
+msgstr ""
+
+msgid "Snapshot saved in this browser."
+msgstr ""
+
+msgid "Snapshot storage is unavailable or invalid. No snapshot was saved or deleted."
+msgstr ""
+
+msgid "Source IP"
+msgstr ""
+
+msgid "Subscription update submitted"
+msgstr ""
+
+msgid "TUN forwarding remains loaded"
+msgstr ""
+
+msgid "Test all groups"
+msgstr ""
+
+msgid "Test all nodes in every displayed group, including collapsed groups"
+msgstr ""
+
+msgid "Test all nodes in this group"
+msgstr ""
+
+msgid "Test node latency"
+msgstr ""
+
+msgid "That snapshot name already exists. Delete it first or choose another name."
+msgstr ""
+
+msgid "The operation failed. Please try again."
+msgstr ""
+
+msgid "This binding is disabled. Saved or loaded firewall rules may still exist."
+msgstr ""
+
+msgid "Top 10 source IPs by bytes transferred on currently active connections. Closed connections are excluded; this is not a usage history."
+msgstr ""
+
+msgid "Unknown source"
+msgstr ""
+
+msgid "Up to 160 characters. Save an empty note to remove it. Notes stay in this browser and are shared by exact proxy name across groups."
+msgstr ""
+
+msgid "Up to 20 snapshots can be saved. Delete one first."
+msgstr ""
+
+msgid "Use at most 160 characters for a local note."
+msgstr ""
+
+msgid "Use the table search box. Address matches source or destination IP and port; Host includes sniffed names; Process matches name or path when reported by Mihomo. Close all still closes every connection."
+msgstr ""
+
+msgid "Verified core process age in hours:minutes:seconds, sampled every 30 seconds. Hours may exceed 24."
+msgstr ""

@@ -90,12 +90,17 @@ def main():
     subprocess.run(['node', str(ROOT / 'tests/test_ui.js')], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tests/test_build.py')], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tests/test_subscription.py')], check=True)
+    subprocess.run([sys.executable, str(ROOT / 'tests/test_service.py')], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tests/test_packaging.py')], check=True)
     if not frontend:
         subprocess.run(['php', str(ROOT / 'tests/test_runtime.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_routing_status.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_patch.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_writes.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_network.php')], check=True)
         subprocess.run(['php', str(ROOT / 'tests/test_api.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_network_apply.php')], check=True)
+        subprocess.run(['php', str(ROOT / 'tests/test_network_api.php')], check=True)
     for path in (ROOT / 'packaging/freebsd').glob('+*INSTALL'):
         text = path.read_text(encoding='utf-8')
         assert not re.search(r'configctl|pfctl|pkill|config.xml|service mihomo|setup_unbound|rm -rf', text), path

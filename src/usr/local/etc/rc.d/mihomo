@@ -11,6 +11,7 @@ rcvar="mihomo_enable"
 desc="mihomo service"
 
 pidfile="/var/run/${name}.pid"
+reloadfile="/var/run/${name}-last-reload"
 logfile="/var/log/${name}.log"
 procname="/usr/local/bin/mihomo"
 command="/usr/sbin/daemon"
@@ -60,6 +61,17 @@ mihomo_prestart()
     fi
 }
 
+mihomo_record_reload()
+{
+    # Best-effort telemetry must never turn a successful start into a failure.
+    # Same-directory rename keeps readers from observing a partial timestamp.
+    reload_tmp="$(mktemp "${reloadfile}.XXXXXX")" || return 0
+    if ! date +%s > "${reload_tmp}" || ! mv -f "${reload_tmp}" "${reloadfile}"; then
+        rm -f "${reload_tmp}"
+    fi
+    return 0
+}
+
 mihomo_poststart()
 {
     sleep 1
@@ -69,6 +81,7 @@ mihomo_poststart()
         if [ -n "${daemon_pid}" ] && kill -0 "${daemon_pid}" 2>/dev/null; then
             mihomo_pid="$(pgrep -P "${daemon_pid}" mihomo 2>/dev/null | head -n 1)"
             if [ -n "${mihomo_pid}" ] && kill -0 "${mihomo_pid}" 2>/dev/null; then
+                mihomo_record_reload
                 echo "${name} started: daemon pid ${daemon_pid}, mihomo pid ${mihomo_pid}."
                 return 0
             fi

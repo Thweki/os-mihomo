@@ -29,7 +29,7 @@ class RuntimeStatus
                 || $next[1] !== $tun) {
                 continue;
             }
-            preg_match('/\bon\s+([A-Za-z0-9_.:-]+)/', $line, $iface);
+            preg_match('/\bon\s+(!\s*)?(\{[^}]+\}|[A-Za-z0-9_.:-]+)/', $line, $iface);
             preg_match('/\bproto\s+(\{[^}]+\}|[^\s]+)/', $line, $proto);
             $protocols = preg_split('/[\s,{}]+/', $proto[1] ?? 'any', -1, PREG_SPLIT_NO_EMPTY);
             $protocols = array_map(fn ($p) => ['6' => 'tcp', '17' => 'udp'][$p] ?? strtolower($p), $protocols);
@@ -38,7 +38,8 @@ class RuntimeStatus
             $destination = trim($scope[2] ?? '');
             preg_match('/\bport\s+(.+)$/', $destination, $ports);
             $rows[] = [
-                'device' => $iface[1] ?? '',
+                'device' => isset($iface[2]) ? trim(($iface[1] ?? '') . $iface[2]) : '',
+                'unrestricted' => !preg_match('/\b(?:tagged|user|group|os|probability|received-on)\b/', preg_split('/\s+label\b/', $line, 2)[0]),
                 'family' => preg_match('/\binet6\b/', $line) ? 'IPv6' : (preg_match('/\binet\b/', $line) ? 'IPv4' : 'IPv4/IPv6'),
                 'direction' => preg_match('/\bpass\s+out\b/', $line) ? 'out' : (preg_match('/\bpass\s+in\b/', $line) ? 'in' : 'any'),
                 'protocols' => array_values($protocols),
@@ -98,10 +99,21 @@ class RuntimeStatus
 
     public static function process(string $output, int $pid, string $pattern): ?array
     {
-        if ($pid <= 1 || !preg_match('/^\s*(\d+)\s+(\d+)\s+(.+)$/s', trim($output), $match)
-            || (int)$match[1] !== $pid || !preg_match($pattern, $match[3])) {
+        if ($pid <= 1 || !preg_match('/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/s', trim($output), $match)
+            || (int)$match[1] !== $pid || !preg_match($pattern, $match[4])) {
             return null;
         }
-        return ['pid' => $pid, 'rss' => (int)$match[2] * 1024];
+        $uptime = filter_var($match[3], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 2147483647]]);
+        return ['pid' => $pid, 'rss' => (int)$match[2] * 1024,
+            'uptime_seconds' => $uptime === false ? null : $uptime];
+    }
+
+    /** The rc.d success marker is a Unix timestamp, never a config file mtime. */
+    public static function lastReload(string $record, int $now): ?int
+    {
+        $record = trim($record);
+        if (!ctype_digit($record)) { return null; }
+        $timestamp = filter_var($record, FILTER_VALIDATE_INT);
+        return $timestamp !== false && $timestamp > 0 && $timestamp <= $now ? $timestamp : null;
     }
 }

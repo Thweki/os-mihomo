@@ -35,6 +35,7 @@ class DashboardController extends ApiControllerBase
     public function overviewAction()
     {
         $snapshot = Controller::snapshot();
+        $clients = $snapshot['ready'] ? Controller::connectionClients($snapshot['connections']) : null;
         if ($this->stringParam('metadata', '1') === '0') {
             return [
                 'controller' => ['alive' => (bool)$snapshot['ready']],
@@ -43,6 +44,7 @@ class DashboardController extends ApiControllerBase
                     'uploadTotal' => (int)($snapshot['uploadTotal'] ?? 0),
                     'memory' => (int)($snapshot['memory'] ?? 0),
                     'connections' => $snapshot['ready'] ? count($snapshot['connections']) : 0,
+                    'clients' => $clients,
                     'ready' => $snapshot['ready'], 'error' => (string)($snapshot['error'] ?? ''),
                 ],
             ];
@@ -58,12 +60,14 @@ class DashboardController extends ApiControllerBase
                 'meta' => (bool)($version['meta'] ?? false),
             ],
             'runtime' => [
+                'ruleCount' => Controller::ruleCount(),
                 'mode' => (string)($running['mode'] ?? ($configured['mode'] ?? '')),
                 'logLevel' => (string)($running['log-level'] ?? ($configured['log-level'] ?? '')),
                 'downloadTotal' => (int)($snapshot['downloadTotal'] ?? 0),
                 'uploadTotal' => (int)($snapshot['uploadTotal'] ?? 0),
                 'memory' => (int)($snapshot['memory'] ?? 0),
                 'connections' => $snapshot['ready'] ? count($snapshot['connections']) : 0,
+                'clients' => $clients,
                 'ready' => $snapshot['ready'],
                 'error' => (string)($snapshot['error'] ?? ''),
             ],
@@ -112,6 +116,26 @@ class DashboardController extends ApiControllerBase
         ];
     }
 
+    /** Resume the core's automatic selection after a manual override. */
+    public function resetProxyAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['status' => 'failed', 'message' => gettext('POST required.')];
+        }
+        $this->throwReadOnly();
+        $group = $this->param('group');
+        if (!is_string($group) || $group === '') {
+            return ['status' => 'failed', 'message' => gettext('A group name is required.')];
+        }
+        $result = Controller::resetProxy($group);
+        return [
+            'status' => $result['ok'] ? 'ok' : 'failed',
+            'message' => $result['ok']
+                ? sprintf(gettext('Automatic selection resumed for "%s".'), $group)
+                : $result['error'],
+        ];
+    }
+
     /** 单节点延迟测速 */
     public function testDelayAction()
     {
@@ -152,10 +176,19 @@ class DashboardController extends ApiControllerBase
     public function connectionsAction()
     {
         $result = Controller::connectionRows();
+        $searchFields = [
+            'all' => ['host', 'sniffHost', 'source', 'destination', 'process', 'processPath',
+                'network', 'type', 'rule', 'rulePayload', 'chain', 'outbound'],
+            'address' => ['source', 'destination'],
+            'host' => ['host', 'sniffHost'],
+            'process' => ['process', 'processPath'],
+        ];
+        $scope = $this->param('connectionScope', 'all');
+        $fields = is_string($scope) && isset($searchFields[$scope]) ? $searchFields[$scope] : $searchFields['all'];
 
         $rows = $this->searchRecordsetBase(
             $result['rows'],
-            ['host', 'source', 'destination', 'network', 'type', 'rule', 'rulePayload', 'chain', 'outbound'],
+            $fields,
             'start'
         );
 
@@ -166,6 +199,11 @@ class DashboardController extends ApiControllerBase
             'ready' => (bool)$result['ready'],
             'error' => (string)($result['error'] ?? ''),
         ];
+    }
+
+    public function rulesAction()
+    {
+        return Controller::ruleRows();
     }
 
     /** 关闭单条连接（id 为空表示全部） */

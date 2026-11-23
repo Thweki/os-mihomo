@@ -28,6 +28,7 @@
             <pattern>api/mihomo/dashboard/overview</pattern>
             <pattern>api/mihomo/dashboard/proxies</pattern>
             <pattern>api/mihomo/dashboard/connections</pattern>
+            <pattern>api/mihomo/dashboard/rules</pattern>
             <pattern>api/mihomo/dashboard/runtime_status</pattern>
             <pattern>api/mihomo/dashboard/safety</pattern>
             <pattern>api/mihomo/service/status</pattern>
@@ -44,6 +45,7 @@
         <description>Combine with view for runtime controls; read-only users remain unable to mutate.</description>
         <patterns>
             <pattern>api/mihomo/dashboard/select_proxy</pattern>
+            <pattern>api/mihomo/dashboard/reset_proxy</pattern>
             <pattern>api/mihomo/dashboard/set_mode</pattern>
             <pattern>api/mihomo/dashboard/close_connection</pattern>
             <pattern>api/mihomo/dashboard/test_delay</pattern>

@@ -47,9 +47,26 @@ expect(RuntimeStatus::task($failed . "[2026-01-03 01:00:00] Subscription task su
 expect(RuntimeStatus::task('', true)['state'] === 'running', 'A verified live worker wins over rotated logs');
 expect(RuntimeStatus::task('', false)['state'] === 'idle', 'Empty log');
 expect(RuntimeStatus::task('legacy output', false)['state'] === 'unknown', 'Unstructured output is not a known success');
-expect(RuntimeStatus::process('42 1024 /usr/local/bin/mihomo -d /example', 42, '~^(?:/usr/local/bin/)?mihomo(?:\s|$)~')['rss'] === 1048576, 'RSS KiB to bytes');
-expect(RuntimeStatus::process('42 1024 /bin/unrelated', 42, '~^(?:/usr/local/bin/)?mihomo(?:\s|$)~') === null, 'Reject reused PID');
-expect(RuntimeStatus::process('42 512 /usr/sbin/daemon /usr/local/bin/mihomo', 42, '~^(?:/usr/local/bin/)?mihomo(?:\s|$)~') === null, 'Do not report supervisor RSS as core memory');
+expect(RuntimeStatus::process('42 1024 90 /usr/local/bin/mihomo -d /example', 42, '~^(?:/usr/local/bin/)?mihomo(?:\s|$)~')['rss'] === 1048576, 'RSS KiB to bytes');
+expect(RuntimeStatus::process('42 1024 90 /bin/unrelated', 42, '~^(?:/usr/local/bin/)?mihomo(?:\s|$)~') === null, 'Reject reused PID');
+expect(RuntimeStatus::process('42 512 90 /usr/sbin/daemon /usr/local/bin/mihomo', 42, '~^(?:/usr/local/bin/)?mihomo(?:\s|$)~') === null, 'Do not report supervisor RSS as core memory');
+$pattern = '~^(?:/usr/local/bin/)?mihomo(?:\s|$)~';
+foreach ([0, 59, 3600, 90061, 31536000] as $seconds) {
+    $process = RuntimeStatus::process("42 1024 $seconds /usr/local/bin/mihomo -d /example", 42, $pattern);
+    expect($process['uptime_seconds'] === $seconds, 'Uptime is actual core age, including zero and multiple days');
+}
+foreach (['-', '-1', '1.5', '999999999999999999999999999'] as $invalid) {
+    $process = RuntimeStatus::process("42 1024 $invalid /usr/local/bin/mihomo -d /example", 42, $pattern);
+    expect($process['uptime_seconds'] === null && $process['rss'] === 1048576, 'Invalid age is unknown without losing RSS');
+}
+expect(RuntimeStatus::process('43 1024 90 /usr/local/bin/mihomo', 42, $pattern) === null, 'PID mismatch has no uptime');
+expect(RuntimeStatus::process('', 42, $pattern) === null, 'Missing process has no uptime');
+expect(RuntimeStatus::process('1 1024 90 /usr/local/bin/mihomo', 1, $pattern) === null, 'Reject init PID');
+expect(RuntimeStatus::lastReload("1700000000\n", 1700000001) === 1700000000, 'Read recorded reload timestamp');
+expect(RuntimeStatus::lastReload('1700000001', 1700000001) === 1700000001, 'Accept current second');
+foreach (['', '0', '-1', '1700000002', '1700000000junk', '1700000000\n1700000001', '999999999999999999999'] as $invalid) {
+    expect(RuntimeStatus::lastReload($invalid, 1700000001) === null, 'Missing, malformed and future markers are unknown');
+}
 $xml = '<opnsense><interfaces><lan><if>vtnet1</if><descr>Example LAN</descr><ipaddr>192.0.2.1</ipaddr></lan><wan><if>vtnet0</if><ipaddr>dhcp</ipaddr></wan></interfaces></opnsense>';
 expect(count(RuntimeStatus::interfaces($xml)) === 1, 'Static client interface discovery');
 echo "Runtime command I/O, rules, task records and process identity: all checks passed\n";

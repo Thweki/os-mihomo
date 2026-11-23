@@ -1749,3 +1749,255 @@ msgstr "测试已停止。"
 
 msgid "Stopping tests; waiting for active requests."
 msgstr "正在停止测试，等待已发出的请求完成。"
+
+msgid "A group name is required."
+msgstr "必须提供分组名称。"
+
+msgid "All fields"
+msgstr "所有字段"
+
+msgid "All rule types"
+msgstr "所有规则类型"
+
+msgid "All saved selections are already active."
+msgstr "所有保存的选择均已生效。"
+
+msgid "Automatic selection resumed for \"%s\"."
+msgstr "已为“%s”恢复自动选择。"
+
+msgid "Automatic switch skipped: cancelled, changed group, failed read, or no faster responding proxy."
+msgstr "已跳过自动切换：操作已取消、分组已更改、读取失败或没有响应更快的代理。"
+
+msgid "Automatic tests stopped; reload to run again."
+msgstr "自动测试已停止；重新加载页面可再次运行。"
+
+msgid "Automatically select the fastest proxy after a group test (experimental)"
+msgstr "分组测速后自动选择最快的代理（实验性）"
+
+msgid "Automatically selected"
+msgstr "已自动选择"
+
+msgid "Automatically test latency on overview load (experimental)"
+msgstr "加载概览时自动测试延迟（实验性）"
+
+msgid "Choose a snapshot"
+msgstr "选择快照"
+
+msgid "Clear filters"
+msgstr "清除筛选"
+
+msgid "Client traffic"
+msgstr "客户端流量"
+
+msgid "Client traffic is unavailable."
+msgstr "客户端流量不可用。"
+
+msgid "Clients shown"
+msgstr "显示的客户端"
+
+msgid "Close %s connections shown on this page? Hidden rows, other pages and new connections are excluded. Applications may reconnect."
+msgstr "关闭此页显示的 %s 个连接？不包含隐藏行、其他页面和新连接。应用程序可能重新连接。"
+
+msgid "Close requests completed: %s; failed or unconfirmed: %s."
+msgstr "关闭请求已完成：%s；失败或未确认：%s。"
+
+msgid "Close visible"
+msgstr "关闭可见连接"
+
+msgid "Close visible connections?"
+msgstr "关闭可见连接？"
+
+msgid "Core uptime"
+msgstr "内核运行时长"
+
+msgid "Could not read current selections. No changes were made."
+msgstr "无法读取当前选择，未作任何更改。"
+
+msgid "Delete snapshot"
+msgstr "删除快照"
+
+msgid "Edit local note"
+msgstr "编辑本地备注"
+
+msgid "Enter a snapshot name of 1 to 80 characters."
+msgstr "请输入 1 至 80 个字符的快照名称。"
+
+msgid "Export comparison (JSON)"
+msgstr "导出配置对照（JSON）"
+
+msgid "Last successful start / reload"
+msgstr "最近成功启动 / 重载时间"
+
+msgid "Loaded routing rules"
+msgstr "已加载路由规则数"
+
+msgid "Local note saved."
+msgstr "本地备注已保存。"
+
+msgid "Local proxy note"
+msgstr "代理本地备注"
+
+msgid "Next"
+msgstr "下一页"
+
+msgid "No active connections."
+msgstr "没有活动连接。"
+
+msgid "No forwarding candidate in the reported members and latest latency results, including nested groups. Untested or missing results are unknown; DIRECT is usable. This is not a live connectivity check."
+msgstr "根据已报告的成员和最近的延迟结果（包括嵌套分组），未找到可转发的候选项。未测试或缺失的结果视为未知；DIRECT 视为可用。这不是实时连通性检查。"
+
+msgid "No manual Selector groups are available to save."
+msgstr "没有可保存的手动 Selector 代理组。"
+
+msgid "No matching rules."
+msgstr "没有匹配的规则。"
+
+msgid "No usable proxies"
+msgstr "无可用代理"
+
+msgid "Note changes could not be saved in this browser. They will last only for this page visit."
+msgstr "无法在此浏览器中保存备注更改，仅在本次页面访问中有效。"
+
+msgid "Off by default. Remembered for this tab. Tests each proxy once per visit, up to three at a time. Sends probe traffic; disabling or hiding the page stops queued tests. In-flight tests finish."
+msgstr "默认关闭，选择保存在当前标签页中。每次访问时对每个代理测试一次，最多同时测试三个。会发送探测流量；关闭选项或隐藏页面会停止排队的测试，已发送的测试继续完成。"
+
+msgid "Off by default; enabled only for this page visit. Applies to Selector groups and fresh group tests. Direct, reject and nested groups are excluded. A submitted switch cannot be cancelled."
+msgstr "默认关闭，仅在本次页面访问中启用。适用于 Selector 分组及本次分组测速结果。排除直连、拒绝和嵌套分组。已提交的切换无法取消。"
+
+msgid "Only URLTest and Fallback groups can resume automatic selection."
+msgstr "仅 URLTest 和 Fallback 分组可以恢复自动选择。"
+
+msgid "Position"
+msgstr "位置"
+
+msgid "Previous"
+msgstr "上一页"
+
+msgid "Process"
+msgstr "进程"
+
+msgid "Proxy target"
+msgstr "目标代理"
+
+msgid "Reading current selections…"
+msgstr "正在读取当前选择…"
+
+msgid "Recent latency, oldest first"
+msgstr "最近延迟（从旧到新）"
+
+msgid "Recent latency: up to 10 controller tests, oldest first. Each chart has its own scale; crosses mark timeouts. Hover for values. No extra tests are run."
+msgstr "最近延迟：最多显示 10 次内核测试，从旧到新排列。各图独立缩放，叉号表示超时。悬停可查看数值，不会额外发起测试。"
+
+msgid "Recorded after a verified service start or restart during this boot. Failed starts and file saves do not change it. External controller reloads are not tracked."
+msgstr "记录本次系统启动后通过检查的服务启动或重启时间。启动失败和保存文件不会更改此记录。不跟踪外部控制器发起的重载。"
+
+msgid "Restore blocked: missing groups, members or changed group types. No changes were made."
+msgstr "无法恢复：代理组或成员缺失，或代理组类型已改变。未作任何更改。"
+
+msgid "Restore cancelled. No changes were made."
+msgstr "已取消恢复，未作任何更改。"
+
+msgid "Restore snapshot"
+msgstr "恢复快照"
+
+msgid "Restore stopped; this selection is unconfirmed. Earlier changes remain active. Check current groups before retrying:"
+msgstr "恢复已停止，此项选择的结果未确认。此前的更改仍然生效，请检查当前代理组后再重试："
+
+msgid "Restore these selections? This changes live routing. Other groups are left as they are."
+msgstr "恢复这些选择？这会改变实时路由，其他代理组保持不变。"
+
+msgid "Resume automatic selection"
+msgstr "恢复自动选择"
+
+msgid "Resume automatic selection clears a manual override in a URLTest or Fallback group and returns control to its configured policy."
+msgstr "恢复自动选择会清除 URLTest 或 Fallback 分组的手动指定，并恢复该组配置的自动策略。"
+
+msgid "Rule type"
+msgstr "规则类型"
+
+msgid "Runtime rules"
+msgstr "运行时规则"
+
+msgid "Runtime rules are unavailable. Check the service and controller, then refresh."
+msgstr "无法获取运行时规则。请检查服务和控制器，然后刷新。"
+
+msgid "Runtime rules could not be refreshed. Showing the last successful snapshot."
+msgstr "无法刷新运行时规则。当前显示上次成功加载的快照。"
+
+msgid "Runtime top-level rules; rule-provider contents are not expanded. Refreshed every 30 seconds while this page is visible."
+msgstr "运行态顶层规则，不展开规则集合内容。页面可见时每 30 秒刷新一次。"
+
+msgid "Save manual Selector groups as named snapshots (up to 20). Stored only in this browser for this firewall address. Restore checks availability before changing live selections; configuration files and automatic groups are not saved."
+msgstr "将手动 Selector 代理组保存为命名快照（最多 20 个），仅存储在此浏览器中，按防火墙地址区分。恢复前会检查可用性，再更改实时选择；不保存配置文件及自动代理组。"
+
+msgid "Save note"
+msgstr "保存备注"
+
+msgid "Save snapshot"
+msgstr "保存快照"
+
+msgid "Saved snapshots"
+msgstr "已保存的快照"
+
+msgid "Search connections in"
+msgstr "连接搜索范围"
+
+msgid "Search runtime rules"
+msgstr "搜索运行时规则"
+
+msgid "Search the loaded top-level Mihomo rules by type, value or proxy target. Position preserves controller order. This is a text search, not a routing simulation; rule-set contents are not expanded."
+msgstr "按类型、匹配内容或目标代理搜索已加载的 Mihomo 顶层规则。位置保留控制器中的顺序。此功能仅搜索文本，不模拟路由，也不展开规则集内容。"
+
+msgid "Selections applied"
+msgstr "已应用的选择"
+
+msgid "Showing %s–%s of %s matches (%s loaded rules)."
+msgstr "显示第 %s–%s 条，共匹配 %s 条（已加载 %s 条规则）。"
+
+msgid "Snapshot deleted."
+msgstr "快照已删除。"
+
+msgid "Snapshot loaded. Refresh to read the current runtime rules."
+msgstr "快照已加载。点击刷新以读取当前运行时规则。"
+
+msgid "Snapshot name"
+msgstr "快照名称"
+
+msgid "Snapshot saved in this browser."
+msgstr "快照已保存在此浏览器中。"
+
+msgid "Snapshot storage is unavailable or invalid. No snapshot was saved or deleted."
+msgstr "快照存储不可用或数据无效，未保存或删除快照。"
+
+msgid "Source IP"
+msgstr "源 IP"
+
+msgid "Test all groups"
+msgstr "测试所有分组"
+
+msgid "Test all nodes in every displayed group, including collapsed groups"
+msgstr "测试所有已显示分组中的全部节点，包括已折叠的分组"
+
+msgid "That snapshot name already exists. Delete it first or choose another name."
+msgstr "此快照名称已存在。请先删除原快照或使用其他名称。"
+
+msgid "Top 10 source IPs by bytes transferred on currently active connections. Closed connections are excluded; this is not a usage history."
+msgstr "按当前活动连接传输的字节数列出前十个源 IP。不包含已关闭的连接，并非历史用量。"
+
+msgid "Unknown source"
+msgstr "未知来源"
+
+msgid "Up to 160 characters. Save an empty note to remove it. Notes stay in this browser and are shared by exact proxy name across groups."
+msgstr "最多 160 个字符。保存空备注可删除备注。备注保存在此浏览器中，完整代理名称相同的节点在各分组中共享备注。"
+
+msgid "Up to 20 snapshots can be saved. Delete one first."
+msgstr "最多可保存 20 个快照，请先删除一个。"
+
+msgid "Use at most 160 characters for a local note."
+msgstr "本地备注不能超过 160 个字符。"
+
+msgid "Use the table search box. Address matches source or destination IP and port; Host includes sniffed names; Process matches name or path when reported by Mihomo. Close all still closes every connection."
+msgstr "请使用表格搜索框。地址匹配源或目标 IP 及端口；主机包含嗅探到的名称；进程匹配 Mihomo 提供的进程名或路径。“关闭全部”仍会关闭所有连接。"
+
+msgid "Verified core process age in hours:minutes:seconds, sampled every 30 seconds. Hours may exceed 24."
+msgstr "已核实的内核进程运行时长，格式为小时:分钟:秒，每 30 秒采样一次。小时数可超过 24。"

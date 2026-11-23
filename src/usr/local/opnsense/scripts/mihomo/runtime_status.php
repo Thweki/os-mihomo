@@ -11,7 +11,7 @@ use OPNsense\Mihomo\Config;
 function process_for_pid(string $pid, string $pattern): ?array
 {
     if (!ctype_digit($pid) || (int)$pid <= 1) { return null; }
-    [$code, $output] = RuntimeStatus::readCommand(['/bin/ps', '-ww', '-p', $pid, '-o', 'pid=', '-o', 'rss=', '-o', 'command=']);
+    [$code, $output] = RuntimeStatus::readCommand(['/bin/ps', '-ww', '-p', $pid, '-o', 'pid=', '-o', 'rss=', '-o', 'etimes=', '-o', 'command=']);
     return $code === 0 ? RuntimeStatus::process($output, (int)$pid, $pattern) : null;
 }
 
@@ -61,5 +61,6 @@ echo json_encode([
     'interfaces' => RuntimeStatus::interfaces((string)file_get_contents('/conf/config.xml')),
     'rules' => $code === 0 ? RuntimeStatus::parseRules($pf, $tun) : [],
     'process' => core_process(),
+    'last_reload_at' => RuntimeStatus::lastReload((string)@file_get_contents('/var/run/mihomo-last-reload'), time()),
     'subscription' => RuntimeStatus::task($log, $task !== null),
 ], JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);

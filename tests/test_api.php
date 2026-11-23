@@ -16,6 +16,28 @@ namespace OPNsense\Core {
     }
 }
 namespace OPNsense\Mihomo {
+    // Keep the Apply failure fixture independent of appliance paths and services.
+    class WriteCoordinator {
+        public static function revisions(array $paths): array {
+            $result = array_fill_keys($paths, 'missing');
+            ksort($result);
+            return $result;
+        }
+    }
+    class BootSettingsProbe {
+        public static int $calls = 0;
+        public static bool $reject = true;
+    }
+    function is_readable(string $path): bool {
+        if ($path === '/etc/rc.conf.d/mihomo') {
+            BootSettingsProbe::$calls++;
+            if (BootSettingsProbe::$reject) {
+                throw new \LogicException('Rejected YAML must not reach boot settings');
+            }
+            return false;
+        }
+        return \is_readable($path);
+    }
     // Namespace-local transport doubles exercise the real JSON decoder without
     // opening sockets or requiring the cURL extension on portable PHP runners.
     class ControllerHttpFixture {
@@ -23,15 +45,28 @@ namespace OPNsense\Mihomo {
         public static int $status = 200;
         public static string $url = '';
         public static int $historyReads = 0;
-        public static int $requests = 0;
+        public static int $requestCount = 0;
+        public static array $requests = [];
+        public static array $responses = [];
+        public static array $urls = [];
     }
     function curl_init($url) {
         ControllerHttpFixture::$url = $url;
-        ControllerHttpFixture::$requests++;
+        ControllerHttpFixture::$requestCount++;
+        ControllerHttpFixture::$urls[] = $url;
         return $url;
     }
-    function curl_setopt_array($handle, $options) { return true; }
-    function curl_exec($handle) { return ControllerHttpFixture::$body; }
+    function curl_setopt_array($handle, $options) {
+        ControllerHttpFixture::$requests[] = [$options[CURLOPT_CUSTOMREQUEST], $handle];
+        return true;
+    }
+    function curl_exec($handle) {
+        if (ControllerHttpFixture::$responses) {
+            [ControllerHttpFixture::$status, ControllerHttpFixture::$body] = array_shift(ControllerHttpFixture::$responses);
+        }
+        return ControllerHttpFixture::$body;
+        public static array $urls = [];
+    }
     function curl_getinfo($handle, $option) { return ControllerHttpFixture::$status; }
     function curl_error($handle) { return 'Fixture transport failure'; }
     function curl_close($handle) {}
@@ -111,6 +146,24 @@ namespace {
             && $rows[0]['destination'] === '198.51.100.9:443',
             'Copy metadata preserves existing display fields');
         echo "Connection copy addresses: strict IPv4/IPv6, display fields and hostname distinction passed\n";
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['proxies' => [
+            'Empty' => ['type' => 'Selector', 'all' => []],
+            'Leaf' => ['type' => 'Shadowsocks'],
+            'Invalid' => ['type' => 'Selector', 'all' => null],
+            'Malformed' => ['type' => 'Selector', 'all' => 'Leaf'],
+            'Nested' => ['type' => 'Selector', 'all' => ['Empty'], 'now' => 'Empty'],
+        ]]);
+        $groups = \OPNsense\Mihomo\Controller::proxyGroups();
+        expect($groups['ready'] === true, 'empty groups do not mean an unavailable controller');
+        expect(array_column($groups['groups'], 'name') === ['Empty', 'Nested'],
+            'retain empty groups but exclude leaves and malformed member lists');
+        expect($groups['groups'][0]['members'] === [], 'empty group remains explicitly empty');
+        expect($groups['groups'][1]['members'][0]['name'] === 'Empty', 'preserve nested empty group references');
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+        $unavailable = \OPNsense\Mihomo\Controller::proxyGroups();
+        expect($unavailable['ready'] === false && $unavailable['groups'] === [],
+            'controller failures must not manufacture empty groups');
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
     } finally {
         \OPNsense\Mihomo\Config::setFileOverride(null);
     }
@@ -180,14 +233,256 @@ namespace {
         $fixture::$historyReads = 0;
         $fixture::$requests = 0;
     }
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        $dashboard = new \OPNsense\Mihomo\Api\DashboardController();
+        $validRules = [
+            ['type' => 'DomainSuffix', 'payload' => 'example.org', 'proxy' => 'Proxy <&>', 'size' => -1],
+            ['type' => 'RuleSet', 'payload' => '中文', 'proxy' => 'DIRECT'],
+            ['type' => 'Match', 'payload' => '', 'proxy' => 'REJECT'],
+        ];
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['rules' => $validRules, 'extra' => 'not exposed']);
+        $result = $dashboard->rulesAction();
+        expect($result === ['ready' => true, 'rows' => [
+            ['position' => 1, 'type' => 'DomainSuffix', 'payload' => 'example.org', 'proxy' => 'Proxy <&>'],
+            ['position' => 2, 'type' => 'RuleSet', 'payload' => '中文', 'proxy' => 'DIRECT'],
+            ['position' => 3, 'type' => 'Match', 'payload' => '', 'proxy' => 'REJECT'],
+        ]], 'Runtime rules expose only ordered display fields, including empty MATCH payloads');
+        expect(\OPNsense\Mihomo\ControllerHttpFixture::$url === 'http://127.0.0.1:9090/rules', 'Reads the runtime rules endpoint');
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = '{"rules":[]}';
+        expect($dashboard->rulesAction() === ['ready' => true, 'rows' => []], 'Empty rules are available');
+        foreach (['null', '42', '"text"', '{invalid', '{}', '{"rules":null}', '{"rules":"text"}',
+            '{"rules":{"named":{}}}', '{"rules":[null]}', '{"rules":[{"type":[],"payload":"","proxy":""}]}',
+            '{"rules":[{"type":"Match","proxy":"DIRECT"}]}',
+            json_encode(['rules' => [$validRules[0], ['type' => 'Match', 'payload' => '', 'proxy' => []]]])] as $body) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = $body;
+            expect($dashboard->rulesAction() === ['ready' => false, 'rows' => []], 'Malformed rules cannot become an empty or partial successful snapshot');
+        }
+        foreach ([false, json_encode(['rules' => $validRules])] as $body) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = $body;
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+            expect($dashboard->rulesAction() === ['ready' => false, 'rows' => []], 'Transport and HTTP errors are unavailable');
+        }
+        $acl = simplexml_load_file($app . 'models/OPNsense/Mihomo/ACL/ACL.xml');
+        expect(in_array('api/mihomo/dashboard/rules', array_map('strval',
+            iterator_to_array($acl->{'page-vpn-mihomo-view'}->patterns->pattern, false)), true), 'View privilege can read runtime rules');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+    }
+    echo "Runtime rule snapshot, ordering, schema, failure and read-only API: passed\n";
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        $samples = array_map(fn ($delay) => ['delay' => $delay, 'time' => 'fixture', 'extra' => 'omit'],
+            [999, 888, 100, 200, 0, 50, 50, -1, null, 'invalid', 25, 100]);
+        $proxies = [
+            'A' => ['type' => 'Selector', 'all' => ['Node', 'Empty', 'Missing', 'Unknown'], 'now' => 'Node'],
+            'B' => ['type' => 'Selector', 'all' => ['Node']],
+            'Node' => ['type' => 'test', 'history' => $samples],
+            'Empty' => ['history' => []],
+            'Unknown' => ['history' => [['time' => 'fixture']]],
+        ];
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['proxies' => $proxies]);
+        $dashboard = new \OPNsense\Mihomo\Api\DashboardController();
+        $result = $dashboard->proxiesAction();
+        $members = $result['groups'][0]['members'];
+        expect($result['ready'] === true, 'Proxy history uses the existing read endpoint');
+        expect($members[0]['delay_history'] === [100, 200, 0, 50, 50, -1, null, null, 25, 100],
+            'Only the last ten measurements are exposed in controller order, with unknown gaps');
+        expect($members[0]['delay'] === 100 && $members[0]['selected'] && $members[0]['alive'],
+            'History leaves the existing delay and selection contract intact');
+        expect($members[1]['delay_history'] === [] && $members[2]['delay_history'] === [],
+            'Untested and missing proxies have no invented measurements');
+        expect($members[3]['delay_history'] === [null], 'Unknown samples retain their position');
+        expect($result['groups'][1]['members'][0]['delay_history'] === $members[0]['delay_history'],
+            'Shared proxies show identical history in every group');
+        expect($dashboard->proxiesAction() === $result, 'Repeated polls do not append measurements');
+        $proxies['Node']['history'] = [['delay' => 42]];
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['proxies' => $proxies]);
+        expect($dashboard->proxiesAction()['groups'][0]['members'][0]['delay_history'] === [42],
+            'A controller history reset replaces old samples');
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+        expect($dashboard->proxiesAction()['ready'] === false, 'Failed reads do not invent history');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+    }
+    echo "Proxy latency history API: passed\n";
     class Request {
         public function isPost() { return true; }
         public function getPost($name, $filter = null, $default = null) { return $default; }
         public function getQuery($name, $filter = null, $default = null) { return $default; }
         public function getJsonRawBody() { return []; }
     }
+    $clientConnections = [
+        ['metadata' => ['sourceIP' => '192.0.2.1', 'sourcePort' => 1000, 'network' => 'tcp'], 'download' => 100, 'upload' => 20],
+        ['metadata' => ['sourceIP' => '192.0.2.1', 'sourcePort' => 2000, 'network' => 'udp'], 'download' => 300, 'upload' => 40],
+        ['metadata' => ['sourceIP' => '2001:db8::1'], 'download' => 200, 'upload' => 300],
+        ['metadata' => ['sourceIP' => '2001:0db8:0:0:0:0:0:1'], 'download' => 100, 'upload' => 100],
+        ['metadata' => ['sourceIP' => '192.0.2.2'], 'download' => 0, 'upload' => 0],
+        ['download' => -10, 'upload' => 7],
+        ['metadata' => ['sourceIP' => '<invalid>'], 'download' => 'bad', 'upload' => 3],
+    ];
+    $clientSummary = \OPNsense\Mihomo\Controller::connectionClients($clientConnections);
+    expect($clientSummary === ['rows' => [
+        ['source' => '2001:db8::1', 'connections' => 2, 'download' => 300, 'upload' => 400],
+        ['source' => '192.0.2.1', 'connections' => 2, 'download' => 400, 'upload' => 60],
+        ['source' => '', 'connections' => 2, 'download' => 0, 'upload' => 10],
+        ['source' => '192.0.2.2', 'connections' => 1, 'download' => 0, 'upload' => 0],
+    ], 'total' => 4], 'Client totals combine ports/protocols and IPv6 spellings, rank combined bytes, retain idle and unknown clients');
+    expect(\OPNsense\Mihomo\Controller::connectionClients([]) === ['rows' => [], 'total' => 0], 'Empty active snapshot has no clients');
+    $manyClients = [];
+    for ($i = 1; $i <= 15; $i++) {
+        $manyClients[] = ['metadata' => ['sourceIP' => '192.0.2.' . $i], 'download' => $i, 'upload' => 0];
+    }
+    $topClients = \OPNsense\Mihomo\Controller::connectionClients($manyClients);
+    expect($topClients['total'] === 15 && count($topClients['rows']) === 10, 'Response bounds rows but counts all clients');
+    expect(array_column($topClients['rows'], 'download') === range(15, 6), 'Top ten selected after sorting all connections');
+    $ties = array_map(static fn ($ip) => ['metadata' => ['sourceIP' => $ip], 'upload' => 10], ['192.0.2.2', '192.0.2.1']);
+    expect(\OPNsense\Mihomo\Controller::connectionClients($ties) === \OPNsense\Mihomo\Controller::connectionClients(array_reverse($ties)), 'Equal-byte ordering is independent of snapshot order');
+    $overview = new \OPNsense\Mihomo\Api\DashboardController();
+    $overview->request = new class extends Request {
+        public string $metadata = '0';
+        public function getPost($name, $filter = null, $default = null) {
+            return $name === 'metadata' ? $this->metadata : $default;
+        }
+    };
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        foreach (['0', '1'] as $metadata) {
+            $overview->request->metadata = $metadata;
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode([
+                'connections' => $clientConnections, 'downloadTotal' => 999999, 'uploadTotal' => 888888,
+            ]);
+            $beforeCalls = \OPNsense\Mihomo\ControllerHttpFixture::$requestCount;
+            $data = $overview->overviewAction();
+            expect($data['runtime']['clients'] === $clientSummary, 'Both overview modes expose the active snapshot summary, not lifetime totals');
+            expect(\OPNsense\Mihomo\ControllerHttpFixture::$requestCount - $beforeCalls === ($metadata === '0' ? 1 : 4), 'Client summary adds no controller requests');
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['connections' => []]);
+        expect($overview->overviewAction()['runtime']['clients'] === ['rows' => [], 'total' => 0], 'Closed connections disappear rather than accumulate');
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = false;
+        expect($overview->overviewAction()['runtime']['clients'] === null, 'Unavailable snapshot is distinct from no active clients');
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode(['connections' => $clientConnections]);
+        expect($overview->overviewAction()['runtime']['clients'] === $clientSummary, 'Recovery restores current client totals');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Client traffic aggregation and overview snapshot contracts: passed\n";
+    // Exercise the real connection decoder and endpoint; spy only on the
+    // framework search boundary (OPNsense owns matching, sorting and paging).
+    class ConnectionSearchRequest extends Request {
+        public function __construct(private array $params) {}
+        public function getPost($name, $filter = null, $default = null) { return $this->params[$name] ?? $default; }
+    }
+    class ConnectionSearchController extends \OPNsense\Mihomo\Api\DashboardController {
+        public array $searchInput = [];
+        protected function searchRecordsetBase($records, $fields = null, $defaultSort = null) {
+            $this->searchInput = [$records, $fields, $defaultSort];
+            // A sentinel page proves the endpoint preserves the framework result.
+            return ['rows' => [$records[1] ?? []], 'total' => 2, 'current' => 2, 'rowCount' => 1];
+        }
+    }
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    $connections = [
+        ['id' => 'first', 'metadata' => ['host' => 'Example.test', 'sniffHost' => 'sniffed.test',
+            'sourceIP' => '2001:db8::1', 'sourcePort' => '50000',
+            'destinationIP' => '198.51.100.10', 'destinationPort' => '443',
+            'process' => 'Browser <&>', 'processPath' => '/opt/应用/Browser <&>'],
+            'chains' => ['DIRECT'], 'start' => '2026-01-01T00:00:01Z'],
+        ['id' => 'second', 'metadata' => ['processPath' => '/opt/path-only'], 'chains' => []],
+        ['id' => 'third', 'metadata' => [], 'chains' => []],
+    ];
+    try {
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = json_encode([
+            'connections' => $connections, 'downloadTotal' => 1234, 'uploadTotal' => 567, 'memory' => 890,
+        ]);
+        $allFields = ['host', 'sniffHost', 'source', 'destination', 'process', 'processPath',
+            'network', 'type', 'rule', 'rulePayload', 'chain', 'outbound'];
+        foreach ([
+            [[], $allFields],
+            [['connectionScope' => 'all'], $allFields],
+            [['connectionScope' => 'address'], ['source', 'destination']],
+            [['connectionScope' => 'host'], ['host', 'sniffHost']],
+            [['connectionScope' => 'process'], ['process', 'processPath']],
+            [['connectionScope' => 'unknown'], $allFields],
+            [['connectionScope' => ['process']], $allFields],
+        ] as [$params, $fields]) {
+            $search = new ConnectionSearchController();
+            $search->request = new ConnectionSearchRequest($params);
+            $page = $search->connectionsAction();
+            [$records, $actualFields, $sort] = $search->searchInput;
+            expect($actualFields === $fields, 'Only allowlisted scope fields reach framework search');
+            expect(count($records) === 3 && $sort === 'start', 'Search receives all connections before framework pagination');
+            expect($records[0]['process'] === 'Browser <&>' && $records[0]['processPath'] === '/opt/应用/Browser <&>',
+                'Process metadata retains literal text and UTF-8 for server-side matching');
+            expect($records[0]['host'] === 'Example.test' && $records[0]['sniffHost'] === 'sniffed.test',
+                'Both original and sniffed hosts are searchable');
+            expect($records[0]['source'] === '2001:db8::1:50000' && $records[0]['destination'] === '198.51.100.10:443',
+                'Address search includes IPv6, destination and ports');
+            expect($records[1]['process'] === '' && $records[1]['processPath'] === '/opt/path-only', 'Path-only metadata is retained');
+            expect($records[2]['process'] === '' && $records[2]['processPath'] === '' && $records[2]['sniffHost'] === '',
+                'Missing optional metadata stays empty');
+            expect($page['rows'] === [$records[1]] && $page['total'] === 2 && $page['current'] === 2 && $page['rowCount'] === 1,
+                'Endpoint preserves filtered page and match count from framework');
+            expect($page['downloadTotal'] === 1234 && $page['uploadTotal'] === 567 && $page['memory'] === 890,
+                'Search does not turn global counters into filtered totals');
+            expect($page['ready'] === true && $page['error'] === '', 'Successful search retains readiness');
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 503;
+        $page = $search->connectionsAction();
+        expect($search->searchInput[0] === [] && $page['ready'] === false, 'Unavailable controller provides no stale connections');
+    } finally {
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Connection search scopes, metadata and framework paging contract: passed\n";
+    // Runtime counts come from the controller, never the on-disk YAML rules.
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        $dashboard = new \OPNsense\Mihomo\Api\DashboardController();
+        $dashboard->request = new Request();
+        $ruleFixtures = [
+            ['{"rules":[{"type":"Domain","payload":"example.invalid"},{"type":"RuleSet","payload":"provider"},{"type":"Match"}]}', 3],
+            ['{"rules":[]}', 0],
+            ['{"rules":[{"type":"Match"}]}', 1],
+            ['{}', null], ['{"rules":null}', null], ['{"rules":{}}', null],
+            ['{"rules":{"0":{"type":"Match"}}}', null],
+            ['{"rules":"unexpected"}', null], ['{"rules":false}', null],
+            ['null', null], ['42', null], ['"unexpected"', null],
+            ['[]', null], ['', null], ['{invalid', null], [false, null],
+        ];
+        foreach ($ruleFixtures as [$body, $expected]) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$body = $body;
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+            expect(\OPNsense\Mihomo\Controller::ruleCount() === $expected, 'Count rules, preserving zero versus unavailable');
+            expect(\OPNsense\Mihomo\ControllerHttpFixture::$url === 'http://127.0.0.1:9090/rules', 'Count reads runtime /rules');
+            $overview = $dashboard->overviewAction();
+            expect(array_key_exists('ruleCount', $overview['runtime']) && $overview['runtime']['ruleCount'] === $expected,
+                'Overview exposes only the runtime rule count, including unavailable');
+            expect(!array_key_exists('rules', $overview['runtime']), 'Rule payloads stay server-side');
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$body = '{"rules":[]}';
+        foreach ([401, 404, 503] as $status) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$status = $status;
+            expect($dashboard->overviewAction()['runtime']['ruleCount'] === null, 'Failed HTTP requests never report zero rules');
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$status = 200;
+        \OPNsense\Mihomo\ControllerHttpFixture::$urls = [];
+        $dashboard->request = new class extends Request {
+            public function getQuery($name, $filter = null, $default = null) { return $name === 'metadata' ? '0' : $default; }
+        };
+        expect(!array_key_exists('ruleCount', $dashboard->overviewAction()['runtime']), 'Fast polls omit rule metadata');
+        expect(\OPNsense\Mihomo\ControllerHttpFixture::$urls === ['http://127.0.0.1:9090/connections'],
+            'Fast polls do not fetch the potentially large rule list');
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Runtime rule counts, unavailable responses and metadata-only reads: passed\n";
     $guarded = [
-        'Dashboard' => ['selectProxy', 'setMode', 'closeConnection', 'testDelay'],
+        'Dashboard' => ['selectProxy', 'resetProxy', 'setMode', 'closeConnection', 'testDelay'],
         'Settings' => ['set', 'apply', 'import', 'configSet'],
         'Subscription' => ['save', 'run', 'clearLog'],
         'Routing' => ['apply', 'historyRestore', 'netapply', 'netrollback', 'selftest'],
@@ -203,6 +498,63 @@ namespace {
         }
     }
     expect(\OPNsense\Core\Backend::$calls === 0, 'Read-only calls never reach configd');
+
+    // Exercise real Apply selection and patching with locked TUN siblings. The
+    // always-written device/stack already match, but must still fail safely.
+    $flow = "log-level: info\ntun: {enable: true, device: tun_mihomo, stack: gvisor, auto-route: false}\n";
+    $flowFile = tempnam(sys_get_temp_dir(), 'mihomo-flow-test-');
+    file_put_contents($flowFile, $flow);
+    \OPNsense\Mihomo\Config::setFileOverride($flowFile);
+    try {
+        $apply = new class extends \OPNsense\Mihomo\Api\SettingsController {
+            public $model;
+            public function throwReadOnly() {}
+            public function getModel() { return $this->model; }
+        };
+        $apply->model = (object)[
+            'managed' => '',
+            'general' => (object)[
+                'logLevel' => 'debug', 'mode' => 'rule', 'allowLan' => '0',
+                'controllerBind' => '127.0.0.1', 'controllerPort' => '9090',
+                'secret' => '', 'ipv6' => '0', 'sniffer' => '0', 'enabled' => '1',
+            ],
+            'tun' => (object)[
+                'enabled' => '0', 'device' => 'tun_mihomo', 'stack' => 'gvisor',
+                'autoRoute' => '1', 'strictRoute' => '0', 'mtu' => '1500',
+            ],
+            'dns' => (object)[
+                'enabled' => '0', 'listen' => '127.0.0.1:1053', 'enhancedMode' => 'redir-host', 'ipv6' => '0',
+            ],
+        ];
+        $apply->request = new class extends Request {
+            public function getJsonRawBody() {
+                $expected = \OPNsense\Mihomo\WriteCoordinator::revisions([
+                    \OPNsense\Mihomo\Config::FILE, \OPNsense\Mihomo\Subscription::ENV_FILE,
+                    '/etc/rc.conf.d/mihomo', '/conf/config.xml',
+                ]);
+                return ['version' => hash('sha256', json_encode($expected, JSON_UNESCAPED_SLASHES))];
+            }
+        };
+        foreach (['', 'mihomo.general.logLevel'] as $managed) {
+            $apply->model->managed = $managed;
+            $result = $apply->applyAction();
+            expect($result['state'] === 'failed' && $result['changed'] === false && $result['code'] === 'apply',
+                'Flow parent rejection is an explicit unchanged Apply failure');
+            expect(str_contains($result['message'], '"tun"') && str_contains($result['message'], 'block mapping'),
+                'Apply explains how to resolve the unsupported parent without exposing its contents');
+            expect(\OPNsense\Core\Backend::$calls === 0 && \OPNsense\Mihomo\BootSettingsProbe::$calls === 0,
+                'Flow parent rejection precedes other file preparation and configd commit');
+            expect(file_get_contents($flowFile) === $flow, 'Locked siblings and earlier selected settings remain byte-identical');
+            expect(glob($flowFile . '.bak.*') === [], 'Rejected Apply creates no configuration backup');
+        }
+    } finally {
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+        unlink($flowFile);
+    }
+    // Safety report fixtures use the real class with boot settings disabled.
+    \OPNsense\Mihomo\BootSettingsProbe::$reject = false;
+    echo "Settings Apply flow mappings: fixed TUN fields reject without writes\n";
+
     foreach (['Config', 'Safety'] as $name) {
         require_once $app . 'models/OPNsense/Mihomo/' . $name . '.php';
     }
@@ -249,6 +601,80 @@ namespace {
         unlink($config);
     }
     echo "Controller binding safety reports: passed\n";
+
+    // Reset uses the core's unfix operation, never a guessed first/fastest member.
+    class WritableDashboard extends \OPNsense\Mihomo\Api\DashboardController {
+        public function throwReadOnly() {}
+    }
+    class ResetRequest extends Request {
+        public function __construct(public mixed $group, public bool $post = true) {}
+        public function isPost() { return $this->post; }
+        public function getJsonRawBody() { return ['group' => $this->group]; }
+    }
+    $reset = function ($group, $post = true) {
+        $controller = new WritableDashboard();
+        $controller->request = new ResetRequest($group, $post);
+        return $controller->resetProxyAction();
+    };
+    \OPNsense\Mihomo\Config::setFileOverride(dirname(__DIR__) . '/src/usr/local/etc/mihomo/config.yaml');
+    try {
+        \OPNsense\Mihomo\ControllerHttpFixture::$requests = [];
+        foreach ([null, '', [], 123] as $invalid) {
+            expect($reset($invalid)['status'] === 'failed', 'Invalid reset name rejected');
+        }
+        expect($reset('Group', false)['status'] === 'failed', 'Reset requires POST');
+        expect(\OPNsense\Mihomo\ControllerHttpFixture::$requests === [], 'Rejected reset does no controller I/O');
+
+        $name = ' 中文 /?%#" &gt; ';
+        $url = 'http://127.0.0.1:9090/proxies/' . rawurlencode($name);
+        foreach (['URLTest', 'Fallback'] as $type) {
+            // Empty fixed is also safe: reset is idempotent if another operator already reset it.
+            foreach (['Pinned', ''] as $fixed) {
+                \OPNsense\Mihomo\ControllerHttpFixture::$requests = [];
+                \OPNsense\Mihomo\ControllerHttpFixture::$responses = [
+                    [200, json_encode(['type' => $type, 'fixed' => $fixed])], [204, ''],
+                ];
+                $result = $reset($name);
+                expect($result['status'] === 'ok' && str_contains($result['message'], $name), 'Reset success preserves exact group name');
+                expect(\OPNsense\Mihomo\ControllerHttpFixture::$requests === [['GET', $url], ['DELETE', $url]],
+                    'Reset validates live type then deletes only the encoded group override');
+            }
+        }
+        foreach ([['type' => 'Selector'], ['type' => 'LoadBalance'], ['type' => 'Direct'], [], 'invalid'] as $data) {
+            \OPNsense\Mihomo\ControllerHttpFixture::$requests = [];
+            \OPNsense\Mihomo\ControllerHttpFixture::$responses = [[200, json_encode($data)]];
+            expect($reset($name)['status'] === 'failed', 'Unsupported or malformed group rejected');
+            expect(count(\OPNsense\Mihomo\ControllerHttpFixture::$requests) === 1, 'Unsupported type never reaches DELETE');
+        }
+        foreach ([[404, '{}'], [503, '{}'], [0, false]] as $failure) {
+            foreach ([false, true] as $failDelete) {
+                \OPNsense\Mihomo\ControllerHttpFixture::$requests = [];
+                \OPNsense\Mihomo\ControllerHttpFixture::$responses = $failDelete
+                    ? [[200, '{"type":"URLTest"}'], $failure] : [$failure];
+                $result = $reset($name);
+                expect($result['status'] === 'failed' && $result['message'] !== '', 'Reset reports read/write failures');
+                expect(count(\OPNsense\Mihomo\ControllerHttpFixture::$requests) === ($failDelete ? 2 : 1), 'Failed read prevents mutation');
+            }
+        }
+        $nodes = [];
+        foreach (['URLTest', 'Fallback', 'Selector', 'LoadBalance'] as $type) {
+            foreach (['', 'Pinned', '0', null, []] as $i => $fixed) {
+                $nodes[$type . $i] = ['type' => $type, 'fixed' => $fixed, 'all' => ['First', 'Pinned'], 'now' => 'Pinned'];
+            }
+        }
+        \OPNsense\Mihomo\ControllerHttpFixture::$responses = [[200, json_encode(['proxies' => $nodes])]];
+        foreach (\OPNsense\Mihomo\Controller::proxyGroups()['groups'] as $group) {
+            $node = $nodes[$group['name']];
+            $expected = in_array($node['type'], ['URLTest', 'Fallback'], true)
+                && is_string($node['fixed']) && $node['fixed'] !== '';
+            expect($group['canReset'] === $expected, 'Only overridden automatic groups advertise reset');
+            expect($group['members'][1]['selected'], 'Reset capability preserves selection');
+        }
+    } finally {
+        \OPNsense\Mihomo\ControllerHttpFixture::$responses = [];
+        \OPNsense\Mihomo\Config::setFileOverride(null);
+    }
+    echo "Automatic selection reset: guards, exact names, group types and controller failures passed\n";
     $settings = new \OPNsense\Mihomo\Api\SettingsController();
     foreach (['', 'FATAL: invalid config', 'Configuration is valid.', '{"status":"ok"}', '{"state":"failed","status":"ok","changed":"no","code":[],"message":"invalid"}'] as $output) {
         \OPNsense\Core\Backend::$output = $output;
@@ -322,7 +748,7 @@ namespace {
     expect(str_contains($redacted, 'normal message'), 'Ordinary log text preserved');
     $acl = simplexml_load_file($app . 'models/OPNsense/Mihomo/ACL/ACL.xml');
     $view = array_map('strval', iterator_to_array($acl->{'page-vpn-mihomo-view'}->patterns->pattern, false));
-    foreach (['api/mihomo/settings/config_get', 'api/mihomo/subscription/get', 'api/mihomo/dashboard/set_mode', 'api/mihomo/routing/history_show'] as $path) {
+    foreach (['api/mihomo/settings/config_get', 'api/mihomo/subscription/get', 'api/mihomo/dashboard/set_mode', 'api/mihomo/dashboard/reset_proxy', 'api/mihomo/routing/history_show'] as $path) {
         foreach ($view as $pattern) { expect(!fnmatch($pattern, $path), 'View privilege excludes mutation and credentials'); }
     }
     expect((string)$acl->{'page-vpn-mihomo'}->patterns->pattern[1] === 'api/mihomo/*', 'Existing full-access grant remains compatible');

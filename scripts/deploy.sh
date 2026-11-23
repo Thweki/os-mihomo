@@ -140,6 +140,9 @@ for rel in \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Logs.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Translator.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/RuntimeStatus.php \
+    usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/NetworkConfig.php \
+    usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/NetworkApply.php \
+    usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/RoutingStatus.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/RequestParamsTrait.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Safety.php \
     usr/local/opnsense/mvc/app/models/OPNsense/Mihomo/Subscription.php \
@@ -163,6 +166,7 @@ for rel in \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/subscription.volt \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/log.volt \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/routing.volt \
+    usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/runtime_rules.volt \
     usr/local/opnsense/mvc/app/views/OPNsense/Mihomo/network_status.volt \
     usr/local/www/mihomo.php \
     usr/local/www/mihomo_sub.php \

@@ -1,6 +1,11 @@
 #!/usr/local/bin/php
 <?php
 
+require_once 'config.inc';
+require_once dirname(__DIR__, 2) . '/mvc/app/models/OPNsense/Mihomo/NetworkConfig.php';
+
+use OPNsense\Mihomo\NetworkConfig;
+
 const CONFIG_FILE = '/conf/config.xml';
 const STATE_DIR = '/var/db/os-mihomo';
 const STATE_FILE = STATE_DIR . '/unbound-state.json';
@@ -34,15 +39,11 @@ if (!in_array($mode, ['install', 'uninstall'], true)) {
     exit(64);
 }
 
-$lock = fopen('/var/run/os-mihomo-unbound.lock', 'c');
-if ($lock === false || !flock($lock, LOCK_EX)) {
-    fwrite(STDERR, "unable to lock Unbound configuration\n");
-    exit(1);
-}
+$transaction = new NetworkConfig();
 
 $doc = new DOMDocument();
 $doc->preserveWhiteSpace = true;
-if (!$doc->load(CONFIG_FILE)) {
+if (!$doc->loadXML($transaction->before, LIBXML_NONET)) {
     fwrite(STDERR, "unable to read " . CONFIG_FILE . "\n");
     exit(1);
 }
@@ -113,16 +114,10 @@ if ($mode === 'install') {
     }
 }
 
-$backup = CONFIG_FILE . '.bak.os-mihomo-unbound-' . date('Ymd-His');
-copy(CONFIG_FILE, $backup);
-$temp = CONFIG_FILE . '.os-mihomo.tmp';
-if ($doc->save($temp) === false || !rename($temp, CONFIG_FILE)) {
-    @unlink($temp);
-    fwrite(STDERR, "unable to update " . CONFIG_FILE . "\n");
-    exit(1);
-}
-
+$transaction->commit($doc->saveXML(), 'bak.os-mihomo-unbound');
 if ($mode === 'uninstall') {
     @unlink(STATE_FILE);
     @rmdir(STATE_DIR);
 }
+
+$transaction->close();

@@ -20,10 +20,11 @@
         }
 
         let savedUrl = '', savedSecret = '', savedVersion = '', taskRunning = false, taskKnown = false;
+        let envFile = '', savePending = false;
         function updateSubmitState() {
             const changed = $('[id="mihomo.subscription.url"]').val() !== savedUrl || $('[id="mihomo.subscription.secret"]').val() !== savedSecret;
-            $('#saveAct').prop('disabled', !changed);
-            $('#runAct').prop('disabled', !taskKnown || taskRunning || changed || !savedUrl);
+            $('#saveAct').prop('disabled', savePending || !savedVersion || !changed);
+            $('#runAct').prop('disabled', savePending || !savedVersion || !taskKnown || taskRunning || changed || !savedUrl);
             $('#subscription-edit-state').text(changed ? {{ lang._('Save subscription settings before submitting an update.') | json_encode }}
                 : !savedUrl ? {{ lang._('Set a subscription URL in Settings to enable updates.') | json_encode }} : '');
         }
@@ -53,6 +54,7 @@
                 savedUrl = MihomoUI.decodeApiText(data['url']);
                 savedSecret = MihomoUI.decodeApiText(data['secret']);
                 savedVersion = data.version || '';
+                envFile = data.envFile || '';
                 updateSubmitState();
                 $('#env-file').text(data['envFile'] || '');
                 if (!data['scriptAvailable']) {
@@ -83,21 +85,34 @@
         }
 
         $('#saveAct').click(function () {
-            const $btn = $(this);
-            $btn.prop('disabled', true);
-            ajaxCall('/api/mihomo/subscription/save', {
+            if (savePending || !savedVersion) { return; }
+            const submitted = {
                 'url': $('[id="mihomo.subscription.url"]').val(),
                 'secret': $('[id="mihomo.subscription.secret"]').val(),
                 'version': savedVersion
-            }, function (data) {
+            };
+            savePending = true;
+            updateSubmitState();
+            ajaxCall('/api/mihomo/subscription/save', submitted, function (data) {
                 data = data || {};
-                $btn.prop('disabled', false);
+                savePending = false;
+                if (data.status === 'ok') {
+                    // Acknowledge only the submitted snapshot. A reload would erase
+                    // newer input and could adopt a different writer's revision.
+                    savedUrl = submitted.url.trim();
+                    savedSecret = submitted.secret.trim();
+                    savedVersion = (data.versions || {})[envFile] || '';
+                    // The backend trims both fields; normalize untouched input only.
+                    const $url = $('[id="mihomo.subscription.url"]'), $secret = $('[id="mihomo.subscription.secret"]');
+                    if ($url.val() === submitted.url) { $url.val(savedUrl); }
+                    if ($secret.val() === submitted.secret) { $secret.val(savedSecret); }
+                }
+                updateSubmitState();
                 showResult(
                     data.status === 'ok' ? {{ lang._('Settings saved') | json_encode }} : {{ lang._('Save failed') | json_encode }},
                     MihomoUI.decodeApiText(data.message),
                     data.status === 'ok' ? BootstrapDialog.TYPE_SUCCESS : BootstrapDialog.TYPE_DANGER
                 );
-                if (data.status === 'ok') { loadSettings(); }
             });
         });
 
