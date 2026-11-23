@@ -5,7 +5,6 @@
 ## Before you install
 
 - Sign in as an OPNsense administrator and confirm the target is **OPNsense 26.7 on FreeBSD 15 amd64**. Other versions and architectures require separate validation.
-- If OPNsense runs in a Proxmox VE VM, see the host-side bridge and VLAN instructions in the [PVE networking chapter in Simplified Chinese](https://thweki.gitbook.io/pve-docs-zh-cn/guide/03-system-administration#sysadmin_network_configuration).
 - Export the OPNsense configuration under **System → Configuration → Backups**. For an upgrade or migration, also back up Mihomo's YAML, subscription settings and boot setting. Store these backups securely because they contain credentials. [OPNsense configuration backups](https://docs.opnsense.org/manual/backups.html) · [Mihomo configuration files](usage.en.md#configuration-files)
 - If `os-mihomo` is already installed from another publisher, read [Migrating from another source](#migrating-from-another-source) first.
 

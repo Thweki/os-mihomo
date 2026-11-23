@@ -5,7 +5,6 @@
 ## 安装前
 
 - 以管理员身份打开 OPNsense，确认系统为 **26.7 系列，FreeBSD 15 amd64**。其他版本和架构需另行验证。
-- 如果 OPNsense 运行在 Proxmox VE 虚拟机里，宿主机的网桥和 VLAN 可参考 [PVE 中文手册的网络配置章节](https://thweki.gitbook.io/pve-docs-zh-cn/guide/03-system-administration#sysadmin_network_configuration)。
 - 在 **系统 → 配置 → 备份** 导出配置。升级或迁移时，还要备份 Mihomo 的 YAML、订阅设置和自启设置。备份含凭据，请妥善保存。[OPNsense 配置备份](https://docs.opnsense.org/manual/backups.html) · [Mihomo 配置文件清单](usage.md#配置文件)
 - 已装其他来源的 `os-mihomo` 时，先看[从其他来源迁移](#从其他来源迁移)。
 
