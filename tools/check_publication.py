@@ -8,7 +8,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parent.parent
 FILES = {'.gitattributes', '.gitignore', '.github/workflows/ci.yml',
-         '.github/workflows/pkg-feed.yml', '.github/dependabot.yml',
+         '.github/workflows/pkg-feed.yml', '.github/workflows/pkg-feed-release.yml',
+         '.github/dependabot.yml',
          'README.md', 'README.US.md', 'Makefile', 'build.sh', 'docs/ci-cd.md',
          'docs/install.md', 'docs/install.en.md', 'docs/usage.md', 'docs/usage.en.md',
          'scripts/ci_build.sh', 'scripts/make_repo.sh', 'scripts/build_pkg_feed.sh',

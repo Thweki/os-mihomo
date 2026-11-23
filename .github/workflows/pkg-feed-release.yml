@@ -1,0 +1,19 @@
+name: Request an OPNsense feed refresh
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  notify:
+    if: >-
+      github.repository == 'Thweki/os-mihomo' &&
+      ((github.event_name == 'release' && !github.event.release.prerelease) ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - run: echo "A stable release can be checked by the default-branch publisher."
