@@ -92,6 +92,8 @@ os-mihomo 将流量监控、代理分组、配置管理、订阅更新和路由�
 
 ## 安装
 
+如果 OPNsense 作为 Proxmox VE（PVE）虚拟机运行，宿主机侧的网桥和 VLAN 配置可查阅 [PVE 中文手册的网络配置章节](https://thweki.gitbook.io/pve-docs-zh-cn/guide/03-system-administration#sysadmin_network_configuration)。
+
 ### 使用构建产物
 
 1. 打开 [GitHub Actions](https://github.com/Thweki/os-mihomo/actions/workflows/ci.yml)，选择一次成功的构建，下载 `os-mihomo-freebsd15-amd64` 产物。

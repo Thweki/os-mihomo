@@ -92,6 +92,8 @@ Other system versions and architectures require separate validation. Pinned sour
 
 ## Installation
 
+If OPNsense runs in a Proxmox VE VM, see the [PVE networking chapter in Simplified Chinese](https://thweki.gitbook.io/pve-docs-zh-cn/guide/03-system-administration#sysadmin_network_configuration) for host-side bridge and VLAN configuration.
+
 ### Install a build artifact
 
 1. Open [GitHub Actions](https://github.com/Thweki/os-mihomo/actions/workflows/ci.yml), select a successful build and download its `os-mihomo-freebsd15-amd64` artifact.
