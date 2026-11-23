@@ -14,9 +14,7 @@
 #   BASE_URL=https://example.com/mihomo sh scripts/make_repo.sh
 #   OUTDIR=/srv/www/mihomo sh scripts/make_repo.sh
 #
-# 生成后把 <OUTDIR>/<ABI> 整个目录放到静态站点（或本机某个目录），
-# 再到 OPNsense 上写一份 /usr/local/etc/pkg/repos/os-mihomo.conf 指向它，
-# 之后「系统 > 固件 > 插件」里就能看到并安装/升级/卸载本插件。
+# 生产环境只启用受信的签名源。签名、发布和客户端启用步骤见 docs/ci-cd.md。
 set -eu
 export LC_ALL=C TZ=UTC
 umask 022
@@ -81,14 +79,14 @@ fi
 
 URL="${BASE_URL:-<把本目录放到静态站点后填写 base URL>/$ABI}"
 cat > "$REPO_DIR/$REPO_NAME.conf" <<EOF
-# os-mihomo 插件仓库 —— 放到 OPNsense 的 /usr/local/etc/pkg/repos/ 下即可
+# os-mihomo 仓库配置模板。先核对来源、URL 和签名公钥，再明确启用。
 #
 #   url 指向本仓库目录（即包含 meta.conf 的那一层）。
 #   可用形式：
 #     · 静态站点   url: "https://example.com/mihomo/$ABI"
 #     · 本机目录   url: "file:///usr/local/opnsense/_repo/$ABI"
-#   改完后执行：pkg update
-#   随后「系统 > 固件 > 插件」即可看到 os-mihomo。
+#   启用后可在「系统 > 固件 > 状态」检查更新。
+#   在「系统 > 固件 > 插件」核对版本和来源后安装。
 $REPO_NAME: {
   url: "$URL",
   $trust
@@ -103,5 +101,7 @@ echo
 echo "==> 客户端配置（已写入 $REPO_DIR/$REPO_NAME.conf）："
 cat "$REPO_DIR/$REPO_NAME.conf"
 echo
-echo "==> 安装路径（与插件管理器一致）："
-echo "    pkg update && pkg install -y $PKG_NAME"
+echo "==> 分发步骤见 docs/ci-cd.md。客户端模板默认禁用。"
+if [ -z "$REPO_SIGNING_KEY" ]; then
+    echo "    当前仓库未签名，仅用于隔离测试。生产分发请配置签名和 HTTPS。"
+fi

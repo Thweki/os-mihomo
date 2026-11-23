@@ -1,4 +1,6 @@
-# B7: routing status and safety evidence
+# How routing status is determined
+
+[中文使用指南](usage.md) · [English user guide](usage.en.md) · [Build and CI](ci-cd.md)
 
 The read-only routing and safety readers share `RoutingStatus`. Native floating
 rules live at `OPNsense/Firewall/Filter/rules/rule`; their binding comes from
@@ -20,7 +22,6 @@ the selected core outbound. Rule order, bypasses and core policies still matter.
 Safety warns about configured exposure even without a loaded rule or when the
 runtime read fails. It also warns when matching PF forwarding remains after the
 saved binding disappears. Legacy/native duplicates produce one interface warning.
-No writer coordination, apply-result or YAML scalar behavior is changed.
 
 ## Regression fixtures
 
@@ -39,14 +40,5 @@ The fixtures represent the before/after migration states; they do not execute
 migration writes on an appliance. PHP tests run in `tools/validate.py` and the
 FreeBSD package CI script. `tests/test_ui.js` checks the actual status renderer.
 
-## Local validation (2026-11-15)
-
-- `python3 tools/validate.py --frontend-only`: passed (publication, translations,
-  XML, translated JavaScript syntax, UI regressions, package metadata/archive
-  tests and shell syntax).
-- Routing fixture XML parsed successfully with Python's ElementTree.
-- `git diff --check`: passed.
-- `php tests/test_routing_status.php`: could not run (`php: command not found`).
-  PHP lint and all PHP suites are therefore skipped locally, not claimed passed.
-- FreeBSD packaging/repository and live PF/appliance checks are not available in
-  this Linux workspace; no appliance mutations or network reloads were performed.
+To run the routing status fixture locally, use `php tests/test_routing_status.php`.
+To review results for a specific commit, open its [GitHub Actions run](https://github.com/Thweki/os-mihomo/actions/workflows/ci.yml).

@@ -16,8 +16,12 @@ images/
 # Keep public documentation separate from local reports and screenshots
 /docs/*
 !/docs/ci-cd.md
+!/docs/install.md
+!/docs/install.en.md
+!/docs/usage.md
+!/docs/usage.en.md
 
-# Only reviewed, sanitized README images may be published.
+# Only reviewed, sanitized documentation images may be published.
 !/docs/assets/
 /docs/assets/*
 !/docs/assets/overview.png

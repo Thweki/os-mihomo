@@ -1,4 +1,25 @@
-# CI/CD
+# Build, validate and publish os-mihomo
+
+[中文首页](../README.md) · [English home](../README.US.md) · [Installation guide](install.en.md)
+
+Use this guide to work on the source, reproduce a release or run your own signed package feed. For a normal installation, follow the installation guide.
+
+## Local development
+
+The repository root is the plugin tree. `src/` mirrors the appliance paths. The MVC models, controllers and Volt views live under `src/usr/local/opnsense/mvc/app/`, with `/ui/mihomo/*` and `/api/mihomo/*` as the entry points. Backend scripts and configd actions live under `src/usr/local/opnsense/`. Package metadata, hooks and pinned [core](../packaging/freebsd/binary-source.json) and [Geo data](../packaging/freebsd/geodata-source.json) inputs are under `packaging/freebsd/`.
+
+Run the portable checks with Python 3, Node.js, PHP CLI with SimpleXML and DOM, and a POSIX shell.
+
+```sh
+python3 tools/check_publication.py
+python3 tools/validate.py
+```
+
+On FreeBSD 15 amd64, `make package` builds `dist/os-mihomo.pkg`. `make repo` also builds the catalogue under `dist/repo/<ABI>/`. Install test packages in a disposable OPNsense environment. [Installation checks](install.en.md#check-the-installation)
+
+For localization, edit `locales/<locale>.po` using `locales/os-mihomo.pot` as the template. Run `python3 tools/build_locales.py` and then `python3 tools/build_locales.py --check`. Commit both the translation source and generated catalogue. The plugin uses its own gettext domain and falls back to system translations or English.
+
+## What CI verifies
 
 Every push, pull request and manual run executes `.github/workflows/ci.yml`:
 
@@ -12,8 +33,6 @@ Tags named `v<version>` must match Makefile's VERSION. A successful tag build cr
 All Actions are pinned to commit SHAs. Default permissions are read-only; only the tag release job receives `contents: write`, `id-token: write` and `attestations: write`. Checkout does not persist credentials. Dependabot checks Action updates weekly.
 
 ```sh
-python3 tools/check_publication.py
-python3 tools/validate.py
 # Include CI correctness lint (install into an isolated virtual environment):
 python3 -m venv work/ci-venv
 work/ci-venv/bin/python -m pip install ruff==0.14.4 shellcheck-py==0.10.0.1
@@ -80,13 +99,17 @@ BASE_URL=https://packages.example.com/mihomo/FreeBSD:15:amd64 \
 sh scripts/make_repo.sh
 ```
 
-The script checks that both keys match, invokes `pkg repo` with RSA signing, and emits `signature_type: "pubkey"` and a public-key path. Any signing failure aborts; `REQUIRE_SIGNED=yes` prevents fallback to an unsigned source. It never copies the private key into the repository. Publish the ABI directory over HTTPS, install the authenticated public key at `/usr/local/etc/pkg/keys/os-mihomo.pub`, review the generated URL, then explicitly enable the client template. Do not change `signature_type` to bypass a verification failure.
+The script checks that both keys match, invokes `pkg repo` with RSA signing, and emits `signature_type: "pubkey"` and a public-key path. Any signing failure aborts. `REQUIRE_SIGNED=yes` prevents fallback to an unsigned source. The published directory contains the public key and no private key.
+
+1. Publish the complete ABI directory over HTTPS. The client URL points to the directory that contains `meta.conf`.
+2. On the appliance, install the authenticated key under `/usr/local/etc/pkg/keys/os-mihomo.pub`. Review the generated `os-mihomo.conf` and its URL, then install it under `/usr/local/etc/pkg/repos/` and set `enabled: yes` for this source. Keep the official OPNsense source enabled. Keep `signature_type: "pubkey"` for this feed.
+3. Refresh the catalogue in **System → Firmware → Status**. If you need to diagnose catalogue discovery from the console, `pkg update -r os-mihomo` refreshes this feed and `pkg rquery -r os-mihomo '%n %v' os-mihomo` checks whether it advertises the expected version. Install from **System → Firmware → Plugins** after checking the origin. [Installation steps](install.en.md#install-through-the-plugin-manager)
 
 For an isolated signing verification without changing client settings, build a package and run `sh tests/test_repository.sh` on a disposable FreeBSD machine. Production key rotation requires distributing the new public key before changing the hosted signatures. The implementation follows [pkg-repo(8)](https://man.freebsd.org/cgi/man.cgi?query=pkg-repo&sektion=8&format=html).
 
 ## Publication boundary
 
-Local instructions, work logs, original screenshots, device exports and one-off diagnostics are excluded. Only the three reviewed, sanitized README images in `docs/assets/` are allowed, with exact SHA-256 checksums pinned in `tools/check_publication.py`. Replacing an image requires a new visual privacy review and checksum update; text scanning cannot detect sensitive pixels.
+Local instructions, work logs, original screenshots, device exports and one-off diagnostics are excluded. Only the three reviewed, sanitized documentation images in `docs/assets/` are allowed, with exact SHA-256 checksums pinned in `tools/check_publication.py`. Replacing an image requires a new visual privacy review and checksum update.
 
 CI rejects tracked files that match `.gitignore`, unexpected files, private host addresses, home-directory paths, private keys and token patterns. Distributed configuration accepts only documented example credentials. Production signing keys, locally downloaded test runtimes and generated outputs remain ignored.
 
@@ -100,8 +123,5 @@ The network plan revision is carried through apply and each subsequent stage. Au
 rollback refuses backups without a recorded revision, or any intervening configuration
 save. Core persistence may reformat XML while preserving unrelated configuration nodes.
 
-Local B1 verification (2026-11-15): `python3 tools/validate.py --frontend-only` passed
-publication, translations, XML, JavaScript/UI, deterministic archive and shell checks.
-PHP CLI was unavailable, so PHP lint and all PHP fixtures (including the new network
-suite) were skipped locally. Full PHP checks are wired into Ubuntu validation and the
-FreeBSD package job; live appliance persistence/reload behavior was not exercised locally.
+The Ubuntu validation and FreeBSD package jobs run the concurrency fixture. Check
+the Actions run for the exact commit to see which checks passed.
